@@ -24,6 +24,12 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permite acceder a la cámara para escanear planos de obra."
+        }
+      ],
       "expo-router",
       [
         "expo-splash-screen",
@@ -34,7 +40,8 @@
             "imageWidth": 76
           }
         }
-      ]
+      ],
+      "react-native-document-scanner-plugin"
     ],
     "experiments": {
       "typedRoutes": true,
