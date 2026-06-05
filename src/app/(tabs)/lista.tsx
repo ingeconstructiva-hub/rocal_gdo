@@ -1,51 +1,46 @@
 import { Feather } from '@expo/vector-icons';
 import * as Print from 'expo-print';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, Dimensions, Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { LineChart } from 'react-native-gifted-charts';
 import { supabase } from '../../lib/supabase';
-import { generarPlantillaInventario } from '../utils/pdfInventario';
+import { generarPlantillaNomina } from '../utils/pdfNomina';
+// 1. IMPORTAMOS EL CEREBRO DE PROYECTOS
+import { useProject } from '../../context/ProjectContext';
 
-interface InventoryItem {
+interface WorkerState {
   id: string;
   name: string;
-  unit: string;
-  quantity: number;
-  unit_price: number;
-  week_label: string;
-  requested_by: string;
-  in_charge: string;
+  role: string;
+  weekly_salary: number;
+  attendance: boolean[]; 
+  extraDeduction: number; 
+  reason: string;         
+  tempDeduction: string;  
+  tempReason: string;     
 }
 
-interface WorkerSimple {
-  id: string;
-  name: string;
-}
+const DAYS_OF_WEEK = ['L', 'M', 'M', 'J', 'V'];
+const screenWidth = Dimensions.get('window').width;
 
-export default function InventarioScreen() {
+export default function ListaScreen() {
   const router = useRouter();
-  const [items, setItems] = useState<InventoryItem[]>([]);
-  const [workers, setWorkers] = useState<WorkerSimple[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Estados del Modal
-  const [isModalVisible, setIsModalVisible] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [name, setName] = useState('');
-  const [unit, setUnit] = useState('');
-  const [quantity, setQuantity] = useState('');
-  const [price, setPrice] = useState('');
-  const [requestedBy, setRequestedBy] = useState('');
-  const [inCharge, setInCharge] = useState('');
-  const [weekLabelModal, setWeekLabelModal] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
   
-  // NUEVO: Estado para mostrar/ocultar las sugerencias predictivas
-  const [showSuggestions, setShowSuggestions] = useState(false);
+  // 2. EXTRAEMOS LA OBRA ACTIVA
+  const { activeProject } = useProject();
+
+  const [workers, setWorkers] = useState<WorkerState[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [chartData, setChartData] = useState<any[]>([{ value: 0, label: 'Sin datos' }]);
+
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [editingWorkerId, setEditingWorkerId] = useState<string | null>(null);
+  const [newName, setNewName] = useState('');
+  const [newRole, setNewRole] = useState('');
+  const [newSalary, setNewSalary] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   const getWeekRange = () => {
     const today = new Date();
@@ -55,95 +50,181 @@ export default function InventarioScreen() {
     const end = new Date(start);
     end.setDate(start.getDate() + 4); 
     const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    return `${start.getDate()} ${months[start.getMonth()]} - ${end.getDate()} ${months[end.getMonth()]} ${start.getFullYear()}`;
+    return `${start.getDate()} ${months[start.getMonth()]} - ${end.getDate()} ${months[end.getMonth()]}`;
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const weekLabel = getWeekRange();
 
-  const fetchData = async () => {
+  // 3. RECARGAMOS CADA QUE ENTRAMOS A LA PANTALLA Y HAY OBRA ACTIVA
+  useFocusEffect(
+    useCallback(() => {
+      if (activeProject?.id) {
+        fetchWorkers();
+      }
+    }, [activeProject])
+  );
+
+  useEffect(() => {
+    if (loading || workers.length === 0) return;
+    const autoSaveTimer = setTimeout(() => {
+      handleSavePayroll(true); 
+    }, 2000);
+    return () => clearTimeout(autoSaveTimer);
+  }, [workers]); 
+
+  const fetchWorkers = async () => {
+    setLoading(true);
     try {
-      const { data: invData, error: invError } = await supabase
-        .from('inventory')
+      const { data, error } = await supabase
+        .from('workers')
         .select('*')
         .eq('is_active', true)
+        .eq('project_id', activeProject?.id) // <-- FILTRO SÓLO ESTA OBRA
         .order('created_at', { ascending: false });
 
-      if (invError) throw invError;
-      if (invData) setItems(invData);
+      if (error) throw error;
 
-      const { data: workData, error: workError } = await supabase
-        .from('workers')
-        .select('id, name')
-        .eq('is_active', true);
+      if (data && data.length > 0) {
+        const initialUIState = data.map(w => ({
+          id: w.id,
+          name: w.name,
+          role: w.role,
+          weekly_salary: w.weekly_salary,
+          attendance: [true, true, true, true, true], 
+          extraDeduction: 0,
+          reason: '',
+          tempDeduction: '', 
+          tempReason: ''     
+        }));
+        setWorkers(initialUIState);
         
-      if (workError) throw workError;
-      if (workData) setWorkers(workData);
-
+        // Cargar gráfica sólo con estos trabajadores
+        const workerIds = initialUIState.map(w => w.id);
+        fetchPayrollHistory(workerIds);
+      } else {
+        setWorkers([]);
+        setChartData([{ value: 0, label: 'Vacío' }]);
+      }
     } catch (error) {
-      console.log("Error cargando datos:", error);
+      console.log("Error cargando trabajadores:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredItems = items.filter(item => {
-    const term = searchQuery.toLowerCase();
-    return (
-      item.name.toLowerCase().includes(term) ||
-      (item.week_label && item.week_label.toLowerCase().includes(term)) ||
-      (item.in_charge && item.in_charge.toLowerCase().includes(term)) ||
-      (item.requested_by && item.requested_by.toLowerCase().includes(term))
-    );
-  });
+  const fetchPayrollHistory = async (workerIds: string[]) => {
+    try {
+      const { data, error } = await supabase
+        .from('payroll_records')
+        .select('week_start, final_salary')
+        .in('worker_id', workerIds) // <-- FILTRO PARA GRÁFICA
+        .order('week_start', { ascending: true }); 
 
-  const totalInvertido = filteredItems.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+      if (error) throw error;
 
-  const groupedItems = filteredItems.reduce((acc, item) => {
-    const week = item.week_label || 'Semana sin definir';
-    if (!acc[week]) acc[week] = [];
-    acc[week].push(item);
-    return acc;
-  }, {} as Record<string, InventoryItem[]>);
+      if (data && data.length > 0) {
+        const groupedData: Record<string, number> = {};
+        data.forEach(record => {
+          if (!groupedData[record.week_start]) {
+            groupedData[record.week_start] = 0;
+          }
+          groupedData[record.week_start] += Number(record.final_salary);
+        });
 
-  // NUEVO: Calculamos los materiales únicos (para que no te sugiera "Cemento" 20 veces)
-  const uniqueMaterials = items.filter((item, index, self) =>
-    index === self.findIndex((t) => (
-      t.name.toLowerCase().trim() === item.name.toLowerCase().trim()
-    ))
-  );
+        const newChartData = Object.keys(groupedData).map(dateStr => {
+          const dateObj = new Date(dateStr);
+          dateObj.setDate(dateObj.getDate() + 1); 
+          const day = dateObj.getDate();
+          const month = dateObj.getMonth() + 1;
+          return { value: groupedData[dateStr], label: `${day}/${month}` };
+        });
+
+        const recentChartData = newChartData.slice(-5);
+        setChartData(recentChartData);
+      } else {
+        setChartData([{ value: 0, label: 'Vacío' }]);
+      }
+    } catch (error) {
+      console.log("Error cargando historial de gráfica:", error);
+    }
+  };
+
+  const toggleAttendance = (workerId: string, dayIndex: number) => {
+    setWorkers(prev => prev.map(w => {
+      if (w.id === workerId) {
+        const currentAttendance = w.attendance || [true, true, true, true, true];
+        const newAttendance = [...currentAttendance];
+        newAttendance[dayIndex] = !newAttendance[dayIndex];
+        return { ...w, attendance: newAttendance };
+      }
+      return w;
+    }));
+  };
+
+  const updateWorkerField = (id: string, field: keyof WorkerState, value: string) => {
+    setWorkers(prev => prev.map(w => w.id === id ? { ...w, [field]: value } : w));
+  };
+
+  const applyDeduction = (id: string) => {
+    Keyboard.dismiss(); 
+    setWorkers(prev => prev.map(w => {
+      if (w.id === id) {
+        const amountToAdd = Number(w.tempDeduction || 0);
+        const reasonToAdd = w.tempReason.trim();
+        
+        if (amountToAdd > 0 || reasonToAdd) {
+          let newReason = w.reason;
+          if (reasonToAdd) {
+            newReason = w.reason ? `${w.reason}, ${reasonToAdd}` : reasonToAdd;
+          }
+          return {
+            ...w,
+            extraDeduction: w.extraDeduction + amountToAdd, 
+            reason: newReason,                              
+            tempDeduction: '',                              
+            tempReason: ''                                  
+          };
+        }
+      }
+      return w;
+    }));
+  };
+
+  const clearDeductions = (id: string) => {
+    setWorkers(prev => prev.map(w => w.id === id ? { ...w, extraDeduction: 0, reason: '' } : w));
+  };
+
+  const calculateFinalSalary = (w: WorkerState) => {
+    const dailySalary = w.weekly_salary / 5;
+    const attendanceArray = w.attendance || [true, true, true, true, true]; 
+    const daysPresent = attendanceArray.filter(Boolean).length; 
+    const extraDeduction = w.extraDeduction || 0; 
+    return Math.max(0, (dailySalary * daysPresent) - extraDeduction);
+  };
+
+  const totalBase = workers.reduce((sum, w) => sum + Number(w.weekly_salary), 0);
+  const totalToPay = workers.reduce((sum, w) => sum + calculateFinalSalary(w), 0);
 
   const openAddModal = () => {
-    setEditingId(null);
-    setName('');
-    setUnit('');
-    setQuantity('');
-    setPrice('');
-    setRequestedBy('');
-    setInCharge('');
-    setWeekLabelModal(getWeekRange());
-    setShowSuggestions(false);
+    setEditingWorkerId(null);
+    setNewName('');
+    setNewRole('');
+    setNewSalary('');
     setIsModalVisible(true);
   };
 
-  const openEditModal = (item: InventoryItem) => {
-    setEditingId(item.id);
-    setName(item.name);
-    setUnit(item.unit);
-    setQuantity(item.quantity.toString());
-    setPrice(item.unit_price.toString());
-    setRequestedBy(item.requested_by || '');
-    setInCharge(item.in_charge || '');
-    setWeekLabelModal(item.week_label || getWeekRange());
-    setShowSuggestions(false);
+  const openEditModal = (worker: WorkerState) => {
+    setEditingWorkerId(worker.id);
+    setNewName(worker.name);
+    setNewRole(worker.role);
+    setNewSalary(worker.weekly_salary.toString());
     setIsModalVisible(true);
   };
 
-  const confirmDelete = (id: string, itemName: string) => {
+  const confirmDeleteWorker = (id: string, name: string) => {
     Alert.alert(
-      "Eliminar Registro",
-      `¿Estás seguro de que deseas quitar "${itemName}" del reporte?`,
+      "Eliminar Trabajador",
+      `¿Estás seguro de que deseas quitar a ${name} de la obra?`,
       [
         { text: "Cancelar", style: "cancel" },
         { 
@@ -151,11 +232,12 @@ export default function InventarioScreen() {
           style: "destructive", 
           onPress: async () => {
             try {
-              const { error } = await supabase.from('inventory').update({ is_active: false }).eq('id', id);
+              const { error } = await supabase.from('workers').update({ is_active: false }).eq('id', id);
               if (error) throw error;
-              setItems(prev => prev.filter(i => i.id !== id));
+              setWorkers(prev => prev.filter(w => w.id !== id));
+              Alert.alert("✅ Eliminado", "El trabajador ya no aparecerá en tu lista.");
             } catch (error: any) {
-              Alert.alert("Error al eliminar", error.message);
+              Alert.alert("❌ Error", error.message);
             }
           } 
         }
@@ -163,33 +245,31 @@ export default function InventarioScreen() {
     );
   };
 
-  const handleSaveItem = async () => {
-    if (!name.trim() || !unit.trim() || !quantity.trim() || !price.trim() || !weekLabelModal.trim()) {
-      Alert.alert("Campos incompletos", "Por favor llena los datos básicos (Semana, Concepto, Cantidad y P.U.).");
+  const handleSaveWorker = async () => {
+    if (!newName.trim() || !newRole.trim() || !newSalary.trim()) {
+      Alert.alert("Campos incompletos", "Llena todos los datos del trabajador.");
       return;
     }
 
     setIsSaving(true);
-    const itemData = {
-      name: name.trim(),
-      unit: unit.trim(),
-      quantity: Number(quantity),
-      unit_price: Number(price),
-      week_label: weekLabelModal.toUpperCase(),
-      requested_by: requestedBy,
-      in_charge: inCharge
-    };
-
     try {
-      if (editingId) {
-        const { error } = await supabase.from('inventory').update(itemData).eq('id', editingId);
+      if (editingWorkerId) {
+        const { error } = await supabase.from('workers').update({ name: newName, role: newRole, weekly_salary: Number(newSalary) }).eq('id', editingWorkerId);
         if (error) throw error;
-        setItems(prev => prev.map(i => i.id === editingId ? { ...i, ...itemData } : i));
+        setWorkers(prev => prev.map(w => w.id === editingWorkerId ? { ...w, name: newName, role: newRole, weekly_salary: Number(newSalary) } : w));
+        Alert.alert("Éxito", "Trabajador actualizado.");
       } else {
-        const { data, error } = await supabase.from('inventory').insert([itemData]).select();
+        const { data, error } = await supabase.from('workers').insert([{ 
+          name: newName, 
+          role: newRole, 
+          weekly_salary: Number(newSalary),
+          project_id: activeProject?.id // <-- VINCULAMOS AL GUARDAR
+        }]).select();
         if (error) throw error;
         if (data && data.length > 0) {
-          setItems(prev => [data[0], ...prev]);
+          const newWorker: WorkerState = { id: data[0].id, name: data[0].name, role: data[0].role, weekly_salary: data[0].weekly_salary, attendance: [true, true, true, true, true], extraDeduction: 0, reason: '', tempDeduction: '', tempReason: '' };
+          setWorkers(prev => [newWorker, ...prev]);
+          Alert.alert("Éxito", "Trabajador agregado a esta obra.");
         }
       }
       setIsModalVisible(false);
@@ -200,26 +280,57 @@ export default function InventarioScreen() {
     }
   };
 
-  const handleExportPDF = async () => {
-    if (filteredItems.length === 0) {
-      Alert.alert("Sin datos", "No hay registros en esta vista para exportar.");
+  const handleSavePayroll = async (isSilent = false) => {
+    if (workers.length === 0) return;
+
+    if (!isSilent) setIsSaving(true);
+    try {
+      const today = new Date();
+      const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
+      const firstDay = today.getDate() - dayOfWeek + 1;
+      const weekStart = new Date(today.setDate(firstDay)).toISOString().split('T')[0];
+
+      const recordsToSave = workers.map(w => {
+        const attendanceArray = w.attendance || [true, true, true, true, true];
+        const daysAbsent = 5 - attendanceArray.filter(Boolean).length;
+        
+        return {
+          worker_id: w.id,
+          week_start: weekStart,
+          days_absent: daysAbsent,
+          deduction_amount: w.extraDeduction, 
+          deduction_reason: w.reason,         
+          final_salary: calculateFinalSalary(w)
+        };
+      });
+
+      const { error } = await supabase.from('payroll_records').upsert(recordsToSave, { onConflict: 'worker_id,week_start' });
+      if (error) throw error;
+
+      if (!isSilent) {
+        Alert.alert("✅ Éxito", `Nómina guardada correctamente.`);
+        // Recargar gráfica
+        fetchPayrollHistory(workers.map(w => w.id));
+      }
+
+    } catch (error: any) {
+      if (!isSilent) Alert.alert("❌ Error", error.message);
+    } finally {
+      if (!isSilent) setIsSaving(false);
+    }
+  };
+
+  const handleGeneratePDF = async () => {
+    if (workers.length === 0) {
+      Alert.alert("Sin datos", "No hay trabajadores activos.");
       return;
     }
-
-    setIsExporting(true);
     try {
-      const htmlContent = generarPlantillaInventario(filteredItems);
-      const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      await Sharing.shareAsync(uri, {
-        UTI: '.pdf',
-        mimeType: 'application/pdf',
-        dialogTitle: 'Exportar Inventario'
-      });
+      const htmlContent = generarPlantillaNomina(workers, weekLabel);
+      const { uri } = await Print.printToFileAsync({ html: htmlContent, base64: false });
+      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Compartir Nómina Semanal', UTI: 'com.adobe.pdf' });
     } catch (error: any) {
-      console.error("Error al exportar inventario:", error);
-      Alert.alert("Error", "Ocurrió un problema al generar el documento.");
-    } finally {
-      setIsExporting(false);
+      Alert.alert("Error", "No se pudo generar el reporte PDF: " + error.message);
     }
   };
 
@@ -230,279 +341,229 @@ export default function InventarioScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Feather name="chevron-left" size={28} color="#FFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Gastos y Materiales</Text>
+          <View>
+            <Text style={styles.headerTitle}>Control de Asistencia</Text>
+            <Text style={styles.headerSubtitle}>{activeProject?.name || "Cargando obra..."}</Text>
+          </View>
         </View>
       </View>
 
-      <View style={styles.body}>
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryBox}>
-            <Text style={styles.summaryLabel}>Total Registros</Text>
-            <Text style={styles.summaryValue}>{filteredItems.length}</Text> 
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }} 
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      >
+        <ScrollView 
+          style={styles.body} 
+          showsVerticalScrollIndicator={false} 
+          contentContainerStyle={{ paddingBottom: 150 }} 
+          keyboardShouldPersistTaps="handled" 
+        >
+          
+          <View style={styles.chartCard}>
+            <Text style={styles.sectionTitle}>Gasto de Nómina Semanal ($)</Text>
+            <View style={{ alignItems: 'center', marginTop: 10, width: '100%' }}>
+              <Text style={{ alignSelf: 'flex-start', fontSize: 10, color: '#6B7280', fontWeight: 'bold', marginBottom: 5 }}>
+                Y: Gasto ($)
+              </Text>
+              <LineChart
+                data={chartData}
+                width={screenWidth - 120} 
+                height={140}
+                thickness={3}
+                color="#2563EB"
+                dataPointsColor="#059669"
+                hideRules
+                noOfSections={4} 
+                yAxisLabelWidth={45} 
+                yAxisTextStyle={{ color: '#6B7280', fontSize: 10 }}
+                xAxisLabelTextStyle={{ color: '#6B7280', fontSize: 10 }}
+                yAxisLabelPrefix="$" 
+                textColor="#059669"
+                textFontSize={10}
+                textShiftY={-12}
+                textShiftX={-15}
+              />
+              <Text style={{ fontSize: 10, color: '#6B7280', fontWeight: 'bold', marginTop: 5 }}>
+                X: Semanas (Inicio de raya)
+              </Text>
+            </View>
           </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryBox}>
-            <Text style={styles.summaryLabel}>Gasto en Pantalla</Text>
-            <Text style={[styles.summaryValue, { color: '#059669' }]} adjustsFontSizeToFit numberOfLines={1}>
-              ${totalInvertido.toFixed(2)}
-            </Text>
+
+          <View style={styles.summaryCard}>
+            <View style={styles.summaryBox}>
+              <Text style={styles.summaryLabel}>Nómina Base</Text>
+              <Text style={styles.summaryValue} adjustsFontSizeToFit numberOfLines={1}>${totalBase.toFixed(2)}</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryBox}>
+              <Text style={styles.summaryLabel}>Proyección Final</Text>
+              <Text style={[styles.summaryValue, { color: '#059669' }]} adjustsFontSizeToFit numberOfLines={1}>${totalToPay.toFixed(2)}</Text>
+            </View>
           </View>
-        </View>
 
-        <View style={styles.searchContainer}>
-          <Feather name="search" size={18} color="#9CA3AF" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar concepto, semana, nombre..."
-            placeholderTextColor="#9CA3AF"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            returnKeyType="search"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchBtn}>
-              <Feather name="x-circle" size={16} color="#9CA3AF" />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle} adjustsFontSizeToFit numberOfLines={1}>
-            {searchQuery ? 'Resultados de Búsqueda' : 'Reporte Histórico'}
-          </Text>
-          <View style={styles.actionsRow}>
-            <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
-              <Feather name="plus" size={14} color="#FFF" />
-              <Text style={styles.addButtonText} adjustsFontSizeToFit numberOfLines={1}>Gasto</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.addButton, styles.pdfButton]} onPress={handleExportPDF} disabled={isExporting}>
-              {isExporting ? (
-                <ActivityIndicator size="small" color="#FFF" />
-              ) : (
-                <>
-                  <Feather name="file-text" size={14} color="#FFF" />
-                  <Text style={styles.addButtonText} adjustsFontSizeToFit numberOfLines={1}>PDF</Text>
-                </>
-              )}
-            </TouchableOpacity>
+          <View style={styles.sectionHeaderRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sectionTitle}>Asistencia Semanal</Text>
+              <Text style={styles.weekLabelText}>Semana: {weekLabel}</Text>
+            </View>
+            
+            {/* EL BOTÓN DE PDF SE QUEDA AQUÍ ARRIBA PORQUE ES "EXPORTACIÓN" */}
+            <View style={styles.actionButtonsContainer}>
+              <TouchableOpacity style={styles.pdfButton} onPress={handleGeneratePDF}>
+                <Feather name="file-text" size={14} color="#FFF" />
+                <Text style={styles.saveButtonText}>PDF</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }} keyboardShouldPersistTaps="handled">
+          <View style={styles.tableHeader}>
+            <Text style={[styles.thText, { flex: 2.5 }]} adjustsFontSizeToFit numberOfLines={1}>Trabajador</Text>
+            <Text style={[styles.thText, { flex: 3, textAlign: 'center' }]} adjustsFontSizeToFit numberOfLines={1}>Semana</Text>
+            <Text style={[styles.thText, { flex: 1.5, textAlign: 'center' }]} adjustsFontSizeToFit numberOfLines={1}>S.x Día</Text>
+            <Text style={[styles.thText, { flex: 2, textAlign: 'right' }]} adjustsFontSizeToFit numberOfLines={1}>S.Semanal</Text>
+          </View>
+
           {loading ? (
-            <Text style={styles.emptyText}>Cargando datos...</Text>
-          ) : Object.keys(groupedItems).length === 0 ? (
-            <Text style={styles.emptyText}>No se encontraron registros.</Text>
+            <Text style={styles.loadingText}>Cargando equipo...</Text>
+          ) : workers.length === 0 ? (
+            <Text style={styles.emptyText}>No hay trabajadores activos.</Text>
           ) : (
-            Object.entries(groupedItems).map(([week, weekItems]) => {
-              const weekSubtotal = weekItems.reduce((sum, i) => sum + (i.quantity * i.unit_price), 0);
+            workers.map((worker) => {
+              const finalSalary = calculateFinalSalary(worker);
+              const dailySalary = worker.weekly_salary / 5;
+              const attendanceArray = worker.attendance || [true, true, true, true, true];
               
               return (
-                <View key={week} style={styles.weekBlock}>
-                  <View style={styles.weekHeader}>
-                    <Text style={styles.weekTitle}>{week}</Text>
-                    <Text style={styles.weekSubtotal}>Subtotal: ${weekSubtotal.toFixed(2)}</Text>
-                  </View>
-
-                  <View style={styles.tableHeader}>
-                    <Text style={[styles.thText, { flex: 2.5 }]}>Concepto / Asignación</Text>
-                    <Text style={[styles.thText, { flex: 1.5, textAlign: 'center' }]}>Cant/U.</Text>
-                    <Text style={[styles.thText, { flex: 1.5, textAlign: 'center' }]}>P.U.</Text>
-                    <Text style={[styles.thText, { flex: 2, textAlign: 'right' }]}>Importe</Text>
-                  </View>
-
-                  {weekItems.map((item) => (
-                    <View key={item.id} style={styles.tableRowContainer}>
-                      <View style={styles.tableRow}>
-                        
-                        <View style={{ flex: 2.5, justifyContent: 'center', paddingRight: 5 }}>
-                          <Text style={styles.tdName} numberOfLines={2}>{item.name}</Text>
-                          
-                          {item.in_charge ? (
-                            <View style={styles.badgeRow}>
-                              <Feather name="user-check" size={10} color="#2563EB" />
-                              <Text style={[styles.tdRole, { color: '#2563EB' }]} numberOfLines={1}> {item.in_charge}</Text>
-                            </View>
-                          ) : null}
-                          
-                          {item.requested_by ? (
-                            <View style={styles.badgeRow}>
-                              <Feather name="message-square" size={10} color="#D97706" />
-                              <Text style={[styles.tdRole, { color: '#D97706' }]} numberOfLines={1}> Solicita: {item.requested_by}</Text>
-                            </View>
-                          ) : null}
-
-                          <View style={styles.actionButtons}>
-                            <TouchableOpacity onPress={() => openEditModal(item)} style={styles.editIcon}>
-                              <Feather name="edit-2" size={10} color="#2563EB" />
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => confirmDelete(item.id, item.name)} style={styles.deleteIcon}>
-                              <Feather name="trash-2" size={10} color="#DC2626" />
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-
-                        <View style={{ flex: 1.5, alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={styles.tdValue}>{item.quantity}</Text>
-                          <Text style={styles.tdUnit}>{item.unit}</Text>
-                        </View>
-
-                        <View style={{ flex: 1.5, alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={styles.tdValue} adjustsFontSizeToFit numberOfLines={1}>${item.unit_price}</Text>
-                        </View>
-
-                        <View style={{ flex: 2, alignItems: 'flex-end', justifyContent: 'center' }}>
-                          <Text style={styles.tdTotal} adjustsFontSizeToFit numberOfLines={1}>
-                            ${(item.quantity * item.unit_price).toFixed(2)}
-                          </Text>
-                        </View>
+                <View key={worker.id} style={styles.tableRowContainer}>
+                  <View style={styles.tableRow}>
+                    <View style={{ flex: 2.5, justifyContent: 'center' }}>
+                      <View style={styles.nameRow}>
+                        <Text style={styles.tdName} numberOfLines={1}>{worker.name}</Text>
+                      </View>
+                      <View style={styles.workerActions}>
+                        <Text style={styles.tdRole} numberOfLines={1}>{worker.role}</Text>
+                        <TouchableOpacity onPress={() => openEditModal(worker)} style={styles.editIcon}>
+                          <Feather name="edit-2" size={10} color="#2563EB" />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => confirmDeleteWorker(worker.id, worker.name)} style={styles.deleteIcon}>
+                          <Feather name="trash-2" size={10} color="#DC2626" />
+                        </TouchableOpacity>
                       </View>
                     </View>
-                  ))}
+
+                    <View style={{ flex: 3, flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'center' }}>
+                      {attendanceArray.map((isPresent, index) => (
+                        <TouchableOpacity 
+                          key={index} 
+                          onPress={() => toggleAttendance(worker.id, index)}
+                          style={styles.dayCheckbox}
+                        >
+                          <Text style={styles.dayLabel}>{DAYS_OF_WEEK[index]}</Text>
+                          <Feather name={isPresent ? "check-square" : "square"} size={16} color={isPresent ? "#059669" : "#9CA3AF"} />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <View style={{ flex: 1.5, justifyContent: 'center', alignItems: 'center' }}>
+                      <Text style={styles.tdDaily} adjustsFontSizeToFit numberOfLines={1}>${dailySalary.toFixed(0)}</Text>
+                    </View>
+
+                    <View style={{ flex: 2, justifyContent: 'center', alignItems: 'flex-end' }}>
+                      <Text style={styles.tdTotal} adjustsFontSizeToFit numberOfLines={1}>${finalSalary.toFixed(0)}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.extraRow}>
+                    <TextInput 
+                      style={[styles.extraInput, { flex: 1 }]} 
+                      placeholder="Agregar Motivo..." 
+                      placeholderTextColor="#9CA3AF" 
+                      returnKeyType="done" 
+                      value={worker.tempReason} 
+                      onChangeText={(val) => updateWorkerField(worker.id, 'tempReason', val)}
+                      onSubmitEditing={() => applyDeduction(worker.id)}
+                    />
+                    <TextInput 
+                      style={[styles.extraInput, { width: 65, marginLeft: 8 }]} 
+                      placeholder="Multa $" 
+                      placeholderTextColor="#9CA3AF" 
+                      keyboardType="numeric" 
+                      returnKeyType="done" 
+                      value={worker.tempDeduction} 
+                      onChangeText={(val) => updateWorkerField(worker.id, 'tempDeduction', val)}
+                      onSubmitEditing={() => applyDeduction(worker.id)}
+                    />
+                    
+                    <TouchableOpacity 
+                      style={styles.applyDeductionBtn} 
+                      onPress={() => applyDeduction(worker.id)}
+                    >
+                      <Feather name="check" size={14} color="#FFF" />
+                    </TouchableOpacity>
+                  </View>
+
+                  {(worker.extraDeduction > 0 || worker.reason !== '') && (
+                    <View style={styles.accumulatedRow}>
+                      <Text style={styles.accumulatedText}>
+                        Multa aplicada: -${worker.extraDeduction} {worker.reason ? `(${worker.reason})` : ''}
+                      </Text>
+                      <TouchableOpacity onPress={() => clearDeductions(worker.id)} style={styles.undoBtn}>
+                        <Feather name="x-circle" size={12} color="#DC2626" />
+                        <Text style={styles.undoText}>Deshacer</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               );
             })
           )}
         </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* 4. LOS DOS BOTONES FLOTANTES (FABs) APILADOS */}
+      <View style={styles.fabContainer}>
+        {/* Botón Guardar Nómina (Verde) */}
+        <TouchableOpacity 
+          style={[styles.fab, { backgroundColor: '#059669', marginBottom: 15 }]} 
+          onPress={() => handleSavePayroll(false)}
+        >
+          {isSaving ? <Feather name="loader" size={24} color="#FFF" /> : <Feather name="save" size={24} color="#FFF" />}
+        </TouchableOpacity>
+        
+        {/* Botón Agregar Trabajador (Azul) */}
+        <TouchableOpacity 
+          style={[styles.fab, { backgroundColor: '#2563EB' }]} 
+          onPress={openAddModal}
+        >
+          <Feather name="plus" size={28} color="#FFF" />
+        </TouchableOpacity>
       </View>
 
+      {/* MODAL */}
       <Modal visible={isModalVisible} animationType="slide" transparent={true}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{editingId ? 'Editar Registro' : 'Nuevo Registro'}</Text>
-                <TouchableOpacity onPress={() => setIsModalVisible(false)}>
-                  <Feather name="x" size={24} color="#6B7280" />
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.modalLabel}>Semana de Registro</Text>
-              <TextInput 
-                style={[styles.modalInput, { backgroundColor: '#EFF6FF', fontWeight: 'bold' }]} 
-                value={weekLabelModal} 
-                onChangeText={setWeekLabelModal} 
-              />
-
-              <Text style={styles.modalLabel}>Concepto / Actividad</Text>
-              <View style={{ zIndex: 1 }}>
-                <TextInput 
-                  style={[styles.modalInput, showSuggestions && name.length > 0 && styles.modalInputActive]} 
-                  placeholder="Ej. Cemento Cruz Azul 50kg" 
-                  placeholderTextColor="#9CA3AF"
-                  value={name} 
-                  onChangeText={(val) => {
-                    setName(val);
-                    setShowSuggestions(true);
-                  }} 
-                />
-                
-                {/* CAJA PREDICTIVA DE AUTOCOMPLETADO */}
-                {showSuggestions && name.length > 1 && (
-                  <View style={styles.suggestionsContainer}>
-                    {uniqueMaterials
-                      .filter(m => m.name.toLowerCase().includes(name.toLowerCase()))
-                      .slice(0, 4) // Mostramos máximo 4 sugerencias
-                      .map(suggestion => (
-                        <TouchableOpacity 
-                          key={`sug-${suggestion.id}`} 
-                          style={styles.suggestionItem}
-                          onPress={() => {
-                            setName(suggestion.name);
-                            setUnit(suggestion.unit);
-                            setPrice(suggestion.unit_price.toString());
-                            setShowSuggestions(false); // Ocultamos la caja al elegir
-                          }}
-                        >
-                          <Text style={styles.suggestionText}>{suggestion.name}</Text>
-                          <Text style={styles.suggestionPrice}>
-                            ${suggestion.unit_price} / {suggestion.unit}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                  </View>
-                )}
-              </View>
-
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
-                <View style={{ flex: 1, marginRight: 10 }}>
-                  <Text style={styles.modalLabel}>Unidad</Text>
-                  <TextInput 
-                    style={styles.modalInput} 
-                    placeholder="Ej. Bulto" 
-                    placeholderTextColor="#9CA3AF"
-                    value={unit} 
-                    onChangeText={setUnit} 
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.modalLabel}>Precio Unitario $</Text>
-                  <TextInput 
-                    style={styles.modalInput} 
-                    placeholder="Ej. 250" 
-                    placeholderTextColor="#9CA3AF"
-                    keyboardType="numeric" 
-                    value={price} 
-                    onChangeText={setPrice} 
-                  />
-                </View>
-              </View>
-
-              <Text style={styles.modalLabel}>Vol. / Cant. (Para esta semana)</Text>
-              <TextInput 
-                style={styles.modalInput} 
-                placeholder="Ej. 10" 
-                placeholderTextColor="#9CA3AF"
-                keyboardType="numeric" 
-                value={quantity} 
-                onChangeText={setQuantity} 
-              />
-
-              <Text style={styles.modalLabel}>Encargado / Recibe (Opcional)</Text>
-              <TextInput 
-                style={styles.modalInput} 
-                placeholder="Nombre del responsable..." 
-                placeholderTextColor="#9CA3AF"
-                value={inCharge} 
-                onChangeText={setInCharge} 
-              />
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipContainer} keyboardShouldPersistTaps="handled">
-                {workers.map(w => (
-                  <TouchableOpacity 
-                    key={`incharge-${w.id}`} 
-                    style={[styles.chip, inCharge === w.name && styles.chipSelected]}
-                    onPress={() => setInCharge(w.name)}
-                  >
-                    <Text style={[styles.chipText, inCharge === w.name && styles.chipTextSelected]}>{w.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-
-              <Text style={styles.modalLabel}>Solicitado por (Opcional)</Text>
-              <TextInput 
-                style={styles.modalInput} 
-                placeholder="Quién pide el material..." 
-                placeholderTextColor="#9CA3AF"
-                value={requestedBy} 
-                onChangeText={setRequestedBy} 
-              />
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipContainer} keyboardShouldPersistTaps="handled">
-                {workers.map(w => (
-                  <TouchableOpacity 
-                    key={`req-${w.id}`} 
-                    style={[styles.chip, requestedBy === w.name && styles.chipSelected]}
-                    onPress={() => setRequestedBy(w.name)}
-                  >
-                    <Text style={[styles.chipText, requestedBy === w.name && styles.chipTextSelected]}>{w.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-
-              <TouchableOpacity style={styles.modalButton} onPress={handleSaveItem} disabled={isSaving}>
-                <Text style={styles.modalButtonText}>{isSaving ? 'Guardando...' : 'Guardar'}</Text>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingWorkerId ? 'Editar Trabajador' : 'Nuevo Trabajador'}</Text>
+              <TouchableOpacity onPress={() => setIsModalVisible(false)}>
+                <Feather name="x" size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
-          </ScrollView>
+
+            <Text style={styles.modalLabel}>Nombre completo</Text>
+            <TextInput style={styles.modalInput} placeholder="Ej. Juan Pérez" value={newName} onChangeText={setNewName} returnKeyType="done" placeholderTextColor="#6B7280"/>
+
+            <Text style={styles.modalLabel}>Puesto</Text>
+            <TextInput style={styles.modalInput} placeholder="Ej. Oficial Carpintero" value={newRole} onChangeText={setNewRole} returnKeyType="done" placeholderTextColor="#6B7280"/>
+
+            <Text style={styles.modalLabel}>Sueldo Base Semanal ($)</Text>
+            <TextInput style={styles.modalInput} placeholder="Ej. 2500" keyboardType="numeric" value={newSalary} onChangeText={setNewSalary} returnKeyType="done" placeholderTextColor="#6B7280"/>
+
+            <TouchableOpacity style={styles.modalButton} onPress={handleSaveWorker} disabled={isSaving}>
+              <Text style={styles.modalButtonText}>{isSaving ? 'Guardando...' : (editingWorkerId ? 'Actualizar' : 'Agregar')}</Text>
+            </TouchableOpacity>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
     </View>
@@ -515,86 +576,68 @@ const styles = StyleSheet.create({
   headerTopRow: { flexDirection: 'row', alignItems: 'center' },
   backButton: { padding: 4, marginLeft: -4 },
   headerTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginLeft: 15 },
+  headerSubtitle: { color: 'rgba(255,255,255,0.8)', fontSize: 12, marginLeft: 15, marginTop: 2 },
   
-  body: { padding: 15, flex: 1 },
+  body: { padding: 15 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#374151', marginBottom: 2 },
+  weekLabelText: { fontSize: 12, color: '#6B7280', fontWeight: '500' },
   
-  summaryCard: { flexDirection: 'row', backgroundColor: '#1E293B', borderRadius: 16, padding: 15, marginBottom: 15, elevation: 3 },
+  chartCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 15, marginBottom: 15, elevation: 2 },
+  
+  summaryCard: { flexDirection: 'row', backgroundColor: '#1E293B', borderRadius: 16, padding: 15, marginBottom: 20 },
   summaryBox: { flex: 1, alignItems: 'center' },
   summaryDivider: { width: 1, backgroundColor: '#475569', marginHorizontal: 10 },
-  summaryLabel: { color: '#94A3B8', fontSize: 11, marginBottom: 5, textTransform: 'uppercase' },
-  summaryValue: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
+  summaryLabel: { color: '#94A3B8', fontSize: 11, marginBottom: 5 },
+  summaryValue: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
 
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 20 },
-  searchIcon: { marginRight: 8 },
-  searchInput: { flex: 1, fontSize: 13, color: '#111827' },
-  clearSearchBtn: { padding: 4 },
+  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  actionButtonsContainer: { flexDirection: 'row', alignItems: 'center' },
+  saveButtonText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', marginLeft: 4 },
+  pdfButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#DC2626', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10 },
+  
+  loadingText: { textAlign: 'center', color: '#6B7280', marginTop: 20 },
+  emptyText: { textAlign: 'center', color: '#6B7280', marginTop: 20, fontStyle: 'italic' },
 
-  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, flexWrap: 'wrap', gap: 8 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#374151', flexShrink: 1 },
-  actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  addButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#059669', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10 },
-  addButtonText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', marginLeft: 6 },
-  pdfButton: { backgroundColor: '#DC2626' },
-
-  weekBlock: { marginBottom: 25 },
-  weekHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#E0E7FF', padding: 10, borderTopLeftRadius: 10, borderTopRightRadius: 10, borderBottomWidth: 2, borderBottomColor: '#4F46E5' },
-  weekTitle: { fontSize: 12, fontWeight: 'bold', color: '#1E3A8A', textTransform: 'uppercase', flexShrink: 1 },
-  weekSubtotal: { fontSize: 13, fontWeight: 'bold', color: '#059669', marginLeft: 10 },
-
-  tableHeader: { flexDirection: 'row', backgroundColor: '#F3F4F6', paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 1, borderColor: '#D1D5DB' },
+  tableHeader: { flexDirection: 'row', backgroundColor: '#E5E7EB', paddingVertical: 10, paddingHorizontal: 5, borderTopLeftRadius: 10, borderTopRightRadius: 10, borderBottomWidth: 1, borderColor: '#D1D5DB' },
   thText: { fontSize: 10, fontWeight: 'bold', color: '#4B5563', textTransform: 'uppercase' },
   
-  tableRowContainer: { backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#E5E7EB', borderLeftWidth: 1, borderRightWidth: 1, paddingHorizontal: 10, paddingVertical: 12 },
+  tableRowContainer: { backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#E5E7EB', borderLeftWidth: 1, borderRightWidth: 1, paddingHorizontal: 5, paddingVertical: 10 },
   tableRow: { flexDirection: 'row', alignItems: 'center' },
   
-  tdName: { fontSize: 12, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
-  badgeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 3 },
-  tdRole: { fontSize: 9, fontStyle: 'italic', fontWeight: '600' },
+  nameRow: { flexDirection: 'row', alignItems: 'center' },
+  tdName: { fontSize: 12, fontWeight: 'bold', color: '#111827' },
   
-  actionButtons: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-  editIcon: { padding: 6, backgroundColor: '#EFF6FF', borderRadius: 6, marginRight: 8 },
-  deleteIcon: { padding: 6, backgroundColor: '#FEE2E2', borderRadius: 6 },
+  workerActions: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  tdRole: { fontSize: 9, color: '#6B7280', flex: 1 },
+  editIcon: { padding: 4, marginLeft: 2, backgroundColor: '#EFF6FF', borderRadius: 6 },
+  deleteIcon: { padding: 4, marginLeft: 4, backgroundColor: '#FEE2E2', borderRadius: 6 },
   
-  tdValue: { fontSize: 12, color: '#374151', fontWeight: '600' },
-  tdUnit: { fontSize: 9, color: '#6B7280', textTransform: 'uppercase', marginTop: 2 },
-  tdTotal: { fontSize: 14, color: '#059669', fontWeight: 'bold' },
+  dayCheckbox: { alignItems: 'center', marginHorizontal: 1 },
+  dayLabel: { fontSize: 8, color: '#6B7280', marginBottom: 2, fontWeight: 'bold' },
+  
+  tdDaily: { fontSize: 11, color: '#4B5563', fontWeight: '500' },
+  tdTotal: { fontSize: 12, color: '#059669', fontWeight: 'bold' },
 
-  emptyText: { textAlign: 'center', color: '#6B7280', marginTop: 30, fontStyle: 'italic' },
+  extraRow: { flexDirection: 'row', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
+  extraInput: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 6, fontSize: 11, color: '#111827' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', padding: 20 },
-  modalContent: { backgroundColor: '#FFF', borderRadius: 16, padding: 20, marginVertical: 40 },
+  applyDeductionBtn: { backgroundColor: '#059669', borderRadius: 6, paddingHorizontal: 8, marginLeft: 8, justifyContent: 'center', alignItems: 'center' },
+  
+  accumulatedRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, paddingHorizontal: 5, backgroundColor: '#FEF2F2', paddingVertical: 4, borderRadius: 4 },
+  accumulatedText: { fontSize: 10, color: '#DC2626', flex: 1, fontStyle: 'italic', fontWeight: '500' },
+  undoBtn: { flexDirection: 'row', alignItems: 'center', marginLeft: 8, backgroundColor: '#FEE2E2', paddingHorizontal: 6, paddingVertical: 4, borderRadius: 4 },
+  undoText: { color: '#DC2626', fontSize: 9, fontWeight: 'bold', marginLeft: 3 },
+
+  // ESTILOS DE LOS BOTONES FLOTANTES
+  fabContainer: { position: 'absolute', bottom: 30, right: 25, alignItems: 'center' },
+  fab: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
+  modalContent: { backgroundColor: '#FFF', borderRadius: 16, padding: 20 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
-  modalLabel: { fontSize: 12, fontWeight: '600', color: '#4B5563', marginTop: 12, marginBottom: 6 },
-  modalInput: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8, padding: 12, fontSize: 14, color: '#111827' },
-  modalInputActive: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderColor: '#2563EB' }, // Si hay sugerencias, se hace cuadrado de abajo
-
-  // ESTILOS DE LA CAJA PREDICTIVA (NUEVO)
-  suggestionsContainer: {
-    backgroundColor: '#FFF',
-    borderWidth: 1,
-    borderColor: '#2563EB',
-    borderTopWidth: 0,
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 8,
-    maxHeight: 150,
-  },
-  suggestionItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6'
-  },
-  suggestionText: { fontSize: 13, color: '#111827', fontWeight: '600' },
-  suggestionPrice: { fontSize: 11, color: '#059669', fontWeight: 'bold' },
-  
-  chipContainer: { flexDirection: 'row', marginTop: 8, marginBottom: 4 },
-  chip: { backgroundColor: '#F3F4F6', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, marginRight: 8, borderWidth: 1, borderColor: '#E5E7EB' },
-  chipSelected: { backgroundColor: '#2563EB', borderColor: '#1D4ED8' },
-  chipText: { fontSize: 11, color: '#4B5563', fontWeight: '500' },
-  chipTextSelected: { color: '#FFF', fontWeight: 'bold' },
-
-  modalButton: { backgroundColor: '#2563EB', padding: 14, borderRadius: 8, alignItems: 'center', marginTop: 25 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold' },
+  modalLabel: { fontSize: 12, fontWeight: '600', color: '#4B5563', marginTop: 10, marginBottom: 5 },
+  modalInput: { borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8, padding: 10, fontSize: 14 },
+  modalButton: { backgroundColor: '#2563EB', padding: 14, borderRadius: 8, alignItems: 'center', marginTop: 20 },
   modalButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 }
 });

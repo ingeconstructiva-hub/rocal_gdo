@@ -1,11 +1,13 @@
 import { Feather } from '@expo/vector-icons';
 import * as Print from 'expo-print';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { generarPlantillaInventario } from '../utils/pdfInventario';
+// 1. IMPORTAMOS EL CEREBRO DE PROYECTOS
+import { useProject } from '../../context/ProjectContext';
 
 interface InventoryItem {
   id: string;
@@ -25,9 +27,15 @@ interface WorkerSimple {
 
 export default function InventarioScreen() {
   const router = useRouter();
+  
+  // 2. EXTRAEMOS LA OBRA ACTIVA
+  const { activeProject } = useProject();
+
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [workers, setWorkers] = useState<WorkerSimple[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Estados del Modal
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -41,6 +49,9 @@ export default function InventarioScreen() {
   const [weekLabelModal, setWeekLabelModal] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  
+  // Estado para mostrar/ocultar las sugerencias predictivas
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const getWeekRange = () => {
     const today = new Date();
@@ -53,25 +64,35 @@ export default function InventarioScreen() {
     return `${start.getDate()} ${months[start.getMonth()]} - ${end.getDate()} ${months[end.getMonth()]} ${start.getFullYear()}`;
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  // 3. RECARGAMOS LOS DATOS CADA VEZ QUE CAMBIAMOS DE OBRA
+  useFocusEffect(
+    useCallback(() => {
+      if (activeProject?.id) {
+        fetchData();
+      }
+    }, [activeProject])
+  );
 
   const fetchData = async () => {
+    setLoading(true);
     try {
+      // Filtrar el inventario solo de esta obra
       const { data: invData, error: invError } = await supabase
         .from('inventory')
         .select('*')
         .eq('is_active', true)
+        .eq('project_id', activeProject?.id) // <-- FILTRO DE OBRA
         .order('created_at', { ascending: false });
 
       if (invError) throw invError;
       if (invData) setItems(invData);
 
+      // Filtrar a los trabajadores para los "Chips" de encargados, solo de esta obra
       const { data: workData, error: workError } = await supabase
         .from('workers')
         .select('id, name')
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .eq('project_id', activeProject?.id); // <-- FILTRO DE OBRA
         
       if (workError) throw workError;
       if (workData) setWorkers(workData);
@@ -83,14 +104,30 @@ export default function InventarioScreen() {
     }
   };
 
-  const totalInvertido = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+  const filteredItems = items.filter(item => {
+    const term = searchQuery.toLowerCase();
+    return (
+      item.name.toLowerCase().includes(term) ||
+      (item.week_label && item.week_label.toLowerCase().includes(term)) ||
+      (item.in_charge && item.in_charge.toLowerCase().includes(term)) ||
+      (item.requested_by && item.requested_by.toLowerCase().includes(term))
+    );
+  });
 
-  const groupedItems = items.reduce((acc, item) => {
+  const totalInvertido = filteredItems.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+
+  const groupedItems = filteredItems.reduce((acc, item) => {
     const week = item.week_label || 'Semana sin definir';
     if (!acc[week]) acc[week] = [];
     acc[week].push(item);
     return acc;
   }, {} as Record<string, InventoryItem[]>);
+
+  const uniqueMaterials = items.filter((item, index, self) =>
+    index === self.findIndex((t) => (
+      t.name.toLowerCase().trim() === item.name.toLowerCase().trim()
+    ))
+  );
 
   const openAddModal = () => {
     setEditingId(null);
@@ -101,6 +138,7 @@ export default function InventarioScreen() {
     setRequestedBy('');
     setInCharge('');
     setWeekLabelModal(getWeekRange());
+    setShowSuggestions(false);
     setIsModalVisible(true);
   };
 
@@ -113,6 +151,7 @@ export default function InventarioScreen() {
     setRequestedBy(item.requested_by || '');
     setInCharge(item.in_charge || '');
     setWeekLabelModal(item.week_label || getWeekRange());
+    setShowSuggestions(false);
     setIsModalVisible(true);
   };
 
@@ -145,15 +184,21 @@ export default function InventarioScreen() {
       return;
     }
 
+    if (!activeProject?.id) {
+      Alert.alert("Error", "No hay una obra seleccionada.");
+      return;
+    }
+
     setIsSaving(true);
     const itemData = {
-      name,
-      unit,
+      name: name.trim(),
+      unit: unit.trim(),
       quantity: Number(quantity),
       unit_price: Number(price),
       week_label: weekLabelModal.toUpperCase(),
       requested_by: requestedBy,
-      in_charge: inCharge
+      in_charge: inCharge,
+      project_id: activeProject.id // <-- 4. VINCULAMOS EL GASTO A LA OBRA
     };
 
     try {
@@ -177,14 +222,14 @@ export default function InventarioScreen() {
   };
 
   const handleExportPDF = async () => {
-    if (items.length === 0) {
-      Alert.alert("Sin datos", "No hay registros de inventario para exportar.");
+    if (filteredItems.length === 0) {
+      Alert.alert("Sin datos", "No hay registros en esta vista para exportar.");
       return;
     }
 
     setIsExporting(true);
     try {
-      const htmlContent = generarPlantillaInventario(items);
+      const htmlContent = generarPlantillaInventario(filteredItems);
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
       await Sharing.shareAsync(uri, {
         UTI: '.pdf',
@@ -206,7 +251,11 @@ export default function InventarioScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Feather name="chevron-left" size={28} color="#FFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Gastos y Materiales</Text>
+          <View>
+            <Text style={styles.headerTitle}>Gastos y Materiales</Text>
+            {/* AGREGAMOS EL NOMBRE DE LA OBRA */}
+            <Text style={styles.headerSubtitle}>{activeProject?.name || "Cargando..."}</Text>
+          </View>
         </View>
       </View>
 
@@ -214,24 +263,42 @@ export default function InventarioScreen() {
         <View style={styles.summaryCard}>
           <View style={styles.summaryBox}>
             <Text style={styles.summaryLabel}>Total Registros</Text>
-            <Text style={styles.summaryValue}>{items.length}</Text>
+            <Text style={styles.summaryValue}>{filteredItems.length}</Text> 
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryBox}>
-            <Text style={styles.summaryLabel}>Gasto Acumulado</Text>
+            <Text style={styles.summaryLabel}>Gasto en Pantalla</Text>
             <Text style={[styles.summaryValue, { color: '#059669' }]} adjustsFontSizeToFit numberOfLines={1}>
               ${totalInvertido.toFixed(2)}
             </Text>
           </View>
         </View>
 
-        {/* CONTENEDOR RESPONSIVO */}
+        <View style={styles.searchContainer}>
+          <Feather name="search" size={18} color="#9CA3AF" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar concepto, semana, nombre..."
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchBtn}>
+              <Feather name="x-circle" size={16} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+        </View>
+
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle} adjustsFontSizeToFit numberOfLines={1}>Reporte Semanal</Text>
+          <Text style={styles.sectionTitle} adjustsFontSizeToFit numberOfLines={1}>
+            {searchQuery ? 'Resultados de Búsqueda' : 'Reporte Histórico'}
+          </Text>
           <View style={styles.actionsRow}>
             <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
               <Feather name="plus" size={14} color="#FFF" />
-              <Text style={styles.addButtonText} adjustsFontSizeToFit numberOfLines={1}>Agregar Gasto</Text>
+              <Text style={styles.addButtonText} adjustsFontSizeToFit numberOfLines={1}>Gasto</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.addButton, styles.pdfButton]} onPress={handleExportPDF} disabled={isExporting}>
               {isExporting ? (
@@ -246,11 +313,11 @@ export default function InventarioScreen() {
           </View>
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }} keyboardShouldPersistTaps="handled">
           {loading ? (
             <Text style={styles.emptyText}>Cargando datos...</Text>
           ) : Object.keys(groupedItems).length === 0 ? (
-            <Text style={styles.emptyText}>No hay gastos registrados aún.</Text>
+            <Text style={styles.emptyText}>No se encontraron registros en esta obra.</Text>
           ) : (
             Object.entries(groupedItems).map(([week, weekItems]) => {
               const weekSubtotal = weekItems.reduce((sum, i) => sum + (i.quantity * i.unit_price), 0);
@@ -326,7 +393,7 @@ export default function InventarioScreen() {
 
       <Modal visible={isModalVisible} animationType="slide" transparent={true}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>{editingId ? 'Editar Registro' : 'Nuevo Registro'}</Text>
@@ -342,6 +409,80 @@ export default function InventarioScreen() {
                 onChangeText={setWeekLabelModal} 
               />
 
+              <Text style={styles.modalLabel}>Concepto / Actividad</Text>
+              <View style={{ zIndex: 1 }}>
+                <TextInput 
+                  style={[styles.modalInput, showSuggestions && name.length > 0 && styles.modalInputActive]} 
+                  placeholder="Ej. Cemento Cruz Azul 50kg" 
+                  placeholderTextColor="#9CA3AF"
+                  value={name} 
+                  onChangeText={(val) => {
+                    setName(val);
+                    setShowSuggestions(true);
+                  }} 
+                />
+                
+                {/* CAJA PREDICTIVA DE AUTOCOMPLETADO */}
+                {showSuggestions && name.length > 1 && (
+                  <View style={styles.suggestionsContainer}>
+                    {uniqueMaterials
+                      .filter(m => m.name.toLowerCase().includes(name.toLowerCase()))
+                      .slice(0, 4) // Mostramos máximo 4 sugerencias
+                      .map(suggestion => (
+                        <TouchableOpacity 
+                          key={`sug-${suggestion.id}`} 
+                          style={styles.suggestionItem}
+                          onPress={() => {
+                            setName(suggestion.name);
+                            setUnit(suggestion.unit);
+                            setPrice(suggestion.unit_price.toString());
+                            setShowSuggestions(false); // Ocultamos la caja al elegir
+                          }}
+                        >
+                          <Text style={styles.suggestionText}>{suggestion.name}</Text>
+                          <Text style={styles.suggestionPrice}>
+                            ${suggestion.unit_price} / {suggestion.unit}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                  </View>
+                )}
+              </View>
+
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
+                <View style={{ flex: 1, marginRight: 10 }}>
+                  <Text style={styles.modalLabel}>Unidad</Text>
+                  <TextInput 
+                    style={styles.modalInput} 
+                    placeholder="Ej. Bulto" 
+                    placeholderTextColor="#9CA3AF"
+                    value={unit} 
+                    onChangeText={setUnit} 
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalLabel}>Precio Unitario $</Text>
+                  <TextInput 
+                    style={styles.modalInput} 
+                    placeholder="Ej. 250" 
+                    placeholderTextColor="#9CA3AF"
+                    keyboardType="numeric" 
+                    value={price} 
+                    onChangeText={setPrice} 
+                  />
+                </View>
+              </View>
+
+              <Text style={styles.modalLabel}>Vol. / Cant. (Para esta semana)</Text>
+              <TextInput 
+                style={styles.modalInput} 
+                placeholder="Ej. 10" 
+                placeholderTextColor="#9CA3AF"
+                keyboardType="numeric" 
+                value={quantity} 
+                onChangeText={setQuantity} 
+              />
+
               <Text style={styles.modalLabel}>Encargado / Recibe (Opcional)</Text>
               <TextInput 
                 style={styles.modalInput} 
@@ -350,7 +491,7 @@ export default function InventarioScreen() {
                 value={inCharge} 
                 onChangeText={setInCharge} 
               />
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipContainer} keyboardShouldPersistTaps="handled">
                 {workers.map(w => (
                   <TouchableOpacity 
                     key={`incharge-${w.id}`} 
@@ -370,7 +511,7 @@ export default function InventarioScreen() {
                 value={requestedBy} 
                 onChangeText={setRequestedBy} 
               />
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipContainer} keyboardShouldPersistTaps="handled">
                 {workers.map(w => (
                   <TouchableOpacity 
                     key={`req-${w.id}`} 
@@ -381,49 +522,6 @@ export default function InventarioScreen() {
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-
-              <Text style={styles.modalLabel}>Concepto / Actividad</Text>
-              <TextInput 
-                style={styles.modalInput} 
-                placeholder="Ej. Cemento Cruz Azul 50kg" 
-                placeholderTextColor="#9CA3AF"
-                value={name} 
-                onChangeText={setName} 
-              />
-
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <View style={{ flex: 1, marginRight: 10 }}>
-                  <Text style={styles.modalLabel}>Unidad</Text>
-                  <TextInput 
-                    style={styles.modalInput} 
-                    placeholder="Ej. Bulto" 
-                    placeholderTextColor="#9CA3AF"
-                    value={unit} 
-                    onChangeText={setUnit} 
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.modalLabel}>Vol. / Cant.</Text>
-                  <TextInput 
-                    style={styles.modalInput} 
-                    placeholder="Ej. 10" 
-                    placeholderTextColor="#9CA3AF"
-                    keyboardType="numeric" 
-                    value={quantity} 
-                    onChangeText={setQuantity} 
-                  />
-                </View>
-              </View>
-
-              <Text style={styles.modalLabel}>Precio Unitario (P.U.) $</Text>
-              <TextInput 
-                style={styles.modalInput} 
-                placeholder="Ej. 250" 
-                placeholderTextColor="#9CA3AF"
-                keyboardType="numeric" 
-                value={price} 
-                onChangeText={setPrice} 
-              />
 
               <TouchableOpacity style={styles.modalButton} onPress={handleSaveItem} disabled={isSaving}>
                 <Text style={styles.modalButtonText}>{isSaving ? 'Guardando...' : 'Guardar'}</Text>
@@ -442,30 +540,25 @@ const styles = StyleSheet.create({
   headerTopRow: { flexDirection: 'row', alignItems: 'center' },
   backButton: { padding: 4, marginLeft: -4 },
   headerTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginLeft: 15 },
+  headerSubtitle: { color: 'rgba(255,255,255,0.8)', fontSize: 12, marginLeft: 15, marginTop: 2 },
   
   body: { padding: 15, flex: 1 },
   
-  summaryCard: { flexDirection: 'row', backgroundColor: '#1E293B', borderRadius: 16, padding: 15, marginBottom: 20, elevation: 3 },
+  summaryCard: { flexDirection: 'row', backgroundColor: '#1E293B', borderRadius: 16, padding: 15, marginBottom: 15, elevation: 3 },
   summaryBox: { flex: 1, alignItems: 'center' },
   summaryDivider: { width: 1, backgroundColor: '#475569', marginHorizontal: 10 },
   summaryLabel: { color: '#94A3B8', fontSize: 11, marginBottom: 5, textTransform: 'uppercase' },
   summaryValue: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
 
-  // ESTILOS RESPONSIVOS APLICADOS AQUÍ
-  sectionHeaderRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: 15,
-    flexWrap: 'wrap', // Permite que los elementos bajen de línea si no caben
-  },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#374151', flex: 1, marginRight: 8, flexShrink: 1 },
-  actionsRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    flexWrap: 'wrap' // Permite que los botones se acomoden si la pantalla es muy delgada
-  },
-  addButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#059669', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, marginRight: 8 },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 20 },
+  searchIcon: { marginRight: 8 },
+  searchInput: { flex: 1, fontSize: 13, color: '#111827' },
+  clearSearchBtn: { padding: 4 },
+
+  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, flexWrap: 'wrap', gap: 8 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#374151', flexShrink: 1 },
+  actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  addButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#059669', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10 },
   addButtonText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', marginLeft: 6 },
   pdfButton: { backgroundColor: '#DC2626' },
 
@@ -500,6 +593,26 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
   modalLabel: { fontSize: 12, fontWeight: '600', color: '#4B5563', marginTop: 12, marginBottom: 6 },
   modalInput: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8, padding: 12, fontSize: 14, color: '#111827' },
+  modalInputActive: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderColor: '#2563EB' },
+
+  suggestionsContainer: {
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#2563EB',
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    maxHeight: 150,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6'
+  },
+  suggestionText: { fontSize: 13, color: '#111827', fontWeight: '600' },
+  suggestionPrice: { fontSize: 11, color: '#059669', fontWeight: 'bold' },
   
   chipContainer: { flexDirection: 'row', marginTop: 8, marginBottom: 4 },
   chip: { backgroundColor: '#F3F4F6', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, marginRight: 8, borderWidth: 1, borderColor: '#E5E7EB' },

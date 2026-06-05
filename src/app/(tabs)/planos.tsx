@@ -3,15 +3,19 @@ import { decode } from 'base64-arraybuffer';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import * as Print from 'expo-print'; // <-- Nueva librería para PDF
-import { Stack, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { Stack, useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
+// 1. IMPORTAMOS LA MEMORIA GLOBAL DE PROYECTOS
+import { useProject } from '../../context/ProjectContext';
 
 export default function DocumentosScreen() {
   const router = useRouter();
   
-  // AHORA GUARDAMOS UN ARREGLO DE IMÁGENES
+  // 2. EXTRAEMOS LA OBRA ACTIVA
+  const { activeProject } = useProject();
+  
   const [scannedImages, setScannedImages] = useState<string[]>([]);
   const [docTitle, setDocTitle] = useState('');
   const [docCategory, setDocCategory] = useState('Plano'); 
@@ -20,14 +24,20 @@ export default function DocumentosScreen() {
 
   const categories = ['Plano', 'Permiso', 'Factura', 'Contrato', 'Otro'];
 
-  useEffect(() => {
-    loadDocumentos();
-  }, []);
+  // 3. RECARGAMOS CADA VEZ QUE LA OBRA CAMBIA
+  useFocusEffect(
+    useCallback(() => {
+      if (activeProject?.id) {
+        loadDocumentos();
+      }
+    }, [activeProject])
+  );
 
   const loadDocumentos = async () => {
     const { data, error } = await supabase
       .from('planos') 
       .select('*')
+      .eq('project_id', activeProject?.id) // <-- FILTRO: SOLO DOCUMENTOS DE ESTA OBRA
       .order('created_at', { ascending: false });
       
     if (data) setDocumentosList(data);
@@ -48,7 +58,6 @@ export default function DocumentosScreen() {
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        // AGREGAR LA NUEVA FOTO A LA LISTA
         setScannedImages(prev => [...prev, result.assets[0].uri]);
       }
     } catch (error) {
@@ -67,13 +76,17 @@ export default function DocumentosScreen() {
       Alert.alert("Falta título", "Por favor ingresa un nombre para identificar este documento.");
       return;
     }
+    
+    if (!activeProject?.id) {
+      Alert.alert("Error", "No se detectó una obra activa.");
+      return;
+    }
 
     setIsUploading(true);
     try {
       // 1. GENERAR EL PDF CON TODAS LAS FOTOS
       let htmlImages = '';
       for (const imgUri of scannedImages) {
-        // Convertimos cada imagen a base64 para que el PDF las pueda leer bien
         const base64Img = await FileSystem.readAsStringAsync(imgUri, { encoding: 'base64' });
         htmlImages += `
           <div class="page">
@@ -81,7 +94,6 @@ export default function DocumentosScreen() {
           </div>`;
       }
 
-      // Estructura HTML para que cada foto ocupe una página completa en el PDF
       const htmlContent = `
         <html>
           <head>
@@ -104,11 +116,11 @@ export default function DocumentosScreen() {
       // 2. SUBIR EL PDF A SUPABASE
       const base64Pdf = await FileSystem.readAsStringAsync(pdfUri, { encoding: 'base64' });
       const arrayBuffer = decode(base64Pdf);
-      const fileName = `doc_${Date.now()}.pdf`; // Ahora es .pdf
+      const fileName = `doc_${Date.now()}.pdf`; 
 
       const { error: uploadError } = await supabase.storage
         .from('planos_obras') 
-        .upload(fileName, arrayBuffer, { contentType: 'application/pdf' }); // Tipo PDF
+        .upload(fileName, arrayBuffer, { contentType: 'application/pdf' }); 
 
       if (uploadError) throw uploadError;
 
@@ -117,9 +129,15 @@ export default function DocumentosScreen() {
         .getPublicUrl(fileName);
       const finalImageUrl = publicUrlData.publicUrl;
 
-      // 3. GUARDAR EN LA BASE DE DATOS
+      // 3. GUARDAR EN LA BASE DE DATOS (AHORA VINCULADO AL PROJECTO)
       const { error: dbError } = await supabase.from('planos').insert([
-        { title: docTitle, category: docCategory, version: 'v1.0', file_url: finalImageUrl }
+        { 
+          title: docTitle, 
+          category: docCategory, 
+          version: 'v1.0', 
+          file_url: finalImageUrl,
+          project_id: activeProject.id // <-- VINCULO SÚPER IMPORTANTE
+        }
       ]);
 
       if (dbError) throw dbError;
@@ -196,7 +214,7 @@ export default function DocumentosScreen() {
           <Feather name="chevron-left" size={28} color="#FFF" />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
-          <Text style={styles.headerSubtitle}>MÓDULO DE CONTROL</Text>
+          <Text style={styles.headerSubtitle}>{activeProject?.name?.toUpperCase() || 'MÓDULO DE CONTROL'}</Text>
           <Text style={styles.headerTitle}>Documentación</Text>
         </View>
       </View>
@@ -215,7 +233,6 @@ export default function DocumentosScreen() {
           <View style={styles.previewContainer}>
             <Text style={styles.sectionTitle}>Páginas del Documento ({scannedImages.length})</Text>
             
-            {/* Carrusel horizontal de páginas tomadas */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 15 }}>
               {scannedImages.map((uri, index) => (
                 <View key={index} style={styles.thumbnailContainer}>
@@ -328,7 +345,6 @@ const styles = StyleSheet.create({
   previewContainer: { backgroundColor: '#FFF', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 30 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 15 },
   
-  // Estilos del carrusel de imágenes
   thumbnailContainer: { marginRight: 15, position: 'relative', alignItems: 'center' },
   thumbnailImage: { width: 100, height: 140, borderRadius: 10, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },
   removeBtn: { position: 'absolute', top: -8, right: -8, backgroundColor: '#DC2626', borderRadius: 12, padding: 4 },

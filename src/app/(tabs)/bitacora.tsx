@@ -1,14 +1,18 @@
 import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useProject } from '../../context/ProjectContext';
 import { supabase } from '../../lib/supabase';
-import { generarPlantillaBitacora } from '../utils/pdfTemplate'; // IMPORTAMOS LA PLANTILLA
+import { generarPlantillaBitacora } from '../utils/pdfTemplate';
 
 export default function BitacoraScreen() {
   const router = useRouter();
+  const { activeProject, isOffline } = useProject();
+
   const [logs, setLogs] = useState<any[]>([]);
   const [categoryStats, setCategoryStats] = useState<any[]>([]);
   const [isExporting, setIsExporting] = useState(false);
@@ -24,40 +28,90 @@ export default function BitacoraScreen() {
     }
   };
 
+  const processData = (data: any[]) => {
+    setLogs(data);
+    const counts: Record<string, number> = {};
+    data.forEach(log => {
+      const cat = log.category || 'General';
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+
+    const sortedStats = Object.keys(counts).map(key => ({
+      label: key,
+      count: counts[key],
+      color: getCategoryColor(key)
+    })).sort((a, b) => b.count - a.count);
+
+    setCategoryStats(sortedStats);
+  };
+
   useFocusEffect(
     useCallback(() => {
-      fetchLogs();
-    }, [])
+      if (activeProject?.id) {
+        fetchLogs();
+      }
+    }, [activeProject, isOffline])
   );
 
   const fetchLogs = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('logs')
-        .select('*')
-        .order('created_at', { ascending: false });
+    if (!activeProject?.id) return;
+    const storageKey = `@bitacora_cache_${activeProject.id}`;
 
-      if (error) throw error;
-      
-      if (data) {
-        setLogs(data);
+    // 1. FUNCIÓN AUXILIAR PARA LEER LA "BANDEJA DE SALIDA"
+    const getOutboxLogs = async () => {
+      try {
+        const outboxData = await AsyncStorage.getItem('@bandeja_salida_logs');
+        if (outboxData) {
+          const parsed = JSON.parse(outboxData);
+          // Filtramos los de esta obra y les ponemos una marca "isPending"
+          return parsed
+            .filter((log: any) => log.project_id === activeProject.id)
+            .map((log: any) => ({ ...log, isPending: true }));
+        }
+      } catch (e) { console.log(e); }
+      return [];
+    };
 
-        const counts: Record<string, number> = {};
-        data.forEach(log => {
-          const cat = log.category || 'General';
-          counts[cat] = (counts[cat] || 0) + 1;
-        });
+    if (isOffline) {
+      try {
+        const cachedData = await AsyncStorage.getItem(storageKey);
+        let finalLogs = cachedData ? JSON.parse(cachedData) : [];
 
-        const sortedStats = Object.keys(counts).map(key => ({
-          label: key,
-          count: counts[key],
-          color: getCategoryColor(key)
-        })).sort((a, b) => b.count - a.count);
+        // 🌟 MAGIA: SUMAMOS LA BANDEJA DE SALIDA A LA VISTA
+        const pendingLogs = await getOutboxLogs();
+        finalLogs = [...pendingLogs, ...finalLogs];
+        
+        // Ordenamos para que los nuevos salgan arriba
+        finalLogs.sort((a: any , b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-        setCategoryStats(sortedStats);
+        processData(finalLogs);
+      } catch (error) {
+        console.error("Error leyendo caché:", error);
       }
-    } catch (error) {
-      console.error("Error al cargar bitácora:", error);
+    } else {
+      try {
+        const { data, error } = await supabase
+          .from('logs')
+          .select('*')
+          .eq('project_id', activeProject.id) 
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        
+        if (data) {
+          // Aunque haya internet, revisamos si hay algo atorado en la bandeja
+          const pendingLogs = await getOutboxLogs();
+          let finalLogs = [...pendingLogs, ...data];
+          finalLogs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          
+          processData(finalLogs);
+          await AsyncStorage.setItem(storageKey, JSON.stringify(data)); // Solo guardamos en caché los de la nube
+        }
+      } catch (error: any) {
+        if (error.message !== 'Network request failed' && error.message !== 'Failed to fetch') {
+          console.error("Error al cargar bitácora:", error);
+        }
+      }
     }
   };
 
@@ -82,16 +136,10 @@ export default function BitacoraScreen() {
     return `${day}/${month} ${time}`;
   };
 
-  // FUNCIÓN SÚPER CORTA Y LIMPIA GRACIAS AL NUEVO ARCHIVO
-  const handleExportPDF = async () => {
-    if (logs.length === 0) {
-      Alert.alert("Sin datos", "No hay entradas en la bitácora para exportar.");
-      return;
-    }
-
+  const ejecutarGeneracionPDF = async () => {
     setIsExporting(true);
     try {
-      const htmlContent = generarPlantillaBitacora(logs);
+      const htmlContent = await generarPlantillaBitacora(logs, isOffline);
 
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
       await Sharing.shareAsync(uri, { 
@@ -107,7 +155,31 @@ export default function BitacoraScreen() {
     }
   };
 
+  const handleExportPDF = async () => {
+    if (logs.length === 0) {
+      Alert.alert("Sin datos", "No hay entradas en la bitácora para exportar.");
+      return;
+    }
+    
+    if (isOffline) {
+      Alert.alert(
+        "Modo Lectura Activo",
+        "El PDF se generará con tus textos y notas. Tus fotos nuevas offline aparecerán bien, pero las fotos antiguas de la nube no saldrán porque no hay internet para descargarlas.\n\n¿Deseas generarlo?",
+        [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Sí, generar PDF", onPress: ejecutarGeneracionPDF }
+        ]
+      );
+    } else {
+      ejecutarGeneracionPDF();
+    }
+  };
+
   const maxCount = categoryStats.length > 0 ? categoryStats[0].count : 1;
+
+  const handleAddNewLog = () => {
+    router.push('/new-log');
+  };
 
   return (
     <View style={styles.container}>
@@ -119,21 +191,15 @@ export default function BitacoraScreen() {
           <Text style={styles.headerSubtitle}>GESTIÓN DE OBRA</Text>
           <View style={{ width: 28 }} />
         </View>
-        
         <View style={styles.headerBottomRow}>
           <Text style={styles.headerTitle}>Bitácora de Obra</Text>
-          <TouchableOpacity style={styles.newButton} onPress={() => router.push('/new-log')}>
-            <Feather name="plus" size={16} color="#FFF" />
-            <Text style={styles.newButtonText}>Nueva</Text>
-          </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView style={styles.body} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView style={styles.body} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
         
         <View style={styles.chartCard}>
           <Text style={styles.sectionTitle}>ACTIVIDAD POR CATEGORÍA</Text>
-          
           {categoryStats.length === 0 ? (
             <Text style={styles.emptyStateText}>Registra tu primera nota para ver la actividad.</Text>
           ) : (
@@ -143,17 +209,10 @@ export default function BitacoraScreen() {
                 <View key={index} style={styles.chartRow}>
                   <View style={styles.chartTextRow}>
                     <Text style={styles.chartLabel}>{item.label}</Text>
-                    <Text style={[styles.chartValue, { color: item.color }]}>
-                      {item.count} {item.count === 1 ? 'nota' : 'notas'}
-                    </Text>
+                    <Text style={[styles.chartValue, { color: item.color }]}>{item.count} {item.count === 1 ? 'nota' : 'notas'}</Text>
                   </View>
                   <View style={styles.chartBarBackground}>
-                    <View 
-                      style={[
-                        styles.chartBarFill, 
-                        { width: `${widthPercentage}%`, backgroundColor: item.color }
-                      ]} 
-                    />
+                    <View style={[styles.chartBarFill, { width: `${widthPercentage}%`, backgroundColor: item.color }]} />
                   </View>
                 </View>
               );
@@ -162,22 +221,12 @@ export default function BitacoraScreen() {
         </View>
 
         <View style={styles.sectionHeaderRow}>
-          <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>
-            HISTORIAL DE ENTRADAS
-          </Text>
-          
-          <TouchableOpacity 
-            style={styles.pdfButton} 
-            onPress={handleExportPDF}
-            disabled={isExporting}
-          >
+          <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>HISTORIAL DE ENTRADAS</Text>
+          <TouchableOpacity style={styles.pdfButton} onPress={handleExportPDF} disabled={isExporting}>
             {isExporting ? (
               <ActivityIndicator size="small" color="#FFF" />
             ) : (
-              <>
-                <Feather name="file-text" size={14} color="#FFF" />
-                <Text style={styles.saveButtonText}>Exportar PDF</Text>
-              </>
+              <><Feather name="file-text" size={14} color="#FFF" /><Text style={styles.saveButtonText}>Exportar PDF</Text></>
             )}
           </TouchableOpacity>
         </View>
@@ -188,11 +237,9 @@ export default function BitacoraScreen() {
           </View>
         ) : (
           logs.map((log) => (
-            <View key={log.id} style={styles.entryCard}>
+            <View key={log.id || Math.random().toString()} style={[styles.entryCard, log.isPending && styles.entryCardPending]}>
               <View style={styles.entryHeader}>
-                <Text style={styles.entryTitle} numberOfLines={1}>
-                  {log.description}
-                </Text>
+                <Text style={styles.entryTitle} numberOfLines={1}>{log.description}</Text>
                 <View style={styles.photoBadge}>
                   <Feather name="camera" size={14} color="#6B7280" />
                   <Text style={styles.photoCount}>{log.photo_url ? '1' : '0'}</Text>
@@ -201,27 +248,35 @@ export default function BitacoraScreen() {
 
               <View style={styles.entryMetaRow}>
                 <Feather name="user" size={14} color="#6B7280" />
-                <Text style={styles.entryMetaText}>J. Escobar</Text>
+                <Text style={styles.entryMetaText}>Ingeniero</Text>
                 <Text style={styles.entryMetaDot}>•</Text>
-                <Feather name="clock" size={14} color="#6B7280" />
-                <Text style={styles.entryMetaText}>{formatTime(log.created_at)}</Text>
+                
+                {/* 🌟 INDICADOR DE QUE ESTÁ EN LA BANDEJA DE SALIDA */}
+                {log.isPending ? (
+                  <>
+                    <Feather name="refresh-cw" size={14} color="#D97706" />
+                    <Text style={[styles.entryMetaText, { color: '#D97706', fontWeight: 'bold' }]}>Pendiente de subir</Text>
+                  </>
+                ) : (
+                  <>
+                    <Feather name="clock" size={14} color="#6B7280" />
+                    <Text style={styles.entryMetaText}>{formatTime(log.created_at)}</Text>
+                  </>
+                )}
               </View>
 
               <View style={styles.tagsRow}>
-                <View style={styles.primaryTag}>
-                  <Text style={styles.primaryTagText}>{log.category}</Text>
-                </View>
-                {log.sector ? (
-                  <View style={styles.secondaryTag}>
-                    <Text style={styles.secondaryTagText}>{log.sector}</Text>
-                  </View>
-                ) : null}
+                <View style={styles.primaryTag}><Text style={styles.primaryTagText}>{log.category}</Text></View>
+                {log.sector && <View style={styles.secondaryTag}><Text style={styles.secondaryTagText}>{log.sector}</Text></View>}
               </View>
             </View>
           ))
         )}
-
       </ScrollView>
+
+      <TouchableOpacity style={styles.fab} onPress={handleAddNewLog}>
+        <Feather name="plus" size={28} color="#FFF" />
+      </TouchableOpacity>
     </View>
   );
 }
@@ -234,8 +289,6 @@ const styles = StyleSheet.create({
   headerSubtitle: { color: 'rgba(255, 255, 255, 0.8)', fontSize: 13, fontWeight: '700', letterSpacing: 1 },
   headerBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerTitle: { color: '#FFF', fontSize: 26, fontWeight: 'bold' },
-  newButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 255, 255, 0.2)', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.4)' },
-  newButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 14, marginLeft: 6 },
   
   body: { padding: 20 },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: '#6B7280', letterSpacing: 0.5 },
@@ -253,6 +306,7 @@ const styles = StyleSheet.create({
   saveButtonText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', marginLeft: 4 },
 
   entryCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 18, marginBottom: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
+  entryCardPending: { borderWidth: 1, borderColor: '#FCD34D', backgroundColor: '#FFFBEB' }, // 🌟 FONDO AMARILLENTO PARA LAS PENDIENTES
   entryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
   entryTitle: { flex: 1, fontSize: 16, fontWeight: 'bold', color: '#111827', marginRight: 10, lineHeight: 22 },
   photoBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB' },
@@ -269,5 +323,7 @@ const styles = StyleSheet.create({
   secondaryTagText: { color: '#4B5563', fontSize: 12, fontWeight: '600' },
 
   emptyState: { padding: 20, alignItems: 'center' },
-  emptyStateText: { color: '#9CA3AF', fontStyle: 'italic', fontSize: 14 }
+  emptyStateText: { color: '#9CA3AF', fontStyle: 'italic', fontSize: 14 },
+
+  fab: { position: 'absolute', bottom: 30, right: 25, backgroundColor: '#2563EB', width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5 }
 });

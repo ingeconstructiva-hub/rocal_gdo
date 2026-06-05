@@ -1,52 +1,79 @@
 import { Feather } from '@expo/vector-icons';
+import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Colors } from '../constants/theme';
+// 1. Importamos la librería del carrusel
+import TextTicker from 'react-native-text-ticker';
 
-interface Props {
-  icon: string;
-  title: string;
-  time: string;
-  iconColor: string;
-  bgColor: string;
-  sector?: string; // El sector es opcional
-}
-
-export const NotificationItem = ({ icon, title, time, iconColor, bgColor, sector }: Props) => (
-  <View style={styles.container}>
-    <View style={[styles.iconContainer, { backgroundColor: bgColor }]}>
-      <Feather name={icon as any} size={20} color={iconColor} />
-    </View>
-    
-    <View style={styles.content}>
-      <Text style={styles.title} numberOfLines={1}>{title}</Text>
+export function NotificationItem({ icon, title, time, iconColor, bgColor, sector }: any) {
+  return (
+    <View style={styles.container}>
+      <View style={[styles.iconBox, { backgroundColor: bgColor }]}>
+        <Feather name={icon} size={20} color={iconColor} />
+      </View>
       
-      {sector ? (
-        <View style={styles.locationContainer}>
-          <Feather name="map-pin" size={12} color="#6B7280" />
-          <Text style={styles.locationText}>{sector}</Text>
+      {/* 2. El contenedor del texto debe tener overflow: 'hidden' */}
+      <View style={styles.content}>
+        <View style={styles.header}>
+          <Text style={styles.sector}>{sector}</Text>
+          <Text style={styles.time}>{time}</Text>
         </View>
-      ) : null}
+        
+        {/* 3. AQUÍ APLICAMOS EL EFECTO CARRUSEL */}
+        <TextTicker
+          style={styles.title}
+          duration={8000}          // Qué tan rápido se mueve (8000 = 8 segundos en dar la vuelta)
+          loop                     // Que se repita infinitamente
+          bounce={false}           // Para que no rebote, solo fluya hacia un lado
+          repeatSpacer={50}        // Espacio en blanco antes de que vuelva a aparecer el inicio
+          marqueeDelay={1000}      // Espera 1 segundo antes de empezar a moverse
+        >
+          {title}
+        </TextTicker>
+      </View>
     </View>
-    
-    <Text style={styles.time}>{time}</Text>
-  </View>
-);
+  );
+}
 
 const styles = StyleSheet.create({
   container: { 
     flexDirection: 'row', 
     alignItems: 'center', 
-    backgroundColor: '#FFF', 
-    padding: 16, 
-    borderRadius: 16, 
     marginBottom: 12, 
+    backgroundColor: '#FFF', 
+    padding: 15, 
+    borderRadius: 16, 
     borderWidth: 1, 
-    borderColor: '#F0F0F0' 
+    borderColor: '#F3F4F6' 
   },
-  iconContainer: { padding: 10, borderRadius: 12, marginRight: 12 },
-  content: { flex: 1 }, 
-  title: { fontSize: 14, color: Colors.text, fontWeight: '500' },
-  time: { fontSize: 12, color: Colors.textSub, marginLeft: 8 },
-  locationContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-  locationText: { fontSize: 11, color: '#6B7280', marginLeft: 4 }
+  iconBox: { 
+    width: 45, 
+    height: 45, 
+    borderRadius: 12, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginRight: 15 
+  },
+  content: { 
+    flex: 1, 
+    overflow: 'hidden' // Súper importante para que el texto no se salga de la tarjeta
+  }, 
+  header: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    marginBottom: 4 
+  },
+  sector: { 
+    fontSize: 12, 
+    fontWeight: 'bold', 
+    color: '#6B7280' 
+  },
+  time: { 
+    fontSize: 11, 
+    color: '#9CA3AF' 
+  },
+  title: { 
+    fontSize: 14, 
+    color: '#111827', 
+    fontWeight: '500' 
+  }
 });

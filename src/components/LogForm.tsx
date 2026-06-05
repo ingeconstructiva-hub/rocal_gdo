@@ -1,24 +1,18 @@
 import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // <-- AGREGAMOS LA MEMORIA
 import { decode } from 'base64-arraybuffer';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, useRouter } from 'expo-router';
 import { useState } from 'react';
-import {
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
-} from 'react-native';
+import { Alert, Image, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useProject } from '../context/ProjectContext';
 import { supabase } from '../lib/supabase';
 
 export function LogForm() {
+  // AHORA SACAMOS TAMBIÉN "isOffline" DEL CEREBRO
+  const { activeProject, isOffline } = useProject();
+
   const defaultCategories = ['Estructura', 'Concreto', 'Eléctrico', 'Seguridad', 'Acabados', 'General'];
   
   const [note, setNote] = useState('');
@@ -30,8 +24,6 @@ export function LogForm() {
 
   const router = useRouter();
   const [imageUris, setImageUris] = useState<string[]>([]);
-
-  // Variable que verifica si la nota tiene texto (para habilitar el botón)
   const isFormValid = note.trim().length > 0;
 
   const handlePickImage = async () => {
@@ -42,16 +34,11 @@ export function LogForm() {
         return;
       }
 
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        quality: 0.8,
-      });
-
+      const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 });
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setImageUris(prev => [...prev, result.assets[0].uri]);
       }
     } catch (error) {
-      console.error("Error al abrir cámara:", error);
       alert("No se pudo abrir la cámara.");
     }
   };
@@ -63,9 +50,7 @@ export function LogForm() {
   const handleAddCustomCategory = () => {
     const newCat = customCategory.trim();
     if (newCat !== '') {
-      if (!categoriesList.includes(newCat)) {
-        setCategoriesList([...categoriesList, newCat]);
-      }
+      if (!categoriesList.includes(newCat)) setCategoriesList([...categoriesList, newCat]);
       setCategory(newCat);
     }
     setIsCustom(false);
@@ -74,53 +59,78 @@ export function LogForm() {
 
   const handleDeleteCategory = (catToDelete: string) => {
     setCategoriesList(prev => prev.filter(c => c !== catToDelete));
-    if (category === catToDelete) {
-      setCategory('Estructura');
-    }
+    if (category === catToDelete) setCategory('Estructura');
   };
 
   const handleSave = async () => {
+    // 1. CREAMOS LA VARIABLE SEGURA PARA CALMAR A TYPESCRIPT
+    const projectId = activeProject?.id;
+
     if (!isFormValid) return;
 
+    if (!projectId) {
+      alert('No se detectó ninguna obra activa.');
+      return;
+    }
+
+    // 🔴 SI NO HAY INTERNET: MODO BANDEJA DE SALIDA
+    if (isOffline) {
+      try {
+        let localBase64Photos: string[] = [];
+        
+        for (const imageUri of imageUris) {
+          const base64 = await FileSystem.readAsStringAsync(imageUri, { encoding: 'base64' });
+          localBase64Photos.push(`data:image/jpeg;base64,${base64}`);
+        }
+        
+        const photoPayload = localBase64Photos.length === 0 ? null : (localBase64Photos.length === 1 ? localBase64Photos[0] : JSON.stringify(localBase64Photos));
+
+        const offlineLog = {
+          project_id: projectId, // <-- USAMOS LA VARIABLE SEGURA
+          description: note,
+          category,
+          sector,
+          photo_url: photoPayload,
+          created_at: new Date().toISOString() 
+        };
+
+        const existing = await AsyncStorage.getItem('@bandeja_salida_logs');
+        const outbox = existing ? JSON.parse(existing) : [];
+        outbox.push(offlineLog);
+        await AsyncStorage.setItem('@bandeja_salida_logs', JSON.stringify(outbox));
+
+        Alert.alert("📴 Guardado Offline", "Tu reporte se guardó en el celular. Se subirá automáticamente cuando vuelva el internet.");
+        router.replace('/(tabs)/bitacora');
+      } catch (error) {
+        alert("Error guardando offline");
+      }
+      return; 
+    }
+
+    // 🟢 SI SÍ HAY INTERNET: MODO NORMAL
     let finalImageUrls: string[] = [];
-    
     if (imageUris.length > 0) {
       try {
         for (const imageUri of imageUris) {
-          // ✅ NUEVO MÉTODO A PRUEBA DE FALLOS ✅
-          // 1. Leemos la imagen como código base64
-          const base64 = await FileSystem.readAsStringAsync(imageUri, { 
-            encoding: 'base64' 
-          });
-          
-          // 2. Lo convertimos al formato binario que Supabase entiende
+          const base64 = await FileSystem.readAsStringAsync(imageUri, { encoding: 'base64' });
           const arrayBuffer = decode(base64);
-          
           const fileName = `foto_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
           
-          // 3. Subimos indicando explícitamente que es una imagen JPEG
-          const { error: uploadError } = await supabase.storage
-            .from('foto_bitacora')
-            .upload(fileName, arrayBuffer, { contentType: 'image/jpeg' });
-            
+          const { error: uploadError } = await supabase.storage.from('foto_bitacora').upload(fileName, arrayBuffer, { contentType: 'image/jpeg' });
           if (uploadError) throw uploadError;
           
           const { data } = supabase.storage.from('foto_bitacora').getPublicUrl(fileName);
           finalImageUrls.push(data.publicUrl);
         }
       } catch (error: any) {
-        console.error("Error detallado al subir:", error);
         return alert(`Error al subir imagen: ${error.message}`);
       }
     }
 
-    const photoPayload = finalImageUrls.length === 0
-      ? null
-      : finalImageUrls.length === 1
-        ? finalImageUrls[0]
-        : JSON.stringify(finalImageUrls);
+    const photoPayload = finalImageUrls.length === 0 ? null : finalImageUrls.length === 1 ? finalImageUrls[0] : JSON.stringify(finalImageUrls);
 
     const { error } = await supabase.from('logs').insert([{ 
+      project_id: projectId, // <-- USAMOS LA VARIABLE SEGURA
       description: note, 
       category, 
       sector, 
@@ -128,15 +138,14 @@ export function LogForm() {
     }]);
     
     if (error) alert(`Error al guardar: ${error.message}`);
-    else { alert('Guardado con éxito'); router.replace('/(tabs)'); }
+    else { 
+      alert('Guardado con éxito en la nube'); 
+      router.replace('/(tabs)/bitacora'); 
+    }
   };
 
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-      style={{ flex: 1 }}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
-    >
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }} keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
       <View style={{ flex: 1, backgroundColor: '#F9FAFB' }}>
         <Stack.Screen options={{ headerShown: false }} />
         
@@ -145,18 +154,25 @@ export function LogForm() {
             <Feather name="chevron-left" size={28} color="#FFF" />
           </TouchableOpacity>
           <View style={styles.headerTextContainer}>
-            <Text style={styles.headerSubtitle}>BITÁCORA DE OBRA</Text>
+            <Text style={styles.headerSubtitle}>{activeProject?.name?.toUpperCase() || 'BITÁCORA DE OBRA'}</Text>
             <Text style={styles.headerTitle}>Nueva Entrada</Text>
           </View>
         </View>
 
-        <ScrollView 
-          style={styles.container} 
-          contentContainerStyle={{ paddingBottom: 150 }}
-          keyboardShouldPersistTaps="handled"
-        >
+        <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 150 }} keyboardShouldPersistTaps="handled">
+          
+          {/* AVISO DE MODO OFFLINE */}
+          {isOffline && (
+            <View style={{ backgroundColor: '#FEF3C7', padding: 12, borderRadius: 12, marginBottom: 20, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#F59E0B' }}>
+              <Feather name="wifi-off" size={20} color="#D97706" style={{ marginRight: 10 }} />
+              <Text style={{ color: '#D97706', fontSize: 13, flex: 1, fontWeight: '600' }}>
+                Estás trabajando sin conexión. Las fotos y notas se guardarán en tu celular por ahora.
+              </Text>
+            </View>
+          )}
+
           <View style={styles.previewContainer}>
-            <TouchableOpacity style={styles.scanButton} onPress={handlePickImage}>
+            <TouchableOpacity style={[styles.scanButton, isOffline && { backgroundColor: '#D97706' }]} onPress={handlePickImage}>
               <Feather name="camera" size={32} color="#FFF" />
               <View style={styles.scanButtonTextContainer}>
                 <Text style={styles.scanButtonTitle}>Agregar fotos</Text>
@@ -171,10 +187,7 @@ export function LogForm() {
                   {imageUris.map((uri, index) => (
                     <View key={`${uri}-${index}`} style={styles.thumbnailContainer}>
                       <Image source={{ uri }} style={styles.thumbnailImage} />
-                      <TouchableOpacity
-                        style={styles.removeBtn}
-                        onPress={() => removeImage(index)}
-                      >
+                      <TouchableOpacity style={styles.removeBtn} onPress={() => removeImage(index)}>
                         <Feather name="x" size={16} color="#FFF" />
                       </TouchableOpacity>
                     </View>
@@ -186,17 +199,7 @@ export function LogForm() {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Nota de campo *</Text>
-            <TextInput 
-              style={styles.textArea} 
-              placeholder="Describe el avance..." 
-              multiline 
-              value={note} 
-              onChangeText={setNote}
-              returnKeyType="done"
-              placeholderTextColor="#6B7280"
-              blurOnSubmit={true}
-              onSubmitEditing={() => Keyboard.dismiss()} // <-- ESTO CIERRA EL TECLADO AL DARLE A "LISTO"
-            />
+            <TextInput style={styles.textArea} placeholder="Describe el avance..." multiline value={note} onChangeText={setNote} returnKeyType="done" placeholderTextColor="#6B7280" blurOnSubmit={true} onSubmitEditing={() => Keyboard.dismiss()} />
           </View>
 
           <View style={styles.inputGroup}>
@@ -205,18 +208,10 @@ export function LogForm() {
               {categoriesList.map((cat) => {
                 const isDefault = defaultCategories.includes(cat);
                 return (
-                  <TouchableOpacity 
-                    key={cat} 
-                    style={[styles.categoryBadge, category === cat && styles.categoryBadgeActive]}
-                    onPress={() => setCategory(cat)}
-                  >
+                  <TouchableOpacity key={cat} style={[styles.categoryBadge, category === cat && styles.categoryBadgeActive]} onPress={() => setCategory(cat)}>
                     <Text style={[styles.categoryText, category === cat && styles.categoryTextActive]}>{cat}</Text>
-                    
                     {!isDefault && (
-                      <TouchableOpacity 
-                        onPress={() => handleDeleteCategory(cat)} 
-                        style={styles.deleteCategoryBtn}
-                      >
+                      <TouchableOpacity onPress={() => handleDeleteCategory(cat)} style={styles.deleteCategoryBtn}>
                         <Feather name="x" size={14} color={category === cat ? "#2563EB" : "#EF4444"} />
                       </TouchableOpacity>
                     )}
@@ -231,14 +226,7 @@ export function LogForm() {
                 </TouchableOpacity>
               ) : (
                 <View style={styles.customCategoryContainer}>
-                  <TextInput
-                    style={styles.customInput}
-                    placeholder="Nueva..."
-                    value={customCategory}
-                    onChangeText={setCustomCategory}
-                    onSubmitEditing={handleAddCustomCategory}
-                    autoFocus
-                  />
+                  <TextInput style={styles.customInput} placeholder="Nueva..." value={customCategory} onChangeText={setCustomCategory} onSubmitEditing={handleAddCustomCategory} autoFocus />
                   <TouchableOpacity onPress={handleAddCustomCategory} style={styles.addCustomBtn}>
                     <Feather name="check" size={16} color="#FFF" />
                   </TouchableOpacity>
@@ -251,25 +239,13 @@ export function LogForm() {
             <Text style={styles.label}>Sector / Ubicación</Text>
             <View style={styles.locationInputContainer}>
               <Feather name="map-pin" size={18} color="#6B7280" style={{ marginRight: 10 }} />
-              <TextInput 
-                style={styles.locationInput} 
-                placeholder="Ej. Nivel 2..." 
-                value={sector} 
-                onChangeText={setSector} 
-                returnKeyType="done"
-                onSubmitEditing={() => Keyboard.dismiss()} // <-- TAMBIÉN AQUÍ
-              />
+              <TextInput style={styles.locationInput} placeholder="Ej. Nivel 2..." value={sector} onChangeText={setSector} returnKeyType="done" onSubmitEditing={() => Keyboard.dismiss()} />
             </View>
           </View>
 
-          {/* BOTÓN INTELIGENTE: Cambia de estilo y estado si no hay texto */}
-          <TouchableOpacity 
-            style={[styles.saveButton, !isFormValid && styles.saveButtonDisabled]} 
-            onPress={handleSave}
-            disabled={!isFormValid}
-          >
+          <TouchableOpacity style={[styles.saveButton, !isFormValid && styles.saveButtonDisabled, isOffline && isFormValid && { backgroundColor: '#D97706' }]} onPress={handleSave} disabled={!isFormValid}>
             <Text style={[styles.saveButtonText, !isFormValid && styles.saveButtonTextDisabled]}>
-              Guardar en bitácora
+              {isOffline ? 'Guardar Reporte Offline' : 'Guardar en bitácora'}
             </Text>
           </TouchableOpacity>
 
@@ -309,12 +285,8 @@ const styles = StyleSheet.create({
   addCustomBtn: { backgroundColor: '#2563EB', padding: 6, borderRadius: 15, marginLeft: 8 },
   locationInputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', borderRadius: 12, paddingHorizontal: 15 },
   locationInput: { flex: 1, paddingVertical: 12, color: '#111827', fontSize: 16 },
-  
-  // ESTILOS DEL BOTÓN INTELIGENTE
   saveButton: { backgroundColor: '#2563EB', alignItems: 'center', padding: 16, borderRadius: 12, marginBottom: 20 },
-  saveButtonDisabled: { backgroundColor: '#E5E7EB' }, // Color gris cuando está bloqueado
+  saveButtonDisabled: { backgroundColor: '#E5E7EB' },
   saveButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
-  saveButtonTextDisabled: { color: '#9CA3AF' }, // Texto gris más oscuro cuando está bloqueado
-  
-  photoText: { marginTop: 10, fontWeight: 'bold', color: '#111827' }
+  saveButtonTextDisabled: { color: '#9CA3AF' }
 });
