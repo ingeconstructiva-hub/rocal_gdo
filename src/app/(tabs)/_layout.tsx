@@ -1,4 +1,4 @@
-import { Feather } from '@expo/vector-icons'; // <-- Faltaba importar los íconos
+import { Feather } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { Colors } from '../../constants/theme';
 
@@ -35,7 +35,7 @@ export default function TabLayout() {
         }} 
       />
 
-      {/* 3. LISTA */}
+      {/* 3. LISTA (Asistencia) */}
       <Tabs.Screen 
         name="lista" 
         options={{ 
@@ -44,16 +44,16 @@ export default function TabLayout() {
         }} 
       />
 
-      {/* 4. PLANOS */}
+      {/* 4. PLANOS (Documentos) */}
       <Tabs.Screen 
         name="planos" 
         options={{ 
-          title: 'Planos',
+          title: 'Documentos',
           tabBarIcon: ({ color }) => <Feather name="map" size={24} color={color} />
         }} 
       />
 
-      {/* 5. GASTOS */}
+      {/* 5. GASTOS (Menú Central Financiero) */}
       <Tabs.Screen 
         name="gastos" 
         options={{ 
@@ -61,7 +61,6 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <Feather name="dollar-sign" size={24} color={color} />
         }} 
       />
-
     </Tabs>
   );
 }

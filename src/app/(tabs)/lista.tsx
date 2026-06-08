@@ -1,14 +1,14 @@
 import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Dimensions, Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, Keyboard, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
+import { useProject } from '../../context/ProjectContext';
 import { supabase } from '../../lib/supabase';
 import { generarPlantillaNomina } from '../utils/pdfNomina';
-// 1. IMPORTAMOS EL CEREBRO DE PROYECTOS
-import { useProject } from '../../context/ProjectContext';
 
 interface WorkerState {
   id: string;
@@ -27,9 +27,7 @@ const screenWidth = Dimensions.get('window').width;
 
 export default function ListaScreen() {
   const router = useRouter();
-  
-  // 2. EXTRAEMOS LA OBRA ACTIVA
-  const { activeProject } = useProject();
+  const { activeProject, isOffline, lastSync } = useProject();
 
   const [workers, setWorkers] = useState<WorkerState[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +39,7 @@ export default function ListaScreen() {
   const [newRole, setNewRole] = useState('');
   const [newSalary, setNewSalary] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const getWeekRange = () => {
     const today = new Date();
@@ -55,7 +54,6 @@ export default function ListaScreen() {
 
   const weekLabel = getWeekRange();
 
-  // 3. RECARGAMOS CADA QUE ENTRAMOS A LA PANTALLA Y HAY OBRA ACTIVA
   useFocusEffect(
     useCallback(() => {
       if (activeProject?.id) {
@@ -65,6 +63,14 @@ export default function ListaScreen() {
   );
 
   useEffect(() => {
+    if (activeProject?.id) {
+      setTimeout(() => {
+        fetchWorkers();
+      }, 500); 
+    }
+  }, [isOffline, lastSync, activeProject?.id]);
+
+  useEffect(() => {
     if (loading || workers.length === 0) return;
     const autoSaveTimer = setTimeout(() => {
       handleSavePayroll(true); 
@@ -72,81 +78,105 @@ export default function ListaScreen() {
     return () => clearTimeout(autoSaveTimer);
   }, [workers]); 
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchWorkers(); 
+    setRefreshing(false);
+  }, [activeProject, isOffline]);
+
   const fetchWorkers = async () => {
     setLoading(true);
+    const projectId = activeProject?.id;
+    if (!projectId) return;
+
+    const storageKeyWorkers = `@lista_workers_${projectId}`;
+    const storageKeyChart = `@lista_chart_${projectId}`;
+
+    let uiPending: WorkerState[] = [];
     try {
-      const { data, error } = await supabase
-        .from('workers')
-        .select('*')
-        .eq('is_active', true)
-        .eq('project_id', activeProject?.id) // <-- FILTRO SÓLO ESTA OBRA
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      if (data && data.length > 0) {
-        const initialUIState = data.map(w => ({
-          id: w.id,
+      const pendingData = await AsyncStorage.getItem('@bandeja_salida_lista');
+      if (pendingData) {
+        const pendingWorkers = JSON.parse(pendingData);
+        const projectPending = pendingWorkers.filter((w: any) => w.project_id === projectId);
+        uiPending = projectPending.map((w: any, index: number) => ({
+          id: `temp_pending_${Date.now()}_${index}`,
           name: w.name,
           role: w.role,
           weekly_salary: w.weekly_salary,
-          attendance: [true, true, true, true, true], 
-          extraDeduction: 0,
-          reason: '',
-          tempDeduction: '', 
-          tempReason: ''     
+          attendance: [true, true, true, true, true],
+          extraDeduction: 0, reason: '', tempDeduction: '', tempReason: ''
         }));
-        setWorkers(initialUIState);
-        
-        // Cargar gráfica sólo con estos trabajadores
-        const workerIds = initialUIState.map(w => w.id);
-        fetchPayrollHistory(workerIds);
-      } else {
-        setWorkers([]);
-        setChartData([{ value: 0, label: 'Vacío' }]);
       }
-    } catch (error) {
-      console.log("Error cargando trabajadores:", error);
-    } finally {
-      setLoading(false);
+    } catch (e) { console.log(e); }
+
+    if (isOffline) {
+      try {
+        const cachedW = await AsyncStorage.getItem(storageKeyWorkers);
+        const cachedC = await AsyncStorage.getItem(storageKeyChart);
+        const parsedW = cachedW ? JSON.parse(cachedW) : [];
+        setWorkers([...uiPending, ...parsedW]); 
+        if (cachedC) setChartData(JSON.parse(cachedC));
+      } catch (e) {
+        console.log("Error leyendo caché:", e);
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      try {
+        // SOLUCCIÓN AL REFRESH: Buscamos los que coincidan con el ID O que sean nulos (antiguos)
+        const { data, error } = await supabase
+          .from('workers')
+          .select('*')
+          .or(`project_id.eq.${projectId},project_id.is.null`)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        if (data) {
+          const activeWorkers = data.filter(w => w.is_active !== false);
+
+          const initialUIState = activeWorkers.map(w => ({
+            id: w.id, name: w.name, role: w.role, weekly_salary: w.weekly_salary,
+            attendance: [true, true, true, true, true], extraDeduction: 0, reason: '', tempDeduction: '', tempReason: ''     
+          }));
+          
+          await AsyncStorage.setItem(storageKeyWorkers, JSON.stringify(initialUIState));
+          setWorkers([...uiPending, ...initialUIState]); 
+          
+          const workerIds = initialUIState.map(w => w.id);
+          fetchPayrollHistory(workerIds, projectId, storageKeyChart);
+        }
+      } catch (error: any) {
+        const cachedW = await AsyncStorage.getItem(storageKeyWorkers);
+        const parsedCached = cachedW ? JSON.parse(cachedW) : [];
+        setWorkers([...uiPending, ...parsedCached]);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
-  const fetchPayrollHistory = async (workerIds: string[]) => {
+  const fetchPayrollHistory = async (workerIds: string[], projectId: string, storageKey: string) => {
     try {
-      const { data, error } = await supabase
-        .from('payroll_records')
-        .select('week_start, final_salary')
-        .in('worker_id', workerIds) // <-- FILTRO PARA GRÁFICA
-        .order('week_start', { ascending: true }); 
-
+      const { data, error } = await supabase.from('payroll_records').select('week_start, final_salary').in('worker_id', workerIds).order('week_start', { ascending: true }); 
       if (error) throw error;
-
+      let finalChartData = [{ value: 0, label: 'Vacío' }];
       if (data && data.length > 0) {
         const groupedData: Record<string, number> = {};
         data.forEach(record => {
-          if (!groupedData[record.week_start]) {
-            groupedData[record.week_start] = 0;
-          }
+          if (!groupedData[record.week_start]) groupedData[record.week_start] = 0;
           groupedData[record.week_start] += Number(record.final_salary);
         });
-
         const newChartData = Object.keys(groupedData).map(dateStr => {
           const dateObj = new Date(dateStr);
           dateObj.setDate(dateObj.getDate() + 1); 
-          const day = dateObj.getDate();
-          const month = dateObj.getMonth() + 1;
-          return { value: groupedData[dateStr], label: `${day}/${month}` };
+          return { value: groupedData[dateStr], label: `${dateObj.getDate()}/${dateObj.getMonth() + 1}` };
         });
-
-        const recentChartData = newChartData.slice(-5);
-        setChartData(recentChartData);
-      } else {
-        setChartData([{ value: 0, label: 'Vacío' }]);
-      }
-    } catch (error) {
-      console.log("Error cargando historial de gráfica:", error);
-    }
+        finalChartData = newChartData.slice(-5);
+      } 
+      setChartData(finalChartData);
+      await AsyncStorage.setItem(storageKey, JSON.stringify(finalChartData));
+    } catch (error) {}
   };
 
   const toggleAttendance = (workerId: string, dayIndex: number) => {
@@ -171,28 +201,17 @@ export default function ListaScreen() {
       if (w.id === id) {
         const amountToAdd = Number(w.tempDeduction || 0);
         const reasonToAdd = w.tempReason.trim();
-        
         if (amountToAdd > 0 || reasonToAdd) {
           let newReason = w.reason;
-          if (reasonToAdd) {
-            newReason = w.reason ? `${w.reason}, ${reasonToAdd}` : reasonToAdd;
-          }
-          return {
-            ...w,
-            extraDeduction: w.extraDeduction + amountToAdd, 
-            reason: newReason,                              
-            tempDeduction: '',                              
-            tempReason: ''                                  
-          };
+          if (reasonToAdd) newReason = w.reason ? `${w.reason}, ${reasonToAdd}` : reasonToAdd;
+          return { ...w, extraDeduction: w.extraDeduction + amountToAdd, reason: newReason, tempDeduction: '', tempReason: '' };
         }
       }
       return w;
     }));
   };
 
-  const clearDeductions = (id: string) => {
-    setWorkers(prev => prev.map(w => w.id === id ? { ...w, extraDeduction: 0, reason: '' } : w));
-  };
+  const clearDeductions = (id: string) => setWorkers(prev => prev.map(w => w.id === id ? { ...w, extraDeduction: 0, reason: '' } : w));
 
   const calculateFinalSalary = (w: WorkerState) => {
     const dailySalary = w.weekly_salary / 5;
@@ -205,76 +224,86 @@ export default function ListaScreen() {
   const totalBase = workers.reduce((sum, w) => sum + Number(w.weekly_salary), 0);
   const totalToPay = workers.reduce((sum, w) => sum + calculateFinalSalary(w), 0);
 
-  const openAddModal = () => {
-    setEditingWorkerId(null);
-    setNewName('');
-    setNewRole('');
-    setNewSalary('');
-    setIsModalVisible(true);
-  };
+  const openAddModal = () => { setEditingWorkerId(null); setNewName(''); setNewRole(''); setNewSalary(''); setIsModalVisible(true); };
 
   const openEditModal = (worker: WorkerState) => {
-    setEditingWorkerId(worker.id);
-    setNewName(worker.name);
-    setNewRole(worker.role);
-    setNewSalary(worker.weekly_salary.toString());
-    setIsModalVisible(true);
+    if (isOffline) { Alert.alert("Modo Lectura", "No puedes editar perfiles sin conexión."); return; }
+    setEditingWorkerId(worker.id); setNewName(worker.name); setNewRole(worker.role); setNewSalary(worker.weekly_salary.toString()); setIsModalVisible(true);
   };
 
   const confirmDeleteWorker = (id: string, name: string) => {
-    Alert.alert(
-      "Eliminar Trabajador",
-      `¿Estás seguro de que deseas quitar a ${name} de la obra?`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        { 
-          text: "Sí, eliminar", 
-          style: "destructive", 
-          onPress: async () => {
-            try {
-              const { error } = await supabase.from('workers').update({ is_active: false }).eq('id', id);
-              if (error) throw error;
-              setWorkers(prev => prev.filter(w => w.id !== id));
-              Alert.alert("✅ Eliminado", "El trabajador ya no aparecerá en tu lista.");
-            } catch (error: any) {
-              Alert.alert("❌ Error", error.message);
-            }
-          } 
-        }
-      ]
-    );
+    if (isOffline) { Alert.alert("Modo Lectura", "No puedes eliminar trabajadores sin conexión."); return; }
+    Alert.alert("Eliminar Trabajador", `¿Estás seguro de que deseas quitar a ${name} de la obra?`, [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Sí, eliminar", style: "destructive", onPress: async () => {
+          try {
+            const { error } = await supabase.from('workers').update({ is_active: false }).eq('id', id);
+            if (error) throw error;
+            setWorkers(prev => prev.filter(w => w.id !== id));
+            Alert.alert("Eliminado", `${name} fue removido con éxito.`);
+          } catch (error: any) { Alert.alert("❌ Error", error.message); }
+        } 
+      }
+    ]);
   };
 
   const handleSaveWorker = async () => {
     if (!newName.trim() || !newRole.trim() || !newSalary.trim()) {
-      Alert.alert("Campos incompletos", "Llena todos los datos del trabajador.");
+      Alert.alert("Campos incompletos", "Llena todos los datos del trabajador."); return;
+    }
+    const projectId = activeProject?.id;
+    if (!projectId) return;
+
+    setIsSaving(true);
+    const workerData = { name: newName.trim(), role: newRole.trim(), weekly_salary: Number(newSalary), project_id: projectId, is_active: true };
+
+    const saveToOutbox = async () => {
+      const existingOutbox = await AsyncStorage.getItem('@bandeja_salida_lista');
+      const outbox = existingOutbox ? JSON.parse(existingOutbox) : [];
+      outbox.push(workerData);
+      await AsyncStorage.setItem('@bandeja_salida_lista', JSON.stringify(outbox));
+
+      const uiWorker: WorkerState = { id: `temp_${Date.now()}`, name: workerData.name, role: workerData.role, weekly_salary: workerData.weekly_salary, attendance: [true, true, true, true, true], extraDeduction: 0, reason: '', tempDeduction: '', tempReason: '' };
+      setWorkers(prev => [uiWorker, ...prev]);
+      setIsModalVisible(false);
+      // NOTIFICACIÓN OFFLINE
+      Alert.alert("Guardado Local", "Trabajador agregado al almacenamiento local. Se subirá automáticamente al recuperar señal.");
+    };
+
+    if (isOffline) {
+      try { await saveToOutbox(); } 
+      catch (e) { Alert.alert("Error", "No se pudo guardar localmente."); } 
+      finally { setIsSaving(false); }
       return;
     }
 
-    setIsSaving(true);
     try {
-      if (editingWorkerId) {
-        const { error } = await supabase.from('workers').update({ name: newName, role: newRole, weekly_salary: Number(newSalary) }).eq('id', editingWorkerId);
+      if (editingWorkerId && !editingWorkerId.startsWith('temp_')) {
+        const { error } = await supabase.from('workers').update(workerData).eq('id', editingWorkerId);
         if (error) throw error;
-        setWorkers(prev => prev.map(w => w.id === editingWorkerId ? { ...w, name: newName, role: newRole, weekly_salary: Number(newSalary) } : w));
-        Alert.alert("Éxito", "Trabajador actualizado.");
+        setWorkers(prev => prev.map(w => w.id === editingWorkerId ? { ...w, ...workerData } : w));
+        // NOTIFICACIÓN EDICIÓN ONLINE
+        Alert.alert("¡Éxito!", "Perfil del trabajador actualizado correctamente.");
       } else {
-        const { data, error } = await supabase.from('workers').insert([{ 
-          name: newName, 
-          role: newRole, 
-          weekly_salary: Number(newSalary),
-          project_id: activeProject?.id // <-- VINCULAMOS AL GUARDAR
-        }]).select();
+        const { data, error } = await supabase.from('workers').insert([workerData]).select();
         if (error) throw error;
+        
         if (data && data.length > 0) {
           const newWorker: WorkerState = { id: data[0].id, name: data[0].name, role: data[0].role, weekly_salary: data[0].weekly_salary, attendance: [true, true, true, true, true], extraDeduction: 0, reason: '', tempDeduction: '', tempReason: '' };
           setWorkers(prev => [newWorker, ...prev]);
-          Alert.alert("Éxito", "Trabajador agregado a esta obra.");
+          // NOTIFICACIÓN CREACIÓN ONLINE
+          Alert.alert("¡Éxito!", "Trabajador registrado y guardado en la nube correctamente.");
+        } else {
+          await fetchWorkers(); 
         }
       }
       setIsModalVisible(false);
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      if (error.message.includes('Network') || error.message.includes('Fetch') || error.message.includes('network')) {
+        await saveToOutbox();
+      } else {
+        Alert.alert("Error", error.message);
+      }
     } finally {
       setIsSaving(false);
     }
@@ -282,8 +311,8 @@ export default function ListaScreen() {
 
   const handleSavePayroll = async (isSilent = false) => {
     if (workers.length === 0) return;
-
     if (!isSilent) setIsSaving(true);
+
     try {
       const today = new Date();
       const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
@@ -293,26 +322,28 @@ export default function ListaScreen() {
       const recordsToSave = workers.map(w => {
         const attendanceArray = w.attendance || [true, true, true, true, true];
         const daysAbsent = 5 - attendanceArray.filter(Boolean).length;
-        
-        return {
-          worker_id: w.id,
-          week_start: weekStart,
-          days_absent: daysAbsent,
-          deduction_amount: w.extraDeduction, 
-          deduction_reason: w.reason,         
-          final_salary: calculateFinalSalary(w)
-        };
-      });
+        return { worker_id: w.id, week_start: weekStart, days_absent: daysAbsent, deduction_amount: w.extraDeduction, deduction_reason: w.reason, final_salary: calculateFinalSalary(w) };
+      }).filter(r => !r.worker_id.startsWith('temp_')); 
+
+      if (isOffline) {
+        const existing = await AsyncStorage.getItem('@bandeja_salida_nomina');
+        let outbox = existing ? JSON.parse(existing) : [];
+        recordsToSave.forEach(newRec => {
+          const index = outbox.findIndex((r: any) => r.worker_id === newRec.worker_id && r.week_start === newRec.week_start);
+          if (index >= 0) outbox[index] = newRec; 
+          else outbox.push(newRec); 
+        });
+        await AsyncStorage.setItem('@bandeja_salida_nomina', JSON.stringify(outbox));
+        if (!isSilent) Alert.alert("Nómina Guardada", "Los datos de asistencia se respaldaron localmente de forma segura.");
+        return;
+      }
 
       const { error } = await supabase.from('payroll_records').upsert(recordsToSave, { onConflict: 'worker_id,week_start' });
       if (error) throw error;
-
       if (!isSilent) {
-        Alert.alert("✅ Éxito", `Nómina guardada correctamente.`);
-        // Recargar gráfica
-        fetchPayrollHistory(workers.map(w => w.id));
+        Alert.alert("Nómina Sincronizada", "La asistencia de la semana ha sido subida con éxito.");
+        fetchPayrollHistory(workers.map(w => w.id), activeProject.id, `@lista_chart_${activeProject.id}`);
       }
-
     } catch (error: any) {
       if (!isSilent) Alert.alert("❌ Error", error.message);
     } finally {
@@ -321,17 +352,12 @@ export default function ListaScreen() {
   };
 
   const handleGeneratePDF = async () => {
-    if (workers.length === 0) {
-      Alert.alert("Sin datos", "No hay trabajadores activos.");
-      return;
-    }
+    if (workers.length === 0) { Alert.alert("Sin datos", "No hay trabajadores activos."); return; }
     try {
       const htmlContent = generarPlantillaNomina(workers, weekLabel);
       const { uri } = await Print.printToFileAsync({ html: htmlContent, base64: false });
       await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Compartir Nómina Semanal', UTI: 'com.adobe.pdf' });
-    } catch (error: any) {
-      Alert.alert("Error", "No se pudo generar el reporte PDF: " + error.message);
-    }
+    } catch (error: any) { Alert.alert("Error", "No se pudo generar el reporte PDF: " + error.message); }
   };
 
   return (
@@ -341,52 +367,32 @@ export default function ListaScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Feather name="chevron-left" size={28} color="#FFF" />
           </TouchableOpacity>
+          <Text style={styles.headerSubtitle}>GESTIÓN DE OBRA</Text>
+          <View style={{ width: 28 }} />
+        </View>
+        <View style={styles.headerBottomRow}>
           <View>
             <Text style={styles.headerTitle}>Control de Asistencia</Text>
-            <Text style={styles.headerSubtitle}>{activeProject?.name || "Cargando obra..."}</Text>
+            <Text style={styles.headerSmall}>{activeProject?.name || "Cargando obra..."}</Text>
           </View>
         </View>
       </View>
 
-      <KeyboardAvoidingView 
-        style={{ flex: 1 }} 
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-      >
-        <ScrollView 
-          style={styles.body} 
-          showsVerticalScrollIndicator={false} 
-          contentContainerStyle={{ paddingBottom: 150 }} 
-          keyboardShouldPersistTaps="handled" 
-        >
-          
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}>
+        <ScrollView style={styles.body} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 150 }} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2563EB']} tintColor="#2563EB" />}>
+          {isOffline && (
+            <View style={{ backgroundColor: '#FEF3C7', padding: 10, borderRadius: 8, marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
+              <Feather name="wifi-off" size={16} color="#D97706" style={{ marginRight: 8 }} />
+              <Text style={{ color: '#D97706', fontSize: 12, flex: 1 }}>Modo Lectura. Puedes agregar empleados y pasar lista. Se guardará localmente.</Text>
+            </View>
+          )}
+
           <View style={styles.chartCard}>
             <Text style={styles.sectionTitle}>Gasto de Nómina Semanal ($)</Text>
             <View style={{ alignItems: 'center', marginTop: 10, width: '100%' }}>
-              <Text style={{ alignSelf: 'flex-start', fontSize: 10, color: '#6B7280', fontWeight: 'bold', marginBottom: 5 }}>
-                Y: Gasto ($)
-              </Text>
-              <LineChart
-                data={chartData}
-                width={screenWidth - 120} 
-                height={140}
-                thickness={3}
-                color="#2563EB"
-                dataPointsColor="#059669"
-                hideRules
-                noOfSections={4} 
-                yAxisLabelWidth={45} 
-                yAxisTextStyle={{ color: '#6B7280', fontSize: 10 }}
-                xAxisLabelTextStyle={{ color: '#6B7280', fontSize: 10 }}
-                yAxisLabelPrefix="$" 
-                textColor="#059669"
-                textFontSize={10}
-                textShiftY={-12}
-                textShiftX={-15}
-              />
-              <Text style={{ fontSize: 10, color: '#6B7280', fontWeight: 'bold', marginTop: 5 }}>
-                X: Semanas (Inicio de raya)
-              </Text>
+              <Text style={{ alignSelf: 'flex-start', fontSize: 10, color: '#6B7280', fontWeight: 'bold', marginBottom: 5 }}>Y: Gasto ($)</Text>
+              <LineChart data={chartData} width={screenWidth - 120} height={140} thickness={3} color="#2563EB" dataPointsColor="#059669" hideRules noOfSections={4} yAxisLabelWidth={45} yAxisTextStyle={{ color: '#6B7280', fontSize: 10 }} xAxisLabelTextStyle={{ color: '#6B7280', fontSize: 10 }} yAxisLabelPrefix="$" textColor="#059669" textFontSize={10} textShiftY={-12} textShiftX={-15} />
+              <Text style={{ fontSize: 10, color: '#6B7280', fontWeight: 'bold', marginTop: 5 }}>X: Semanas (Inicio de raya)</Text>
             </View>
           </View>
 
@@ -407,8 +413,6 @@ export default function ListaScreen() {
               <Text style={styles.sectionTitle}>Asistencia Semanal</Text>
               <Text style={styles.weekLabelText}>Semana: {weekLabel}</Text>
             </View>
-            
-            {/* EL BOTÓN DE PDF SE QUEDA AQUÍ ARRIBA PORQUE ES "EXPORTACIÓN" */}
             <View style={styles.actionButtonsContainer}>
               <TouchableOpacity style={styles.pdfButton} onPress={handleGeneratePDF}>
                 <Feather name="file-text" size={14} color="#FFF" />
@@ -440,25 +444,22 @@ export default function ListaScreen() {
                     <View style={{ flex: 2.5, justifyContent: 'center' }}>
                       <View style={styles.nameRow}>
                         <Text style={styles.tdName} numberOfLines={1}>{worker.name}</Text>
+                        {worker.id.startsWith('temp_') && <Text style={{fontSize: 8, color: '#D97706', marginLeft: 4, fontWeight: 'bold'}}>PENDIENTE</Text>}
                       </View>
                       <View style={styles.workerActions}>
                         <Text style={styles.tdRole} numberOfLines={1}>{worker.role}</Text>
-                        <TouchableOpacity onPress={() => openEditModal(worker)} style={styles.editIcon}>
-                          <Feather name="edit-2" size={10} color="#2563EB" />
+                        <TouchableOpacity onPress={() => openEditModal(worker)} style={[styles.editIcon, isOffline && {opacity: 0.5}]} disabled={worker.id.startsWith('temp_')}>
+                          <Feather name="edit-2" size={10} color={worker.id.startsWith('temp_') ? "#9CA3AF" : "#2563EB"} />
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => confirmDeleteWorker(worker.id, worker.name)} style={styles.deleteIcon}>
-                          <Feather name="trash-2" size={10} color="#DC2626" />
+                        <TouchableOpacity onPress={() => confirmDeleteWorker(worker.id, worker.name)} style={[styles.deleteIcon, isOffline && {opacity: 0.5}]} disabled={worker.id.startsWith('temp_')}>
+                          <Feather name="trash-2" size={10} color={worker.id.startsWith('temp_') ? "#9CA3AF" : "#DC2626"} />
                         </TouchableOpacity>
                       </View>
                     </View>
 
                     <View style={{ flex: 3, flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'center' }}>
                       {attendanceArray.map((isPresent, index) => (
-                        <TouchableOpacity 
-                          key={index} 
-                          onPress={() => toggleAttendance(worker.id, index)}
-                          style={styles.dayCheckbox}
-                        >
+                        <TouchableOpacity key={index} onPress={() => toggleAttendance(worker.id, index)} style={styles.dayCheckbox}>
                           <Text style={styles.dayLabel}>{DAYS_OF_WEEK[index]}</Text>
                           <Feather name={isPresent ? "check-square" : "square"} size={16} color={isPresent ? "#059669" : "#9CA3AF"} />
                         </TouchableOpacity>
@@ -475,39 +476,14 @@ export default function ListaScreen() {
                   </View>
 
                   <View style={styles.extraRow}>
-                    <TextInput 
-                      style={[styles.extraInput, { flex: 1 }]} 
-                      placeholder="Agregar Motivo..." 
-                      placeholderTextColor="#9CA3AF" 
-                      returnKeyType="done" 
-                      value={worker.tempReason} 
-                      onChangeText={(val) => updateWorkerField(worker.id, 'tempReason', val)}
-                      onSubmitEditing={() => applyDeduction(worker.id)}
-                    />
-                    <TextInput 
-                      style={[styles.extraInput, { width: 65, marginLeft: 8 }]} 
-                      placeholder="Multa $" 
-                      placeholderTextColor="#9CA3AF" 
-                      keyboardType="numeric" 
-                      returnKeyType="done" 
-                      value={worker.tempDeduction} 
-                      onChangeText={(val) => updateWorkerField(worker.id, 'tempDeduction', val)}
-                      onSubmitEditing={() => applyDeduction(worker.id)}
-                    />
-                    
-                    <TouchableOpacity 
-                      style={styles.applyDeductionBtn} 
-                      onPress={() => applyDeduction(worker.id)}
-                    >
-                      <Feather name="check" size={14} color="#FFF" />
-                    </TouchableOpacity>
+                    <TextInput style={[styles.extraInput, { flex: 1 }]} placeholder="Agregar Motivo..." placeholderTextColor="#9CA3AF" returnKeyType="done" value={worker.tempReason} onChangeText={(val) => updateWorkerField(worker.id, 'tempReason', val)} onSubmitEditing={() => applyDeduction(worker.id)} />
+                    <TextInput style={[styles.extraInput, { width: 65, marginLeft: 8 }]} placeholder="Multa $" placeholderTextColor="#9CA3AF" keyboardType="numeric" returnKeyType="done" value={worker.tempDeduction} onChangeText={(val) => updateWorkerField(worker.id, 'tempDeduction', val)} onSubmitEditing={() => applyDeduction(worker.id)} />
+                    <TouchableOpacity style={styles.applyDeductionBtn} onPress={() => applyDeduction(worker.id)}><Feather name="check" size={14} color="#FFF" /></TouchableOpacity>
                   </View>
 
                   {(worker.extraDeduction > 0 || worker.reason !== '') && (
                     <View style={styles.accumulatedRow}>
-                      <Text style={styles.accumulatedText}>
-                        Multa aplicada: -${worker.extraDeduction} {worker.reason ? `(${worker.reason})` : ''}
-                      </Text>
+                      <Text style={styles.accumulatedText}>Multa aplicada: -${worker.extraDeduction} {worker.reason ? `(${worker.reason})` : ''}</Text>
                       <TouchableOpacity onPress={() => clearDeductions(worker.id)} style={styles.undoBtn}>
                         <Feather name="x-circle" size={12} color="#DC2626" />
                         <Text style={styles.undoText}>Deshacer</Text>
@@ -521,47 +497,31 @@ export default function ListaScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* 4. LOS DOS BOTONES FLOTANTES (FABs) APILADOS */}
       <View style={styles.fabContainer}>
-        {/* Botón Guardar Nómina (Verde) */}
-        <TouchableOpacity 
-          style={[styles.fab, { backgroundColor: '#059669', marginBottom: 15 }]} 
-          onPress={() => handleSavePayroll(false)}
-        >
+        <TouchableOpacity style={[styles.fab, { backgroundColor: isOffline ? '#D97706' : '#059669', marginBottom: 15 }]} onPress={() => handleSavePayroll(false)}>
           {isSaving ? <Feather name="loader" size={24} color="#FFF" /> : <Feather name="save" size={24} color="#FFF" />}
         </TouchableOpacity>
-        
-        {/* Botón Agregar Trabajador (Azul) */}
-        <TouchableOpacity 
-          style={[styles.fab, { backgroundColor: '#2563EB' }]} 
-          onPress={openAddModal}
-        >
+        <TouchableOpacity style={[styles.fab, { backgroundColor: isOffline ? '#D97706' : '#2563EB' }]} onPress={openAddModal}>
           <Feather name="plus" size={28} color="#FFF" />
         </TouchableOpacity>
       </View>
 
-      {/* MODAL */}
       <Modal visible={isModalVisible} animationType="slide" transparent={true}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{editingWorkerId ? 'Editar Trabajador' : 'Nuevo Trabajador'}</Text>
-              <TouchableOpacity onPress={() => setIsModalVisible(false)}>
-                <Feather name="x" size={24} color="#6B7280" />
-              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setIsModalVisible(false)}><Feather name="x" size={24} color="#6B7280" /></TouchableOpacity>
             </View>
-
+            {isOffline && <Text style={{color: '#D97706', fontSize: 12, marginBottom: 10, fontStyle: 'italic'}}>* Guardando en modo local. La subida se hará después.</Text>}
             <Text style={styles.modalLabel}>Nombre completo</Text>
             <TextInput style={styles.modalInput} placeholder="Ej. Juan Pérez" value={newName} onChangeText={setNewName} returnKeyType="done" placeholderTextColor="#6B7280"/>
-
             <Text style={styles.modalLabel}>Puesto</Text>
             <TextInput style={styles.modalInput} placeholder="Ej. Oficial Carpintero" value={newRole} onChangeText={setNewRole} returnKeyType="done" placeholderTextColor="#6B7280"/>
-
             <Text style={styles.modalLabel}>Sueldo Base Semanal ($)</Text>
             <TextInput style={styles.modalInput} placeholder="Ej. 2500" keyboardType="numeric" value={newSalary} onChangeText={setNewSalary} returnKeyType="done" placeholderTextColor="#6B7280"/>
-
-            <TouchableOpacity style={styles.modalButton} onPress={handleSaveWorker} disabled={isSaving}>
-              <Text style={styles.modalButtonText}>{isSaving ? 'Guardando...' : (editingWorkerId ? 'Actualizar' : 'Agregar')}</Text>
+            <TouchableOpacity style={[styles.modalButton, isOffline && {backgroundColor: '#D97706'}]} onPress={handleSaveWorker} disabled={isSaving}>
+              <Text style={styles.modalButtonText}>{isSaving ? 'Guardando...' : (isOffline ? 'Guardar Offline' : 'Guardar')}</Text>
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
@@ -572,66 +532,51 @@ export default function ListaScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F6F8' },
-  header: { backgroundColor: '#2563EB', paddingTop: 60, paddingBottom: 20, paddingHorizontal: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
-  headerTopRow: { flexDirection: 'row', alignItems: 'center' },
+  header: { backgroundColor: '#2563EB', paddingTop: 60, paddingBottom: 25, paddingHorizontal: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   backButton: { padding: 4, marginLeft: -4 },
-  headerTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginLeft: 15 },
-  headerSubtitle: { color: 'rgba(255,255,255,0.8)', fontSize: 12, marginLeft: 15, marginTop: 2 },
-  
+  headerSubtitle: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '700', letterSpacing: 1 },
+  headerBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerTitle: { color: '#FFF', fontSize: 20, fontWeight: '700' },
+  headerSmall: { color: 'rgba(255,255,255,0.9)', fontSize: 14, marginTop: 4 },
   body: { padding: 15 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#374151', marginBottom: 2 },
   weekLabelText: { fontSize: 12, color: '#6B7280', fontWeight: '500' },
-  
   chartCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 15, marginBottom: 15, elevation: 2 },
-  
   summaryCard: { flexDirection: 'row', backgroundColor: '#1E293B', borderRadius: 16, padding: 15, marginBottom: 20 },
   summaryBox: { flex: 1, alignItems: 'center' },
   summaryDivider: { width: 1, backgroundColor: '#475569', marginHorizontal: 10 },
   summaryLabel: { color: '#94A3B8', fontSize: 11, marginBottom: 5 },
   summaryValue: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
-
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   actionButtonsContainer: { flexDirection: 'row', alignItems: 'center' },
   saveButtonText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', marginLeft: 4 },
   pdfButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#DC2626', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10 },
-  
   loadingText: { textAlign: 'center', color: '#6B7280', marginTop: 20 },
   emptyText: { textAlign: 'center', color: '#6B7280', marginTop: 20, fontStyle: 'italic' },
-
   tableHeader: { flexDirection: 'row', backgroundColor: '#E5E7EB', paddingVertical: 10, paddingHorizontal: 5, borderTopLeftRadius: 10, borderTopRightRadius: 10, borderBottomWidth: 1, borderColor: '#D1D5DB' },
   thText: { fontSize: 10, fontWeight: 'bold', color: '#4B5563', textTransform: 'uppercase' },
-  
   tableRowContainer: { backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#E5E7EB', borderLeftWidth: 1, borderRightWidth: 1, paddingHorizontal: 5, paddingVertical: 10 },
   tableRow: { flexDirection: 'row', alignItems: 'center' },
-  
   nameRow: { flexDirection: 'row', alignItems: 'center' },
   tdName: { fontSize: 12, fontWeight: 'bold', color: '#111827' },
-  
   workerActions: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   tdRole: { fontSize: 9, color: '#6B7280', flex: 1 },
   editIcon: { padding: 4, marginLeft: 2, backgroundColor: '#EFF6FF', borderRadius: 6 },
   deleteIcon: { padding: 4, marginLeft: 4, backgroundColor: '#FEE2E2', borderRadius: 6 },
-  
   dayCheckbox: { alignItems: 'center', marginHorizontal: 1 },
   dayLabel: { fontSize: 8, color: '#6B7280', marginBottom: 2, fontWeight: 'bold' },
-  
   tdDaily: { fontSize: 11, color: '#4B5563', fontWeight: '500' },
   tdTotal: { fontSize: 12, color: '#059669', fontWeight: 'bold' },
-
   extraRow: { flexDirection: 'row', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
   extraInput: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 6, fontSize: 11, color: '#111827' },
-
   applyDeductionBtn: { backgroundColor: '#059669', borderRadius: 6, paddingHorizontal: 8, marginLeft: 8, justifyContent: 'center', alignItems: 'center' },
-  
   accumulatedRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, paddingHorizontal: 5, backgroundColor: '#FEF2F2', paddingVertical: 4, borderRadius: 4 },
   accumulatedText: { fontSize: 10, color: '#DC2626', flex: 1, fontStyle: 'italic', fontWeight: '500' },
   undoBtn: { flexDirection: 'row', alignItems: 'center', marginLeft: 8, backgroundColor: '#FEE2E2', paddingHorizontal: 6, paddingVertical: 4, borderRadius: 4 },
   undoText: { color: '#DC2626', fontSize: 9, fontWeight: 'bold', marginLeft: 3 },
-
-  // ESTILOS DE LOS BOTONES FLOTANTES
   fabContainer: { position: 'absolute', bottom: 30, right: 25, alignItems: 'center' },
   fab: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5 },
-
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
   modalContent: { backgroundColor: '#FFF', borderRadius: 16, padding: 20 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },

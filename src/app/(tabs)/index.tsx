@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // <-- NUEVA MEMORIA
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -22,7 +22,7 @@ export default function DashboardScreen() {
       checkOutbox();  
     }, [])
   );
-  // EXTRAEMOS isOffline PARA DETENER LAS CONSULTAS SI NO HAY RED
+
   const { activeProject, isOffline } = useProject(); 
 
   const [project, setProject] = useState<any>(null);
@@ -64,7 +64,6 @@ export default function DashboardScreen() {
         
         const storageKey = `@dashboard_cache_${activeProject.id}`;
 
-        // 🔴 SI NO HAY INTERNET, LEEMOS DEL DISCO DURO Y DETENEMOS LA FUNCIÓN
         if (isOffline) {
           try {
             const cachedData = await AsyncStorage.getItem(storageKey);
@@ -77,19 +76,20 @@ export default function DashboardScreen() {
           } catch (e) {
             console.error("Error leyendo caché del dashboard", e);
           }
-          return; // <-- ESTO EVITA LA PANTALLA ROJA
+          return; 
         }
 
-        // 🟢 SI HAY INTERNET, DESCARGAMOS FRESCO DE SUPABASE
         try {
+          // 1. CARGAMOS INFO DEL PROYECTO (¡AGREGAMOS CLIENTE Y CONTRATO AQUÍ!)
           const { data: projectData } = await supabase
             .from('projects')
-            .select('id, name, location, start_date, end_date, invite_code') 
+            .select('id, name, location, start_date, end_date, invite_code, client_name, contract_number') 
             .eq('id', activeProject.id)
             .single();
           
           if (projectData) setProject(projectData);
 
+          // 2. CARGAMOS EL PERFIL
           let newProfile = { name: "Ingeniero", role: "Residente de Obra" };
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user) {
@@ -100,10 +100,14 @@ export default function DashboardScreen() {
             }
           }
 
-          const { data: logsData } = await supabase.from('logs').select('*').eq('project_id', activeProject.id).order('created_at', { ascending: false }).limit(4);
-          const { data: planosData } = await supabase.from('planos').select('*').eq('project_id', activeProject.id).order('created_at', { ascending: false }).limit(4);
-          
-          // (Aquí irían inventarioData y listaData si las necesitas, simplifiqué para que no choque)
+          // 3. CARGAMOS NOTIFICACIONES
+          const limit = 4; 
+          const [ { data: logsData }, { data: planosData }, { data: workersData }, { data: cajaData } ] = await Promise.all([
+            supabase.from('logs').select('category, description, created_at').eq('project_id', activeProject.id).order('created_at', { ascending: false }).limit(limit),
+            supabase.from('planos').select('title, created_at').eq('project_id', activeProject.id).order('created_at', { ascending: false }).limit(limit),
+            supabase.from('workers').select('name, role, created_at').eq('project_id', activeProject.id).order('created_at', { ascending: false }).limit(limit),
+            supabase.from('caja_chica').select('concepto, monto, fecha').eq('project_id', activeProject.id).order('fecha', { ascending: false }).limit(limit)
+          ]);
           
           const todayDate = new Date();
           todayDate.setHours(0, 0, 0, 0);
@@ -122,21 +126,17 @@ export default function DashboardScreen() {
             return `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')} ${hours}:${minutes}`;
           };
 
-          const mappedLogs = (logsData || []).map((log: any) => {
-            const styles = getCategoryStyles(log.category);
-            return { icon: styles.icon, title: `[Bitácora] ${log.category}: ${log.description}`, time: formatNotificationTime(log.created_at), iconColor: styles.color, bgColor: styles.bg, timestamp: new Date(log.created_at).getTime() };
-          });
-          const mappedPlanos = (planosData || []).map((plano: any) => {
-            return { icon: "folder-plus", title: `[Documentación] Nuevo: ${plano.title}`, time: formatNotificationTime(plano.created_at), iconColor: "#059669", bgColor: "#D1FAE5", timestamp: new Date(plano.created_at).getTime() };
-          });
+          const mappedLogs = (logsData || []).map((log: any) => ({ icon: getCategoryStyles(log.category).icon, title: `[Bitácora] ${log.category}: ${log.description}`, time: formatNotificationTime(log.created_at), iconColor: getCategoryStyles(log.category).color, bgColor: getCategoryStyles(log.category).bg, timestamp: new Date(log.created_at).getTime() }));
+          const mappedPlanos = (planosData || []).map((plano: any) => ({ icon: "folder-plus", title: `[Planos] Nuevo documento: ${plano.title}`, time: formatNotificationTime(plano.created_at), iconColor: "#059669", bgColor: "#D1FAE5", timestamp: new Date(plano.created_at).getTime() }));
+          const mappedWorkers = (workersData || []).map((worker: any) => ({ icon: "user-plus", title: `[Personal] Nuevo ingreso: ${worker.name} (${worker.role})`, time: formatNotificationTime(worker.created_at), iconColor: "#2563EB", bgColor: "#DBEAFE", timestamp: new Date(worker.created_at).getTime() }));
+          const mappedCaja = (cajaData || []).map((gasto: any) => ({ icon: "shopping-cart", title: `[Caja Chica] Compra: ${gasto.concepto} por $${gasto.monto}`, time: formatNotificationTime(gasto.fecha), iconColor: "#DB2777", bgColor: "#FCE7F3", timestamp: new Date(gasto.fecha).getTime() }));
 
-          const combinedNotifications = [...mappedLogs, ...mappedPlanos]
+          const combinedNotifications = [...mappedLogs, ...mappedPlanos, ...mappedWorkers, ...mappedCaja]
             .sort((a, b) => b.timestamp - a.timestamp)
             .slice(0, 4); 
 
           setNotifications(combinedNotifications);
 
-          // GUARDAMOS LA CACHÉ SILENCIOSA
           await AsyncStorage.setItem(storageKey, JSON.stringify({
             project: projectData,
             profile: newProfile,
@@ -155,10 +155,7 @@ export default function DashboardScreen() {
   );
 
   const handleOpenInviteModal = async () => {
-    if (isOffline) {
-      Alert.alert("Modo Offline", "Necesitas internet para generar invitaciones.");
-      return;
-    }
+    if (isOffline) { Alert.alert("Modo Offline", "Necesitas internet para generar invitaciones."); return; }
     const projectId = activeProject?.id;
     if (!projectId) return;
 
@@ -217,7 +214,25 @@ export default function DashboardScreen() {
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.projectTitle}>{project?.name || "Cargando proyecto..."}</Text>
-                <Text style={styles.projectSub}>{project?.location || "Cargando ubicación..."}</Text>
+                
+                {/* UBICACIÓN */}
+                <Text style={styles.projectSub}>
+                  <Feather name="map-pin" size={12} color={Colors.textSub} /> {project?.location || "Cargando ubicación..."}
+                </Text>
+
+                {/* CLIENTE Y CONTRATO AGREGADOS AQUÍ */}
+                {project?.client_name && (
+                  <Text style={[styles.projectSub, { marginTop: 4 }]}>
+                    <Feather name="user" size={12} color="#475569" /> Cliente: <Text style={{fontWeight: '600', color: '#1E293B'}}>{project.client_name}</Text>
+                  </Text>
+                )}
+                
+                {project?.contract_number && (
+                  <Text style={styles.projectSub}>
+                    <Feather name="file-text" size={12} color="#475569" /> Contrato: <Text style={{fontWeight: '600', color: '#1E293B'}}>{project.contract_number}</Text>
+                  </Text>
+                )}
+
               </View>
               <TouchableOpacity onPress={handleOpenInviteModal} style={[styles.inviteButton, isOffline && { opacity: 0.5 }]}>
                 <Feather name="user-plus" size={16} color="#2563EB" />
@@ -289,7 +304,7 @@ const styles = StyleSheet.create({
   userName: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
   role: { color: 'rgba(255,255,255,0.9)', fontSize: 14, marginBottom: 20 },
   projectCard: { backgroundColor: '#FFF', padding: 20, borderRadius: 20, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1 },
-  projectTitle: { fontSize: 16, fontWeight: 'bold', color: Colors.text },
+  projectTitle: { fontSize: 16, fontWeight: 'bold', color: Colors.text, marginBottom: 4 },
   projectSub: { fontSize: 12, color: Colors.textSub, marginTop: 2 },
   inviteButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: '#BFDBFE' },
   inviteButtonText: { color: '#2563EB', fontSize: 12, fontWeight: 'bold', marginLeft: 4 },

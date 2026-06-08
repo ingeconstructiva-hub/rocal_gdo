@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // <-- IMPORTAMOS LA MEMORIA
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
@@ -12,7 +12,6 @@ import { supabase } from '../lib/supabase';
 export default function ProyectosScreen() {
   const router = useRouter();
   
-  // EXTRAEMOS isOffline PARA SABER SI USAR LA MEMORIA O EL INTERNET
   const { setActiveProject, isOffline } = useProject(); 
 
   const [proyectos, setProyectos] = useState<any[]>([]);
@@ -29,9 +28,19 @@ export default function ProyectosScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectLocation, setNewProjectLocation] = useState('');
+  
+  // NUEVOS ESTADOS AÑADIDOS
+  const [clientName, setClientName] = useState('');
+  const [contractNumber, setContractNumber] = useState('');
+
   const [startDate, setStartDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [dateSelected, setDateSelected] = useState(false);
+
+  const [endDate, setEndDate] = useState(new Date());
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  const [endDateSelected, setEndDateSelected] = useState(false);
+
   const [isGettingLocation, setIsGettingLocation] = useState(false); 
 
   // ESTADOS PARA UNIRSE A OBRA
@@ -42,7 +51,6 @@ export default function ProyectosScreen() {
   const [permission, requestPermission] = useCameraPermissions();
 
   useEffect(() => {
-    // Al cambiar la conexión a internet, vuelve a cargar los datos
     cargarPerfil();
     cargarProyectos();
   }, [isOffline]);
@@ -52,7 +60,6 @@ export default function ProyectosScreen() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         if (isOffline) {
-          // MODO OFFLINE: Leer el perfil del disco duro
           const cachedProfile = await AsyncStorage.getItem(`@perfil_cache_${session.user.id}`);
           if (cachedProfile) {
             setUserProfile(JSON.parse(cachedProfile));
@@ -60,7 +67,6 @@ export default function ProyectosScreen() {
             setUserProfile({ name: "Modo Offline", role: "Ingeniero" });
           }
         } else {
-          // MODO ONLINE: Consultar base de datos y guardar en disco duro
           const { data: profile } = await supabase.from('profiles').select('full_name, role').eq('id', session.user.id).single();
           if (profile) {
             const profileData = {
@@ -88,11 +94,9 @@ export default function ProyectosScreen() {
       }
       setUserId(session.user.id);
       
-      // Creamos una llave única para guardar los proyectos de este usuario
       const storageKey = `@proyectos_cache_${session.user.id}`;
 
       if (isOffline) {
-        // 🔴 MODO OFFLINE: Leemos las obras guardadas en el disco duro
         const cachedData = await AsyncStorage.getItem(storageKey);
         if (cachedData) {
           setProyectos(JSON.parse(cachedData));
@@ -100,7 +104,6 @@ export default function ProyectosScreen() {
           setProyectos([]);
         }
       } else {
-        // 🟢 MODO ONLINE: Descargamos las obras frescas de Supabase
         const { data, error } = await supabase
           .from('user_projects')
           .select(`
@@ -118,8 +121,6 @@ export default function ProyectosScreen() {
             userRole: item.role
           }));
           setProyectos(proyectosFormateados);
-          
-          // Tomamos la "foto" silenciosa y la guardamos en el disco duro
           await AsyncStorage.setItem(storageKey, JSON.stringify(proyectosFormateados));
         }
       }
@@ -180,6 +181,14 @@ export default function ProyectosScreen() {
     }
   };
 
+  const onChangeEndDate = (event: any, selectedDate?: Date) => {
+    setShowEndDatePicker(false); 
+    if (selectedDate) {
+      setEndDate(selectedDate);
+      setEndDateSelected(true); 
+    }
+  };
+
   const handleCrearObra = async () => {
     if (isOffline) {
       Alert.alert("Modo Offline", "Necesitas conexión a internet para crear un proyecto nuevo.");
@@ -195,14 +204,18 @@ export default function ProyectosScreen() {
 
     setIsSaving(true);
     try {
-      const formattedDate = dateSelected ? startDate.toISOString().split('T')[0] : null;
+      const formattedStartDate = dateSelected ? startDate.toISOString().split('T')[0] : null;
+      const formattedEndDate = endDateSelected ? endDate.toISOString().split('T')[0] : null;
 
       const { data: newProject, error: projectError } = await supabase
         .from('projects')
         .insert([{ 
           name: newProjectName, 
           location: newProjectLocation,
-          start_date: formattedDate 
+          start_date: formattedStartDate,
+          end_date: formattedEndDate,
+          client_name: clientName.trim() || null,
+          contract_number: contractNumber.trim() || null
         }])
         .select()
         .single();
@@ -215,12 +228,17 @@ export default function ProyectosScreen() {
 
       if (assignmentError) throw assignmentError;
 
+      // Limpiar Formulario
       setNewProjectName('');
       setNewProjectLocation('');
+      setClientName('');
+      setContractNumber('');
       setDateSelected(false);
       setStartDate(new Date());
-      setIsModalVisible(false);
+      setEndDateSelected(false);
+      setEndDate(new Date());
       
+      setIsModalVisible(false);
       cargarProyectos(); 
       Alert.alert("¡Éxito!", "La obra se ha creado correctamente.");
 
@@ -300,10 +318,12 @@ export default function ProyectosScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View>
-            <Text style={styles.greeting}>Bienvenido, {userProfile.name.split(' ')[0]}</Text>
-            <Text style={styles.title}>Mis Obras</Text>
+        <View style={styles.headerTopRow}>
+        </View>
+        <View style={styles.headerBottomRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle}>Mis Obras</Text>
+            <Text style={styles.headerSmall}>{userProfile.name.split(' ')[0]}</Text>
           </View>
           <TouchableOpacity onPress={cerrarSesion} style={styles.logoutBtn}>
             <Feather name="log-out" size={20} color="#FFF" />
@@ -365,51 +385,74 @@ export default function ProyectosScreen() {
       {/* MODAL 1: CREAR OBRA */}
       <Modal visible={isModalVisible} animationType="fade" transparent={true}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nueva Obra</Text>
-              <TouchableOpacity onPress={() => setIsModalVisible(false)}>
-                <Feather name="x" size={24} color="#6B7280" />
+          <ScrollView contentContainerStyle={{flexGrow: 1, justifyContent: 'flex-end'}}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Nueva Obra</Text>
+                <TouchableOpacity onPress={() => setIsModalVisible(false)}>
+                  <Feather name="x" size={24} color="#6B7280" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalLabel}>Nombre del Proyecto</Text>
+              <TextInput style={styles.modalInput} placeholder="Ej. Torre Mayor" placeholderTextColor="#9CA3AF" value={newProjectName} onChangeText={setNewProjectName} />
+
+              <Text style={styles.modalLabel}>Cliente</Text>
+              <TextInput style={styles.modalInput} placeholder="Ej. Constructora Sur S.A." placeholderTextColor="#9CA3AF" value={clientName} onChangeText={setClientName} />
+
+              <Text style={styles.modalLabel}>Número de Contrato</Text>
+              <TextInput style={styles.modalInput} placeholder="Ej. CTR-2026-001" placeholderTextColor="#9CA3AF" value={contractNumber} onChangeText={setContractNumber} />
+
+              <Text style={styles.modalLabel}>Ubicación</Text>
+              <View style={styles.locationContainer}>
+                <TextInput 
+                  style={[styles.modalInput, { flex: 1, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRightWidth: 0 }]} 
+                  placeholder="Ej. Av. Reforma 123 o usa GPS 👉" 
+                  placeholderTextColor="#9CA3AF"
+                  value={newProjectLocation} 
+                  onChangeText={setNewProjectLocation} 
+                  multiline
+                />
+                <TouchableOpacity style={styles.gpsButton} onPress={obtenerUbicacionActual} disabled={isGettingLocation}>
+                  {isGettingLocation ? <ActivityIndicator size="small" color="#FFF" /> : <Feather name="navigation" size={20} color="#FFF" />}
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalLabel}>Fecha de Inicio (Opcional)</Text>
+              <TouchableOpacity 
+                style={[styles.modalInput, { flexDirection: 'row', alignItems: 'center' }]} 
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Feather name="calendar" size={18} color="#9CA3AF" style={{ marginRight: 10 }} />
+                <Text style={{ color: dateSelected ? '#111827' : '#9CA3AF', fontSize: 15 }}>
+                  {dateSelected ? startDate.toLocaleDateString('es-MX') : "Toca para seleccionar fecha"}
+                </Text>
+              </TouchableOpacity>
+
+              {showDatePicker && (
+                <DateTimePicker value={startDate} mode="date" display="default" onChange={onChangeDate} />
+              )}
+
+              <Text style={styles.modalLabel}>Fecha de Entrega (Opcional)</Text>
+              <TouchableOpacity 
+                style={[styles.modalInput, { flexDirection: 'row', alignItems: 'center' }]} 
+                onPress={() => setShowEndDatePicker(true)}
+              >
+                <Feather name="flag" size={18} color="#9CA3AF" style={{ marginRight: 10 }} />
+                <Text style={{ color: endDateSelected ? '#111827' : '#9CA3AF', fontSize: 15 }}>
+                  {endDateSelected ? endDate.toLocaleDateString('es-MX') : "Toca para seleccionar fecha"}
+                </Text>
+              </TouchableOpacity>
+
+              {showEndDatePicker && (
+                <DateTimePicker value={endDate} mode="date" display="default" onChange={onChangeEndDate} />
+              )}
+
+              <TouchableOpacity style={styles.modalButton} onPress={handleCrearObra} disabled={isSaving}>
+                {isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.modalButtonText}>Crear Obra</Text>}
               </TouchableOpacity>
             </View>
-
-            <Text style={styles.modalLabel}>Nombre del Proyecto</Text>
-            <TextInput style={styles.modalInput} placeholder="Ej. Torre Mayor" placeholderTextColor="#9CA3AF" value={newProjectName} onChangeText={setNewProjectName} />
-
-            <Text style={styles.modalLabel}>Ubicación</Text>
-            <View style={styles.locationContainer}>
-              <TextInput 
-                style={[styles.modalInput, { flex: 1, borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRightWidth: 0 }]} 
-                placeholder="Ej. Av. Reforma 123 o usa GPS 👉" 
-                placeholderTextColor="#9CA3AF"
-                value={newProjectLocation} 
-                onChangeText={setNewProjectLocation} 
-                multiline
-              />
-              <TouchableOpacity style={styles.gpsButton} onPress={obtenerUbicacionActual} disabled={isGettingLocation}>
-                {isGettingLocation ? <ActivityIndicator size="small" color="#FFF" /> : <Feather name="navigation" size={20} color="#FFF" />}
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.modalLabel}>Fecha de Inicio (Opcional)</Text>
-            <TouchableOpacity 
-              style={[styles.modalInput, { flexDirection: 'row', alignItems: 'center' }]} 
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Feather name="calendar" size={18} color="#9CA3AF" style={{ marginRight: 10 }} />
-              <Text style={{ color: dateSelected ? '#111827' : '#9CA3AF', fontSize: 15 }}>
-                {dateSelected ? startDate.toLocaleDateString('es-MX') : "Toca para seleccionar fecha"}
-              </Text>
-            </TouchableOpacity>
-
-            {showDatePicker && (
-              <DateTimePicker value={startDate} mode="date" display="default" onChange={onChangeDate} />
-            )}
-
-            <TouchableOpacity style={styles.modalButton} onPress={handleCrearObra} disabled={isSaving}>
-              {isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.modalButtonText}>Crear Obra</Text>}
-            </TouchableOpacity>
-          </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -484,10 +527,13 @@ export default function ProyectosScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F6F8' },
-  header: { backgroundColor: '#2563EB', paddingTop: 60, paddingBottom: 30, paddingHorizontal: 25, borderBottomLeftRadius: 30, borderBottomRightRadius: 30 },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  greeting: { color: 'rgba(255,255,255,0.8)', fontSize: 14, fontWeight: '500' },
-  title: { color: '#FFF', fontSize: 28, fontWeight: 'bold', marginTop: 5 },
+  header: { backgroundColor: '#2563EB', paddingTop: 60, paddingBottom: 25, paddingHorizontal: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 },
+  backButton: { padding: 4, marginLeft: -4 },
+  headerSubtitle: { color: 'rgba(255, 255, 255, 0.8)', fontSize: 13, fontWeight: '700', letterSpacing: 1 },
+  headerBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerTitle: { color: '#FFF', fontSize: 26, fontWeight: 'bold' },
+  headerSmall: { color: 'rgba(255,255,255,0.9)', fontSize: 14, marginTop: 4 },
   logoutBtn: { padding: 10, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12 },
   
   body: { padding: 20, paddingBottom: 150 },

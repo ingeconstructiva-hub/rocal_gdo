@@ -1,30 +1,28 @@
 import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { decode } from 'base64-arraybuffer';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
-import * as Print from 'expo-print'; // <-- Nueva librería para PDF
+import * as Print from 'expo-print';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { supabase } from '../../lib/supabase';
-// 1. IMPORTAMOS LA MEMORIA GLOBAL DE PROYECTOS
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, Linking, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useProject } from '../../context/ProjectContext';
+import { supabase } from '../../lib/supabase';
 
 export default function DocumentosScreen() {
   const router = useRouter();
-  
-  // 2. EXTRAEMOS LA OBRA ACTIVA
-  const { activeProject } = useProject();
+  const { activeProject, isOffline, lastSync } = useProject();
   
   const [scannedImages, setScannedImages] = useState<string[]>([]);
   const [docTitle, setDocTitle] = useState('');
   const [docCategory, setDocCategory] = useState('Plano'); 
   const [isUploading, setIsUploading] = useState(false);
   const [documentosList, setDocumentosList] = useState<any[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
   const categories = ['Plano', 'Permiso', 'Factura', 'Contrato', 'Otro'];
 
-  // 3. RECARGAMOS CADA VEZ QUE LA OBRA CAMBIA
   useFocusEffect(
     useCallback(() => {
       if (activeProject?.id) {
@@ -33,15 +31,74 @@ export default function DocumentosScreen() {
     }, [activeProject])
   );
 
+  useEffect(() => {
+    if (activeProject?.id) {
+      setTimeout(() => {
+        loadDocumentos();
+      }, 500);
+    }
+  }, [isOffline, lastSync, activeProject?.id]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadDocumentos();
+    setRefreshing(false);
+  }, [activeProject, isOffline]);
+
   const loadDocumentos = async () => {
-    const { data, error } = await supabase
-      .from('planos') 
-      .select('*')
-      .eq('project_id', activeProject?.id) // <-- FILTRO: SOLO DOCUMENTOS DE ESTA OBRA
-      .order('created_at', { ascending: false });
-      
-    if (data) setDocumentosList(data);
-    if (error) console.log("Error cargando documentos:", error.message);
+    const projectId = activeProject?.id;
+    if (!projectId) return;
+
+    const storageKeyDocs = `@planos_cache_${projectId}`;
+
+    // --- 🛡️ SISTEMA ANTI-FANTASMAS: Leer siempre documentos pendientes locales ---
+    let uiPending: any[] = [];
+    try {
+      const pendingData = await AsyncStorage.getItem('@bandeja_salida_planos');
+      if (pendingData) {
+        const pendingDocs = JSON.parse(pendingData);
+        const projectPending = pendingDocs.filter((d: any) => d.project_id === projectId);
+        uiPending = projectPending.map((d: any, index: number) => ({
+          id: `temp_doc_${Date.now()}_${index}`,
+          title: d.title,
+          category: d.category,
+          file_url: d.local_file_uri, // Usamos la ruta local temporalmente
+          is_pending: true // Bandera visual opcional
+        }));
+      }
+    } catch (e) { console.log("Error leyendo planos pendientes:", e); }
+
+    if (isOffline) {
+      try {
+        const cachedDocs = await AsyncStorage.getItem(storageKeyDocs);
+        const parsedDocs = cachedDocs ? JSON.parse(cachedDocs) : [];
+        setDocumentosList([...uiPending, ...parsedDocs]);
+      } catch (error) {
+        console.log("Error leyendo caché de documentos:", error);
+      }
+    } else {
+      try {
+        const { data, error } = await supabase
+          .from('planos') 
+          .select('*')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false });
+          
+        if (error) throw error;
+        
+        if (data) {
+          await AsyncStorage.setItem(storageKeyDocs, JSON.stringify(data));
+          setDocumentosList([...uiPending, ...data]);
+        }
+      } catch (error: any) {
+        if (error.message !== 'Network request failed' && error.message !== 'Failed to fetch') {
+          console.log("Error cargando documentos:", error.message);
+        } else {
+          const cachedDocs = await AsyncStorage.getItem(storageKeyDocs);
+          if (cachedDocs) setDocumentosList([...uiPending, ...JSON.parse(cachedDocs)]);
+        }
+      }
+    }
   };
 
   const handleScanDocument = async () => {
@@ -61,7 +118,6 @@ export default function DocumentosScreen() {
         setScannedImages(prev => [...prev, result.assets[0].uri]);
       }
     } catch (error) {
-      console.error("Error al abrir cámara:", error);
       Alert.alert("Error", "No se pudo abrir la cámara.");
     }
   };
@@ -76,22 +132,16 @@ export default function DocumentosScreen() {
       Alert.alert("Falta título", "Por favor ingresa un nombre para identificar este documento.");
       return;
     }
-    
-    if (!activeProject?.id) {
-      Alert.alert("Error", "No se detectó una obra activa.");
-      return;
-    }
+    const projectId = activeProject?.id;
+    if (!projectId) return;
 
     setIsUploading(true);
     try {
-      // 1. GENERAR EL PDF CON TODAS LAS FOTOS
+      // 1. GENERAR EL HTML DE IMÁGENES COMPARTIDO
       let htmlImages = '';
       for (const imgUri of scannedImages) {
         const base64Img = await FileSystem.readAsStringAsync(imgUri, { encoding: 'base64' });
-        htmlImages += `
-          <div class="page">
-            <img src="data:image/jpeg;base64,${base64Img}" />
-          </div>`;
+        htmlImages += `<div class="page"><img src="data:image/jpeg;base64,${base64Img}" /></div>`;
       }
 
       const htmlContent = `
@@ -104,17 +154,44 @@ export default function DocumentosScreen() {
               img { max-width: 100%; max-height: 100%; object-fit: contain; }
             </style>
           </head>
-          <body>
-            ${htmlImages}
-          </body>
+          <body>${htmlImages}</body>
         </html>
       `;
 
-      // Creamos el archivo PDF temporal
-      const { uri: pdfUri } = await Print.printToFileAsync({ html: htmlContent });
+      const { uri: tempPdfUri } = await Print.printToFileAsync({ html: htmlContent });
 
-      // 2. SUBIR EL PDF A SUPABASE
-      const base64Pdf = await FileSystem.readAsStringAsync(pdfUri, { encoding: 'base64' });
+      // 🔴 MODO OFFLINE: GUARDADO LOCAL EN DISCO DURO
+      if (isOffline) {
+        const permanentFileName = `offline_doc_${Date.now()}.pdf`;
+        const permanentPdfUri = FileSystem.documentDirectory + permanentFileName;
+        
+        // Movemos el archivo temporal a una carpeta permanente en el celular
+        await FileSystem.moveAsync({ from: tempPdfUri, to: permanentPdfUri });
+
+        const localDocData = {
+          title: docTitle.trim(),
+          category: docCategory,
+          version: 'v1.0',
+          local_file_uri: permanentPdfUri, // Guardamos la ruta del archivo en el cel
+          project_id: projectId
+        };
+
+        const existingOutbox = await AsyncStorage.getItem('@bandeja_salida_planos');
+        const outbox = existingOutbox ? JSON.parse(existingOutbox) : [];
+        outbox.push(localDocData);
+        await AsyncStorage.setItem('@bandeja_salida_planos', JSON.stringify(outbox));
+
+        Alert.alert("Guardado Offline", "El documento PDF se generó y guardó en tu celular. Se subirá automáticamente al recuperar internet.");
+        setScannedImages([]);
+        setDocTitle('');
+        setDocCategory('Plano');
+        await loadDocumentos();
+        setIsUploading(false);
+        return;
+      }
+
+      // 🟢 MODO ONLINE NORMAL
+      const base64Pdf = await FileSystem.readAsStringAsync(tempPdfUri, { encoding: 'base64' });
       const arrayBuffer = decode(base64Pdf);
       const fileName = `doc_${Date.now()}.pdf`; 
 
@@ -124,32 +201,21 @@ export default function DocumentosScreen() {
 
       if (uploadError) throw uploadError;
 
-      const { data: publicUrlData } = supabase.storage
-        .from('planos_obras')
-        .getPublicUrl(fileName);
-      const finalImageUrl = publicUrlData.publicUrl;
-
-      // 3. GUARDAR EN LA BASE DE DATOS (AHORA VINCULADO AL PROJECTO)
+      const { data: publicUrlData } = supabase.storage.from('planos_obras').getPublicUrl(fileName);
+      
       const { error: dbError } = await supabase.from('planos').insert([
-        { 
-          title: docTitle, 
-          category: docCategory, 
-          version: 'v1.0', 
-          file_url: finalImageUrl,
-          project_id: activeProject.id // <-- VINCULO SÚPER IMPORTANTE
-        }
+        { title: docTitle.trim(), category: docCategory, version: 'v1.0', file_url: publicUrlData.publicUrl, project_id: projectId }
       ]);
 
       if (dbError) throw dbError;
 
-      Alert.alert("¡Éxito!", "Documento de múltiples páginas generado y guardado.");
+      Alert.alert("¡Éxito!", "Documento generado y guardado en la nube.");
       setScannedImages([]);
       setDocTitle('');
       setDocCategory('Plano'); 
       loadDocumentos(); 
 
     } catch (error: any) {
-      console.error("Error al subir:", error);
       Alert.alert("Error", error.message);
     } finally {
       setIsUploading(false);
@@ -159,16 +225,26 @@ export default function DocumentosScreen() {
   const handleViewDocument = async (url: string) => {
     if (!url) return;
     try {
+      // Si es un archivo local (offline), lo abrimos directo, si es HTTP abrimos el link
       await Linking.openURL(url);
     } catch (error) {
-      Alert.alert("Error", "No se pudo abrir el enlace.");
+      Alert.alert("Error", "No se pudo abrir el documento.");
     }
   };
 
-  const handleDeleteDocument = (id: number, fileUrl: string) => {
+  const handleDeleteDocument = (id: any, fileUrl: string) => {
+    if (typeof id === 'string' && id.startsWith('temp_')) {
+      Alert.alert("Modo Offline", "No puedes eliminar documentos en espera de sincronización hasta volver a estar online.");
+      return;
+    }
+    if (isOffline) {
+      Alert.alert("Sin Conexión", "No puedes eliminar documentos mientras estés offline.");
+      return;
+    }
+
     Alert.alert(
       "Eliminar Documento",
-      "¿Estás seguro de que quieres eliminar este archivo?",
+      "¿Estás seguro de que quieres eliminar este archivo permanentemente?",
       [
         { text: "Cancelar", style: "cancel" },
         { 
@@ -210,17 +286,34 @@ export default function DocumentosScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Feather name="chevron-left" size={28} color="#FFF" />
-        </TouchableOpacity>
-        <View style={styles.headerTextContainer}>
-          <Text style={styles.headerSubtitle}>{activeProject?.name?.toUpperCase() || 'MÓDULO DE CONTROL'}</Text>
+        <View style={styles.headerTopRow}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Feather name="chevron-left" size={28} color="#FFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerSubtitle}>GESTIÓN DE OBRA</Text>
+          <View style={{ width: 28 }} />
+        </View>
+        <View style={styles.headerBottomRow}>
           <Text style={styles.headerTitle}>Documentación</Text>
+          <Text style={styles.headerSmall}>{activeProject?.name?.toUpperCase() || 'MÓDULO DE CONTROL'}</Text>
         </View>
       </View>
 
-      <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-        
+      <ScrollView 
+        style={styles.body} 
+        contentContainerStyle={{ paddingBottom: 40 }} 
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2563EB']} tintColor="#2563EB" />
+        }
+      >
+        {isOffline && (
+          <View style={{ backgroundColor: '#FEF3C7', padding: 10, borderRadius: 8, marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
+            <Feather name="wifi-off" size={16} color="#D97706" style={{ marginRight: 8 }} />
+            <Text style={{ color: '#D97706', fontSize: 12, flex: 1 }}>Modo Offline Activo. Tus documentos se guardarán en tu celular y se subirán solos al tener red.</Text>
+          </View>
+        )}
+
         {scannedImages.length === 0 ? (
           <TouchableOpacity style={styles.scanButton} onPress={handleScanDocument}>
             <Feather name="camera" size={32} color="#FFF" />
@@ -251,38 +344,22 @@ export default function DocumentosScreen() {
             </TouchableOpacity>
             
             <Text style={styles.label}>Nombre del Documento *</Text>
-            <TextInput 
-              style={styles.input} 
-              placeholder="Ej. Contrato de Obra..." 
-              value={docTitle} 
-              onChangeText={setDocTitle} 
-              placeholderTextColor="#6B7280" 
-            />
+            <TextInput style={styles.input} placeholder="Ej. Contrato de Obra..." value={docTitle} onChangeText={setDocTitle} placeholderTextColor="#6B7280" />
 
             <Text style={styles.label}>Categoría</Text>
             <View style={styles.categoryContainer}>
               {categories.map((cat) => (
-                <TouchableOpacity 
-                  key={cat} 
-                  style={[styles.categoryBadge, docCategory === cat && styles.categoryBadgeActive]}
-                  onPress={() => setDocCategory(cat)}
-                >
+                <TouchableOpacity key={cat} style={[styles.categoryBadge, docCategory === cat && styles.categoryBadgeActive]} onPress={() => setDocCategory(cat)}>
                   <Text style={[styles.categoryText, docCategory === cat && styles.categoryTextActive]}>{cat}</Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            <TouchableOpacity 
-              style={[styles.saveButton, isUploading && styles.saveButtonDisabled]} 
-              onPress={handleSaveToDatabase}
-              disabled={isUploading}
-            >
-              {isUploading ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
+            <TouchableOpacity style={styles.saveButton} onPress={handleSaveToDatabase} disabled={isUploading}>
+              {isUploading ? <ActivityIndicator color="#FFF" /> : (
                 <>
                   <Feather name="upload-cloud" size={20} color="#FFF" />
-                  <Text style={styles.saveButtonText}>Generar PDF y Guardar</Text>
+                  <Text style={styles.saveButtonText}>{isOffline ? 'Generar y Guardar Local' : 'Generar PDF y Subir'}</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -309,7 +386,9 @@ export default function DocumentosScreen() {
                 </View>
                 <View style={styles.planoInfo}>
                   <Text style={styles.planoTitle}>{doc.title}</Text>
-                  <Text style={styles.planoSub}>{doc.category || 'General'} • PDF</Text>
+                  <Text style={[styles.planoSub, doc.is_pending && {color: '#D97706', fontWeight: 'bold'}]}>
+                    {doc.is_pending ? '⏳ Pendiente de subir' : `${doc.category || 'General'} • PDF`}
+                  </Text>
                 </View>
                 
                 <View style={styles.actionButtonsContainer}>
@@ -320,7 +399,6 @@ export default function DocumentosScreen() {
                     <Feather name="trash-2" size={20} color="#DC2626" />
                   </TouchableOpacity>
                 </View>
-
               </View>
             ))
           )}
@@ -332,11 +410,13 @@ export default function DocumentosScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FAFB' },
-  header: { backgroundColor: '#2563EB', paddingTop: 60, paddingBottom: 20, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center' },
-  backButton: { marginRight: 15, padding: 5 },
-  headerTextContainer: { flexDirection: 'column' },
-  headerSubtitle: { color: 'rgba(255, 255, 255, 0.7)', fontSize: 12, fontWeight: '600', letterSpacing: 1 },
+  header: { backgroundColor: '#2563EB', paddingTop: 60, paddingBottom: 25, paddingHorizontal: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  backButton: { padding: 4, marginLeft: -4 },
+  headerSubtitle: { color: 'rgba(255, 255, 255, 0.8)', fontSize: 13, fontWeight: '700', letterSpacing: 1 },
+  headerBottomRow: { flexDirection: 'column', alignItems: 'flex-start' },
   headerTitle: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
+  headerSmall: { color: 'rgba(255,255,255,0.8)', fontSize: 12, marginTop: 4 },
   body: { padding: 20 },
   scanButton: { backgroundColor: '#059669', borderRadius: 16, padding: 24, flexDirection: 'row', alignItems: 'center', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, marginBottom: 30 },
   scanButtonTextContainer: { marginLeft: 15, flex: 1 },
@@ -344,15 +424,12 @@ const styles = StyleSheet.create({
   scanButtonSub: { color: '#D1FAE5', fontSize: 13, marginTop: 4 },
   previewContainer: { backgroundColor: '#FFF', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 30 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 15 },
-  
   thumbnailContainer: { marginRight: 15, position: 'relative', alignItems: 'center' },
   thumbnailImage: { width: 100, height: 140, borderRadius: 10, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },
   removeBtn: { position: 'absolute', top: -8, right: -8, backgroundColor: '#DC2626', borderRadius: 12, padding: 4 },
   pageNumber: { marginTop: 6, fontSize: 12, color: '#6B7280', fontWeight: 'bold' },
-  
   addPageBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', backgroundColor: '#EFF6FF', padding: 12, borderRadius: 10, marginBottom: 20, borderWidth: 1, borderColor: '#BFDBFE', borderStyle: 'dashed' },
   addPageBtnText: { color: '#2563EB', fontWeight: 'bold', marginLeft: 8 },
-
   label: { fontSize: 14, color: '#4B5563', fontWeight: 'bold', marginBottom: 8 },
   input: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, padding: 12, fontSize: 16, marginBottom: 20},
   categoryContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 25 },

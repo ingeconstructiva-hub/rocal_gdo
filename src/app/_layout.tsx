@@ -28,8 +28,8 @@ export default function RootLayout() {
   useEffect(() => {
     if (!isInitialized) return;
 
-    // AHORA RECONOCE TANTO LOGIN COMO REGISTER COMO PANTALLAS PÚBLICAS
-    const inAuthGroup = segments[0] === 'login' || segments[0] === 'register';
+    // AHORA RECONOCE TANTO LOGIN COMO REGISTER COMO PANTALLAS PÚBLICAS; AGREGAR EN CASO DE QUE SE REQUIERA ->|| segments[0] === 'register'
+    const inAuthGroup = segments[0] === 'login' ;
 
     // Usamos un micro-retraso para asegurar que el <Stack> 
     // ya se dibujó antes de intentar cambiar de ruta.

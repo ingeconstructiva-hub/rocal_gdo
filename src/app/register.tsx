@@ -71,14 +71,17 @@ export default function RegisterScreen() {
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Feather name="arrow-left" size={24} color="#111827" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.titleContainer}>
-          <Text style={styles.title}>Crear Cuenta</Text>
-          <Text style={styles.subtitle}>Únete al sistema de gestión de obra</Text>
+          <View style={styles.headerTopRow}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+              <Feather name="chevron-left" size={28} color="#FFF" />
+            </TouchableOpacity>
+            <Text style={styles.headerSubtitle}>GESTIÓN DE OBRA</Text>
+            <View style={{ width: 28 }} />
+          </View>
+          <View style={styles.headerBottomRow}>
+            <Text style={styles.headerTitle}>Crear Cuenta</Text>
+            <Text style={styles.headerSmall}>Únete al sistema de gestión de obra</Text>
+          </View>
         </View>
 
         <View style={styles.formContainer}>
@@ -155,11 +158,13 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
   scrollContainer: { flexGrow: 1, padding: 25 },
-  header: { marginTop: 40, marginBottom: 20 },
-  backButton: { padding: 5, alignSelf: 'flex-start' },
-  titleContainer: { marginBottom: 30 },
-  title: { fontSize: 32, fontWeight: 'bold', color: '#111827' },
-  subtitle: { fontSize: 15, color: '#6B7280', marginTop: 5 },
+  header: { backgroundColor: '#2563EB', paddingTop: 60, paddingBottom: 25, paddingHorizontal: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20, marginBottom: 20 },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  backButton: { padding: 4, marginLeft: -4 },
+  headerSubtitle: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '700', letterSpacing: 1 },
+  headerBottomRow: { flexDirection: 'column', alignItems: 'flex-start' },
+  headerTitle: { color: '#FFF', fontSize: 26, fontWeight: 'bold' },
+  headerSmall: { color: 'rgba(255,255,255,0.9)', fontSize: 14, marginTop: 4 },
   
   formContainer: { flex: 1 },
   label: { fontSize: 13, fontWeight: '600', color: '#4B5563', marginBottom: 8, marginTop: 15 },

@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "rocal-mobile",
+    "name": "ROCAL",
     "slug": "rocal-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/icono.png",
     "scheme": "rocalmobile",
     "userInterfaceStyle": "automatic",
     "ios": {
