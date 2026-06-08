@@ -46,40 +46,41 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isOffline]);
 
-  const sincronizarBandejasDeSalida = async () => {
-    let huboSincronizacion = false;
+const sincronizarBandejasDeSalida = async () => {
+  let huboSincronizacion = false;
 
-    try {
-      // --- A. BITÁCORAS ---
-      const pendingLogsData = await AsyncStorage.getItem('@bandeja_salida_logs');
-      if (pendingLogsData) {
-        const logsPendientes = JSON.parse(pendingLogsData);
-        if (logsPendientes.length > 0) {
-          const { error } = await supabase.from('logs').insert(logsPendientes);
-          if (!error) { await AsyncStorage.removeItem('@bandeja_salida_logs'); huboSincronizacion = true; }
-        }
+  try {
+    // --- A. BITÁCORAS ---
+    const pendingLogsData = await AsyncStorage.getItem('@bandeja_salida_logs');
+    if (pendingLogsData) {
+      const logsPendientes = JSON.parse(pendingLogsData);
+      if (logsPendientes.length > 0) {
+        const { error } = await supabase.from('logs').upsert(logsPendientes, { onConflict: 'local_uuid' });
+        if (!error) { await AsyncStorage.removeItem('@bandeja_salida_logs'); huboSincronizacion = true; }
       }
+    }
 
-      // --- B. GASTOS ---
-      const pendingInvData = await AsyncStorage.getItem('@bandeja_salida_inventario');
-      if (pendingInvData) {
-        const invPendientes = JSON.parse(pendingInvData);
-        if (invPendientes.length > 0) {
-          const { error } = await supabase.from('inventory').insert(invPendientes);
-          if (!error) { await AsyncStorage.removeItem('@bandeja_salida_inventario'); huboSincronizacion = true; }
-        }
+    // --- B. GASTOS ---
+    const pendingInvData = await AsyncStorage.getItem('@bandeja_salida_inventario');
+    if (pendingInvData) {
+      const invPendientes = JSON.parse(pendingInvData);
+      if (invPendientes.length > 0) {
+        const { error } = await supabase.from('inventory').upsert(invPendientes, { onConflict: 'local_uuid' });
+        if (!error) { await AsyncStorage.removeItem('@bandeja_salida_inventario'); huboSincronizacion = true; }
       }
+    }
 
-      // --- C. TRABAJADORES NUEVOS ---
-      const pendingWorkersData = await AsyncStorage.getItem('@bandeja_salida_lista');
-      if (pendingWorkersData) {
-        const workersPendientes = JSON.parse(pendingWorkersData);
-        if (workersPendientes.length > 0) {
-          const { error } = await supabase.from('workers').insert(workersPendientes);
-          if (!error) { await AsyncStorage.removeItem('@bandeja_salida_lista'); huboSincronizacion = true; }
-        }
+    // --- C. TRABAJADORES NUEVOS ---
+    const pendingWorkersData = await AsyncStorage.getItem('@bandeja_salida_lista');
+    if (pendingWorkersData) {
+      const workersPendientes = JSON.parse(pendingWorkersData);
+      if (workersPendientes.length > 0) {
+        const { error } = await supabase.from('workers').upsert(workersPendientes, { onConflict: 'local_uuid' });
+        if (!error) { await AsyncStorage.removeItem('@bandeja_salida_lista'); huboSincronizacion = true; }
       }
+    }
 
+    // El resto queda igual desde D en adelante...
       // --- D. ASISTENCIA Y NÓMINA ---
       const pendingPayrollData = await AsyncStorage.getItem('@bandeja_salida_nomina');
       if (pendingPayrollData) {

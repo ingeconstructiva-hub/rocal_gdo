@@ -1,5 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage'; // <-- 1. IMPORTAMOS MEMORIA
+import * as Crypto from 'expo-crypto';
 import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
@@ -259,15 +260,19 @@ export default function InventarioScreen() {
     if (isOffline) {
       try {
         const offlineItem = {
-          ...itemData,
-          id: `temp_${Date.now()}`, // ID temporal falso para que la lista funcione
-          created_at: new Date().toISOString()
+        ...itemData,
+        id: `temp_${Date.now()}`,
+        created_at: new Date().toISOString()
         };
 
-        // Guardamos en la bandeja de salida (outbox)
+        const itemConUUID = {
+        ...itemData,
+        local_uuid: Crypto.randomUUID() // <-- agregar esto
+        };
+
         const existing = await AsyncStorage.getItem('@bandeja_salida_inventario');
         const outbox = existing ? JSON.parse(existing) : [];
-        outbox.push(itemData); // Subimos el itemData original a la nube luego (sin ID falso)
+        outbox.push(itemConUUID); // <-- usar itemConUUID en lugar de itemData
         await AsyncStorage.setItem('@bandeja_salida_inventario', JSON.stringify(outbox));
 
         // Reflejamos el cambio en pantalla inmediatamente para el usuario

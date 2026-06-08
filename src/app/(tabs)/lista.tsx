@@ -1,5 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
@@ -258,14 +259,14 @@ export default function ListaScreen() {
     const workerData = { name: newName.trim(), role: newRole.trim(), weekly_salary: Number(newSalary), project_id: projectId, is_active: true };
 
     const saveToOutbox = async () => {
-      const existingOutbox = await AsyncStorage.getItem('@bandeja_salida_lista');
-      const outbox = existingOutbox ? JSON.parse(existingOutbox) : [];
-      outbox.push(workerData);
-      await AsyncStorage.setItem('@bandeja_salida_lista', JSON.stringify(outbox));
-
-      const uiWorker: WorkerState = { id: `temp_${Date.now()}`, name: workerData.name, role: workerData.role, weekly_salary: workerData.weekly_salary, attendance: [true, true, true, true, true], extraDeduction: 0, reason: '', tempDeduction: '', tempReason: '' };
-      setWorkers(prev => [uiWorker, ...prev]);
-      setIsModalVisible(false);
+    const workerConUUID = {
+      ...workerData,
+      local_uuid: Crypto.randomUUID() // <-- agregar esto
+    };
+    const existingOutbox = await AsyncStorage.getItem('@bandeja_salida_lista');
+    const outbox = existingOutbox ? JSON.parse(existingOutbox) : [];
+    outbox.push(workerConUUID); // <-- usar workerConUUID
+    await AsyncStorage.setItem('@bandeja_salida_lista', JSON.stringify(outbox));
       // NOTIFICACIÓN OFFLINE
       Alert.alert("Guardado Local", "Trabajador agregado al almacenamiento local. Se subirá automáticamente al recuperar señal.");
     };
