@@ -1,6 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage'; // <-- AGREGAMOS LA MEMORIA
 import { decode } from 'base64-arraybuffer';
+import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, useRouter } from 'expo-router';
@@ -86,12 +87,13 @@ export function LogForm() {
         const photoPayload = localBase64Photos.length === 0 ? null : (localBase64Photos.length === 1 ? localBase64Photos[0] : JSON.stringify(localBase64Photos));
 
         const offlineLog = {
-          project_id: projectId, // <-- USAMOS LA VARIABLE SEGURA
+          project_id: projectId,
           description: note,
           category,
           sector,
           photo_url: photoPayload,
-          created_at: new Date().toISOString() 
+          created_at: new Date().toISOString(),
+          local_uuid: Crypto.randomUUID() // <-- agregar esto
         };
 
         const existing = await AsyncStorage.getItem('@bandeja_salida_logs');

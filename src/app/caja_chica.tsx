@@ -1,5 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
@@ -126,8 +127,9 @@ export default function CajaChicaScreen() {
       project_id: projectId,
       monto: parseFloat(monto),
       concepto: concepto.trim(),
-      foto_local_uri: foto, // Se usará para la subida posterior si es offline
+      foto_local_uri: foto,
       fecha: new Date().toISOString(),
+      local_uuid: Crypto.randomUUID(),
     };
 
     if (isOffline) {

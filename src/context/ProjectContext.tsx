@@ -160,13 +160,15 @@ const sincronizarBandejasDeSalida = async () => {
               }
 
               // Insertamos en la tabla
-              await supabase.from('caja_chica').insert([{
+              await supabase.from('caja_chica').upsert([{
                 project_id: gasto.project_id,
                 monto: gasto.monto,
                 concepto: gasto.concepto,
                 foto_ticket: fotoUrl,
-                fecha: gasto.fecha
-              }]);
+                fecha: gasto.fecha,
+                local_uuid: gasto.local_uuid,
+              }], { onConflict: 'local_uuid' });
+
             } catch (err) { console.log("Gasto fallido:", err); }
           }
           await AsyncStorage.removeItem('@bandeja_salida_caja');
