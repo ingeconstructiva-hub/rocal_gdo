@@ -234,7 +234,7 @@ export default function InventarioScreen() {
 
   const handleSaveItem = async () => {
     if (!name.trim() || !unit.trim() || !quantity.trim() || !price.trim() || !weekLabelModal.trim()) {
-      Alert.alert("Campos incompletos", "Por favor llena los datos básicos (Semana, Concepto, Cantidad y P.U.).");
+      Alert.alert("Campos incompletos", "Por favor llena los datos básicos (Semana, Concepto, Cantidad y Mano de Obra).");
       return;
     }
 
@@ -400,7 +400,7 @@ export default function InventarioScreen() {
           <View style={styles.actionsRow}>
             <TouchableOpacity style={[styles.addButton, isOffline && {backgroundColor: '#D97706'}]} onPress={openAddModal}>
               <Feather name="plus" size={14} color="#FFF" />
-              <Text style={styles.addButtonText} adjustsFontSizeToFit numberOfLines={1}>Gasto</Text>
+              <Text style={styles.addButtonText} adjustsFontSizeToFit numberOfLines={1}>Concepto</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.addButton, styles.pdfButton]} onPress={handleExportPDF} disabled={isExporting}>
               {isExporting ? (
@@ -440,7 +440,7 @@ export default function InventarioScreen() {
                   <View style={styles.tableHeader}>
                     <Text style={[styles.thText, { flex: 2.5 }]}>Concepto / Asignación</Text>
                     <Text style={[styles.thText, { flex: 1.5, textAlign: 'center' }]}>Cant/U.</Text>
-                    <Text style={[styles.thText, { flex: 1.5, textAlign: 'center' }]}>P.U.</Text>
+                    <Text style={[styles.thText, { flex: 1.5, textAlign: 'center' }]}>P.U./ M.O</Text>
                     <Text style={[styles.thText, { flex: 2, textAlign: 'right' }]}>Importe</Text>
                   </View>
 

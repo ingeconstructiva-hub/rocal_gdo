@@ -1,17 +1,20 @@
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Crypto from 'expo-crypto';
 import * as ImagePicker from 'expo-image-picker';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useProject } from '../context/ProjectContext';
 import { supabase } from '../lib/supabase';
 
 interface GastoCaja {
   id: string;
-  concepto: string;
+  numero_nota: string;
+  encargado: string;
   monto: number;
+  unidad: string;
+  tipo_deposito: 'efectivo' | 'transferencia';
+  justificacion: string;
   foto_ticket: string | null;
   fecha: string;
   is_pending?: boolean;
@@ -19,176 +22,206 @@ interface GastoCaja {
 
 export default function CajaChicaScreen() {
   const router = useRouter();
-  const { activeProject, isOffline, lastSync } = useProject();
+  const { activeProject, isOffline } = useProject();
 
   const [gastos, setGastos] = useState<GastoCaja[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  // Estados para el formulario
-  const [isModalVisible, setIsModalVisible] = useState(false);
-  const [monto, setMonto] = useState('');
-  const [concepto, setConcepto] = useState('');
-  const [foto, setFoto] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isModalVisible, setIsModalVisible] = useState(false);
 
-  // Carga inicial y por pestaña
-  useFocusEffect(
-    useCallback(() => {
-      if (activeProject?.id) loadGastos();
-    }, [activeProject])
-  );
+  // NUEVOS ESTADOS DEL FORMULARIO
+  const [numeroNota, setNumeroNota] = useState('');
+  const [encargado, setEncargado] = useState('');
+  const [monto, setMonto] = useState(''); // Importe
+  const [unidad, setUnidad] = useState('');
+  const [tipoDeposito, setTipoDeposito] = useState<'efectivo' | 'transferencia'>('efectivo');
+  const [justificacion, setJustificacion] = useState('');
+  const [fotoTicket, setFotoTicket] = useState<string | null>(null);
 
-  // Recarga en vivo por timbre de sincronización
   useEffect(() => {
     if (activeProject?.id) {
-      setTimeout(() => loadGastos(), 500);
+      loadGastos();
     }
-  }, [isOffline, lastSync]);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadGastos();
-    setRefreshing(false);
   }, [activeProject, isOffline]);
 
   const loadGastos = async () => {
+    setLoading(true);
     const projectId = activeProject?.id;
     if (!projectId) return;
 
     const storageKey = `@caja_chica_cache_${projectId}`;
 
-    // 1. Leer Pendientes de la bandeja de salida
+    // Cargar pendientes locales para pintar en la UI inmediatamente
     let uiPending: GastoCaja[] = [];
     try {
       const pendingData = await AsyncStorage.getItem('@bandeja_salida_caja');
       if (pendingData) {
         const allPending = JSON.parse(pendingData);
-        uiPending = allPending
-          .filter((g: any) => g.project_id === projectId)
-          .map((g: any) => ({
-            id: `temp_${Date.now()}_${Math.random()}`,
-            concepto: g.concepto,
-            monto: g.monto,
-            foto_ticket: g.foto_local_uri,
-            fecha: new Date().toISOString(),
-            is_pending: true
-          }));
+        const projectPending = allPending.filter((g: any) => g.project_id === projectId);
+        uiPending = projectPending.map((g: any, i: number) => ({
+          id: g.id || `temp_caja_${Date.now()}_${i}`,
+          numero_nota: g.numero_nota,
+          encargado: g.encargado,
+          monto: Number(g.monto),
+          unidad: g.unidad,
+          tipo_deposito: g.tipo_deposito,
+          justificacion: g.justificacion,
+          foto_ticket: g.foto_ticket,
+          fecha: g.fecha,
+          is_pending: true
+        }));
       }
     } catch (e) { console.log(e); }
 
     if (isOffline) {
       const cached = await AsyncStorage.getItem(storageKey);
-      setGastos([...uiPending, ...(cached ? JSON.parse(cached) : [])]);
+      const parsedCached = cached ? JSON.parse(cached) : [];
+      setGastos([...uiPending, ...parsedCached]);
       setLoading(false);
     } else {
-      const { data, error } = await supabase
-        .from('caja_chica')
-        .select('*')
-        .eq('project_id', projectId)
-        .eq('is_active', true)
-        .order('fecha', { ascending: false });
+      try {
+        const { data, error } = await supabase
+          .from('caja_chica')
+          .select('*')
+          .eq('project_id', projectId)
+          .eq('is_active', true)
+          .order('fecha', { ascending: false });
 
-      if (data) {
-        setGastos([...uiPending, ...data]);
-        await AsyncStorage.setItem(storageKey, JSON.stringify(data));
+        if (error) throw error;
+
+        if (data) {
+          await AsyncStorage.setItem(storageKey, JSON.stringify(data));
+          setGastos([...uiPending, ...data]);
+        }
+      } catch (err) {
+        const cached = await AsyncStorage.getItem(storageKey);
+        setGastos([...uiPending, ...(cached ? JSON.parse(cached) : [])]);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
   };
 
-  const handleTomarFoto = async () => {
+  const seleccionarFoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Error', 'Se necesita permiso de cámara.');
+      Alert.alert("Permiso requerido", "Necesitamos acceso a la cámara para el ticket.");
       return;
     }
-
     const result = await ImagePicker.launchCameraAsync({
-      quality: 0.6,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
+      quality: 0.6,
     });
-
     if (!result.canceled) {
-      setFoto(result.assets[0].uri);
+      setFotoTicket(result.assets[0].uri);
     }
+  };
+
+  const limpiarFormulario = () => {
+    setNumeroNota('');
+    setEncargado('');
+    setMonto('');
+    setUnidad('');
+    setTipoDeposito('efectivo');
+    setJustificacion('');
+    setFotoTicket(null);
   };
 
   const handleGuardarGasto = async () => {
-    if (!monto || !concepto) {
-      Alert.alert("Campos incompletos", "Por favor indica el monto y el concepto.");
+    if (!monto.trim() || !justificacion.trim() || !encargado.trim()) {
+      Alert.alert("Campos incompletos", "Importe, Encargado y Justificación son obligatorios.");
       return;
     }
 
-    setIsSaving(true);
-    const projectId = activeProject.id;
+    const projectId = activeProject?.id;
+    if (!projectId) return;
 
-    const nuevoGasto = {
+    setIsSaving(true);
+    const uniqueId = `caja_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    
+    const nuevoGastoPayload = {
+      id: uniqueId,
       project_id: projectId,
-      monto: parseFloat(monto),
-      concepto: concepto.trim(),
-      foto_local_uri: foto,
-      fecha: new Date().toISOString(),
-      local_uuid: Crypto.randomUUID(),
+      numero_nota: numeroNota.trim() || 'S/N',
+      encargado: encargado.trim(),
+      monto: Number(monto),
+      unidad: unidad.trim() || 'General',
+      tipo_deposito: tipoDeposito,
+      justificacion: justificacion.trim(),
+      foto_ticket: fotoTicket,
+      fecha: new Date().toISOString()
+    };
+
+    const saveToOutbox = async () => {
+      const existing = await AsyncStorage.getItem('@bandeja_salida_caja');
+      const outbox = existing ? JSON.parse(existing) : [];
+      outbox.push(nuevoGastoPayload);
+      await AsyncStorage.setItem('@bandeja_salida_caja', JSON.stringify(outbox));
+
+      setGastos(prev => [{ ...nuevoGastoPayload, is_pending: true }, ...prev]);
+      setIsModalVisible(false);
+      limpiarFormulario();
+      setTimeout(() => {
+        Alert.alert("Guardado Local", "Gasto registrado en la memoria interna de la obra. Se subirá al recuperar señal.");
+      }, 300);
     };
 
     if (isOffline) {
-      // 🔴 GUARDADO OFFLINE
-      const existing = await AsyncStorage.getItem('@bandeja_salida_caja');
-      const outbox = existing ? JSON.parse(existing) : [];
-      outbox.push(nuevoGasto);
-      await AsyncStorage.setItem('@bandeja_salida_caja', JSON.stringify(outbox));
-
-      Alert.alert("Guardado Local", "El gasto se sincronizará cuando tengas internet.");
-      cerrarModal();
-      loadGastos();
+      await saveToOutbox();
       setIsSaving(false);
-    } else {
-      // 🟢 GUARDADO ONLINE (Simplificado para el ejemplo, subiría foto primero)
-      try {
-        let fotoUrl = null;
-        if (foto) {
-          const fileName = `ticket_${Date.now()}.jpg`;
-          const formData = new FormData();
-          formData.append('file', { uri: foto, name: fileName, type: 'image/jpeg' } as any);
+      return;
+    }
+
+    try {
+      let fotoUrl = null;
+      if (fotoTicket) {
+        // Lógica de subida al bucket (se mantiene intacta usando el id único generado)
+        const filename = `${uniqueId}.jpg`;
+        const formData = new FormData();
+        formData.append('file', { uri: fotoTicket, name: filename, type: 'image/jpeg' } as any);
+        
+        const { error: uploadError } = await supabase.storage
+          .from('tickets')
+          .upload(filename, formData as any);
           
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('tickets_caja_chica')
-            .upload(fileName, formData);
-          
-          if (!uploadError) {
-            const { data: pUrl } = supabase.storage.from('tickets_caja_chica').getPublicUrl(fileName);
-            fotoUrl = pUrl.publicUrl;
-          }
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage.from('tickets').getPublicUrl(filename);
+          fotoUrl = urlData.publicUrl;
         }
-
-        const { error } = await supabase.from('caja_chica').insert([{
-          project_id: projectId,
-          monto: nuevoGasto.monto,
-          concepto: nuevoGasto.concepto,
-          foto_ticket: fotoUrl
-        }]);
-
-        if (error) throw error;
-        Alert.alert("Éxito", "Gasto registrado en la nube.");
-        cerrarModal();
-        loadGastos();
-      } catch (e: any) {
-        Alert.alert("Error", e.message);
-      } finally {
-        setIsSaving(false);
       }
+
+      const { error } = await supabase.from('caja_chica').insert([{
+        id: nuevoGastoPayload.id,
+        project_id: nuevoGastoPayload.project_id,
+        numero_nota: nuevoGastoPayload.numero_nota,
+        encargado: nuevoGastoPayload.encargado,
+        monto: nuevoGastoPayload.monto,
+        unidad: nuevoGastoPayload.unidad,
+        tipo_deposito: nuevoGastoPayload.tipo_deposito,
+        justificacion: nuevoGastoPayload.justificacion,
+        foto_ticket: fotoUrl,
+        fecha: nuevoGastoPayload.fecha
+      }]);
+
+      if (error) throw error;
+
+      setIsModalVisible(false);
+      limpiarFormulario();
+      setTimeout(() => { Alert.alert("Éxito", "Gasto sincronizado en la nube correctamente."); }, 300);
+      loadGastos();
+    } catch (e: any) {
+      if (e.message?.includes('network') || e.message?.includes('Fetch')) {
+        await saveToOutbox();
+      } else {
+        Alert.alert("Error", e.message);
+      }
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const cerrarModal = () => {
-    setIsModalVisible(false);
-    setMonto('');
-    setConcepto('');
-    setFoto(null);
-  };
-
-  const totalGastado = gastos.reduce((acc, curr) => acc + Number(curr.monto), 0);
+  const totalCaja = gastos.reduce((sum, g) => sum + Number(g.monto), 0);
 
   return (
     <View style={styles.container}>
@@ -198,96 +231,105 @@ export default function CajaChicaScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Feather name="chevron-left" size={28} color="#FFF" />
           </TouchableOpacity>
+          <Text style={styles.headerSubtitle}>CAJA CHICA</Text>
           <View style={{ width: 28 }} />
         </View>
-        <View style={styles.headerBottomRow}>
-          <Text style={styles.headerTitle}>Caja Chica</Text>
-        </View>
+        <Text style={styles.headerTitle}>Flujo de Efectivo</Text>
+        <Text style={styles.totalAmount}>${totalCaja.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Text>
       </View>
 
-      <ScrollView 
-        style={styles.body}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2563EB']} />}
-      >
-        {/* CARD RESUMEN */}
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Total Gastado (Esta Obra)</Text>
-          <Text style={styles.summaryValue}>${totalGastado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Text>
-        </View>
-
-        <Text style={styles.sectionTitle}>Historial de Gastos</Text>
-
-        {loading ? <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 20 }} /> : 
-         gastos.length === 0 ? <Text style={styles.emptyText}>No hay gastos registrados aún.</Text> :
-         gastos.map((item) => (
-          <View key={item.id} style={[styles.gastoCard, item.is_pending && styles.pendingCard]}>
-            <View style={styles.gastoInfo}>
-              <Text style={styles.gastoConcepto}>{item.concepto}</Text>
-              <Text style={styles.gastoFecha}>{new Date(item.fecha).toLocaleDateString()}</Text>
-              {item.is_pending && <Text style={styles.pendingTag}>⏳ Pendiente de subir</Text>}
+      {/* LISTA DE GASTOS */}
+      <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+        <Text style={styles.sectionTitle}>Historial de Movimientos</Text>
+        {loading ? (
+          <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 30 }} />
+        ) : gastos.length === 0 ? (
+          <Text style={styles.emptyText}>No hay gastos registrados en esta obra.</Text>
+        ) : (
+          gastos.map((gasto) => (
+            <View key={gasto.id} style={styles.gastoCard}>
+              <View style={styles.gastoMainRow}>
+                <View style={{ flex: 1 }}>
+                  <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                    <Text style={styles.gastoJustificacion}>{gasto.justificacion}</Text>
+                    {gasto.is_pending && <Text style={styles.pendingBadge}>PENDIENTE</Text>}
+                  </View>
+                  <Text style={styles.gastoMeta}>Resp: {gasto.encargado} • Nota: {gasto.numero_nota}</Text>
+                  <Text style={styles.gastoSubMeta}>Unidad/Área: {gasto.unidad} • Tipo: {gasto.tipo_deposito}</Text>
+                </View>
+                <Text style={styles.gastoMonto}>-${Number(gasto.monto).toFixed(0)}</Text>
+              </View>
             </View>
-            <View style={styles.gastoMontoContainer}>
-              <Text style={styles.gastoMonto}>${Number(item.monto).toFixed(2)}</Text>
-              {item.foto_ticket && (
-                <TouchableOpacity onPress={() => Alert.alert("Comprobante", "Abriendo foto...")}>
-                  <Feather name="image" size={18} color="#2563EB" />
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        ))}
+          ))
+        )}
       </ScrollView>
 
-      {/* BOTÓN FLOTANTE */}
+      {/* FAB */}
       <TouchableOpacity style={styles.fab} onPress={() => setIsModalVisible(true)}>
-        <Feather name="plus" size={30} color="#FFF" />
+        <Feather name="plus" size={28} color="#FFF" />
       </TouchableOpacity>
 
       {/* MODAL NUEVO GASTO */}
       <Modal visible={isModalVisible} animationType="slide" transparent={true}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nuevo Gasto de Caja</Text>
-              <TouchableOpacity onPress={cerrarModal}><Feather name="x" size={24} color="#6B7280" /></TouchableOpacity>
+          <ScrollView contentContainerStyle={styles.modalScroll}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Registrar Gasto</Text>
+                <TouchableOpacity onPress={() => { setIsModalVisible(false); limpiarFormulario(); }}>
+                  <Feather name="x" size={24} color="#6B7280" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.rowInputs}>
+                <View style={{ flex: 1, marginRight: 10 }}>
+                  <Text style={styles.modalLabel}>No. de Nota</Text>
+                  <TextInput style={styles.modalInput} placeholder="Ej. 451A" placeholderTextColor="#9CA3AF" value={numeroNota} onChangeText={setNumeroNota} returnKeyType="done" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalLabel}>Importe ($)</Text>
+                  <TextInput style={styles.modalInput} placeholder="Ej. 1250" keyboardType="numeric" placeholderTextColor="#9CA3AF" value={monto} onChangeText={setMonto} returnKeyType="done" />
+                </View>
+              </View>
+
+              <Text style={styles.modalLabel}>Encargado / Responsable</Text>
+              <TextInput style={styles.modalInput} placeholder="Ej. Ing. Héctor Escobar" placeholderTextColor="#9CA3AF" value={encargado} onChangeText={setEncargado} returnKeyType="done" />
+
+              <Text style={styles.modalLabel}>Unidad / Vehículo / Frente</Text>
+              <TextInput style={styles.modalInput} placeholder="Ej. Camioneta Ford / Frente 2" placeholderTextColor="#9CA3AF" value={unidad} onChangeText={setUnidad} returnKeyType="done" />
+
+              <Text style={styles.modalLabel}>Tipo de Depósito</Text>
+              <View style={styles.selectorContainer}>
+                <TouchableOpacity style={[styles.selectorBtn, tipoDeposito === 'efectivo' && styles.selectorActive]} onPress={() => setTipoDeposito('efectivo')}>
+                  <Feather name="dollar-sign" size={16} color={tipoDeposito === 'efectivo' ? '#FFF' : '#4B5563'} />
+                  <Text style={[styles.selectorText, tipoDeposito === 'efectivo' && styles.selectorTextActive]}>Efectivo</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.selectorBtn, tipoDeposito === 'transferencia' && styles.selectorActive]} onPress={() => setTipoDeposito('transferencia')}>
+                  <Feather name="credit-card" size={16} color={tipoDeposito === 'transferencia' ? '#FFF' : '#4B5563'} />
+                  <Text style={[styles.selectorText, tipoDeposito === 'transferencia' && styles.selectorTextActive]}>Transferencia</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalLabel}>Justificación / Concepto</Text>
+              <TextInput style={[styles.modalInput, { height: 70, textAlignVertical: 'top' }]} placeholder="Ej. Compra de clavos de 2 pulgadas para cimbra" placeholderTextColor="#9CA3AF" value={justificacion} onChangeText={setJustificacion} multiline />
+
+              <Text style={styles.modalLabel}>Evidencia (Ticket/Comprobante)</Text>
+              <TouchableOpacity style={styles.cameraBtn} onPress={seleccionarFoto}>
+                {fotoTicket ? (
+                  <Image source={{ uri: fotoTicket }} style={styles.previewImage} />
+                ) : (
+                  <>
+                    <Feather name="camera" size={24} color="#2563EB" />
+                    <Text style={styles.cameraBtnText}>Tomar foto de evidencia</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.saveBtn} onPress={handleGuardarGasto} disabled={isSaving}>
+                {isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>Guardar Movimiento</Text>}
+              </TouchableOpacity>
             </View>
-
-            <Text style={styles.label}>Monto ($)</Text>
-            <TextInput 
-              style={styles.inputMonto} 
-              placeholder="0.00" 
-              keyboardType="numeric" 
-              value={monto} 
-              onChangeText={setMonto} 
-            />
-
-            <Text style={styles.label}>Concepto</Text>
-            <TextInput 
-              style={styles.input} 
-              placeholder="Ej. Gasolina, Clavos, Comida..." 
-              value={concepto} 
-              onChangeText={setConcepto} 
-            />
-
-            <TouchableOpacity style={styles.fotoBtn} onPress={handleTomarFoto}>
-              {foto ? (
-                <Image source={{ uri: foto }} style={styles.previewFoto} />
-              ) : (
-                <>
-                  <Feather name="camera" size={24} color="#2563EB" />
-                  <Text style={styles.fotoBtnText}>Tomar foto al ticket</Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.saveButton, isSaving && { opacity: 0.7 }]} 
-              onPress={handleGuardarGasto}
-              disabled={isSaving}
-            >
-              {isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveButtonText}>Guardar Gasto</Text>}
-            </TouchableOpacity>
-          </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
     </View>
@@ -295,39 +337,40 @@ export default function CajaChicaScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
-  header: { backgroundColor: '#2563EB', paddingTop: 60, paddingBottom: 25, paddingHorizontal: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
-  headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 },
-  backButton: { padding: 4, marginLeft: -4, top: 26},
-  headerSubtitle: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '700', letterSpacing: 1 },
-  headerBottomRow: { flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between' },
-  headerTitle: { color: '#FFF', fontSize: 26, fontWeight: 'bold', textAlign: 'center', top: -25 },
-  headerSmall: { color: 'rgba(255,255,255,0.9)', fontSize: 14, marginTop: 4 },
-  body: { flex: 1, padding: 20 },
-  summaryCard: { backgroundColor: '#1E293B', padding: 20, borderRadius: 16, alignItems: 'center', marginBottom: 25 },
-  summaryLabel: { color: '#94A3B8', fontSize: 13, marginBottom: 5 },
-  summaryValue: { color: '#FFF', fontSize: 28, fontWeight: 'bold' },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#374151', marginBottom: 15 },
-  gastoCard: { backgroundColor: '#FFF', padding: 15, borderRadius: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#E5E7EB' },
-  gastoInfo: { flex: 1, paddingRight: 10 },
-  pendingCard: { borderColor: '#F59E0B', borderLeftWidth: 4 },
-  gastoConcepto: { fontSize: 15, fontWeight: '600', color: '#111827' },
-  gastoFecha: { fontSize: 12, color: '#6B7280', marginTop: 2 },
-  pendingTag: { fontSize: 10, color: '#D97706', fontWeight: 'bold', marginTop: 4 },
-  gastoMontoContainer: { alignItems: 'flex-end' },
-  gastoMonto: { fontSize: 16, fontWeight: 'bold', color: '#059669', marginBottom: 5 },
-  emptyText: { textAlign: 'center', color: '#9CA3AF', marginTop: 40, fontStyle: 'italic' },
-  fab: { position: 'absolute', bottom: 30, right: 20, backgroundColor: '#2563EB', width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 5 },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  header: { backgroundColor: '#2563EB', paddingTop: 60, paddingBottom: 25, paddingHorizontal: 20, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  backButton: { padding: 4, marginLeft: -4 },
+  headerSubtitle: { color: 'rgba(255, 255, 255, 0.6)', fontSize: 12, fontWeight: '700', letterSpacing: 1 },
+  headerTitle: { color: '#94A3B8', fontSize: 14, fontWeight: '500', marginTop: 5 },
+  totalAmount: { color: '#FFF', fontSize: 32, fontWeight: 'bold', marginTop: 2 },
+  body: { padding: 20, paddingBottom: 120 },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#334155', marginBottom: 15 },
+  emptyText: { textAlign: 'center', color: '#64748B', marginTop: 30, fontStyle: 'italic' },
+  gastoCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 12, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, borderWidth: 1, borderColor: '#F1F5F9' },
+  gastoMainRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  gastoJustificacion: { fontSize: 14, fontWeight: 'bold', color: '#1E293B', flex: 1 },
+  pendingBadge: { fontSize: 8, color: '#D97706', backgroundColor: '#FEF3C7', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, fontWeight: 'bold', marginLeft: 6, alignSelf: 'center' },
+  gastoMeta: { fontSize: 11, color: '#475569', marginTop: 4 },
+  gastoSubMeta: { fontSize: 10, color: '#64748B', marginTop: 2 },
+  gastoMonto: { fontSize: 16, fontWeight: 'bold', color: '#DC2626', marginLeft: 10 },
+  fab: { position: 'absolute', bottom: 30, right: 25, width: 60, height: 60, borderRadius: 30, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 25, minHeight: 450 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  modalTitle: { fontSize: 18, fontWeight: 'bold' },
-  label: { fontSize: 13, fontWeight: 'bold', color: '#4B5563', marginBottom: 8, marginTop: 10 },
-  inputMonto: { fontSize: 32, fontWeight: 'bold', color: '#059669', borderBottomWidth: 2, borderColor: '#E5E7EB', paddingVertical: 5, marginBottom: 15 },
-  input: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 10, padding: 12, fontSize: 16, marginBottom: 15 },
-  fotoBtn: { borderStyle: 'dashed', borderWidth: 2, borderColor: '#BFDBFE', borderRadius: 12, height: 100, justifyContent: 'center', alignItems: 'center', marginBottom: 20, overflow: 'hidden' },
-  fotoBtnText: { color: '#2563EB', fontWeight: 'bold', marginTop: 5 },
-  previewFoto: { width: '100%', height: '100%' },
-  saveButton: { backgroundColor: '#2563EB', padding: 16, borderRadius: 12, alignItems: 'center' },
-  saveButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 }
+  modalScroll: { flexGrow: 1, justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#0F172A' },
+  modalLabel: { fontSize: 12, fontWeight: '700', color: '#475569', marginTop: 12, marginBottom: 6 },
+  modalInput: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 12, fontSize: 14, color: '#0F172A' },
+  rowInputs: { flexDirection: 'row', justifyContent: 'space-between' },
+  selectorContainer: { flexDirection: 'row', backgroundColor: '#F1F5F9', borderRadius: 12, padding: 4, marginTop: 2 },
+  selectorBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10 },
+  selectorActive: { backgroundColor: '#2563EB' },
+  selectorText: { fontSize: 13, color: '#4B5563', fontWeight: '600', marginLeft: 6 },
+  selectorTextActive: { color: '#FFF' },
+  cameraBtn: { height: 90, borderWidth: 1, borderColor: '#BFDBFE', borderStyle: 'dashed', backgroundColor: '#EFF6FF', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 5, overflow: 'hidden' },
+  cameraBtnText: { color: '#2563EB', fontSize: 13, fontWeight: '600', marginTop: 6 },
+  previewImage: { width: '100%', height: '100%' },
+  saveBtn: { backgroundColor: '#059669', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 25 },
+  saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 }
 });
