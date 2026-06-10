@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter } from 'expo-router';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useProject } from '../../context/ProjectContext';
@@ -11,23 +12,34 @@ export default function GastosHubScreen() {
     {
       title: 'Control de Destajos',
       sub: 'Materiales, volúmenes y mano de obra',
-      icon: 'package',
+      type: 'Feather',
+      icon: 'package', // Cambiado a package (MCI)
       color: '#F59E0B',
       path: '../destajo'
     },
     {
       title: 'Caja Chica',
       sub: 'Gastos menores del día a día',
-      icon: 'dollar-sign',
+      type: 'Feather',
+      icon: 'dollar-sign', // Cambiado a currency-usd (MCI)
       color: '#EC4899',
       path: '../caja_chica'
     },
     {
       title: 'Gastos Generales',
       sub: 'Resumen total y gastos de administración',
-      icon: 'pie-chart',
+      type: 'material-community', 
+      icon: 'office-building-cog', // Cambiado a office-building-cog (MCI)
       color: '#8B5CF6',
       path: '../gastos_generales'
+    },
+    {
+      title: 'Analisis de Costos',
+      sub: 'Resumen total y gastos de administración',
+      type: 'material-community',
+      icon: 'chart-line', // Cambiado a chart-line (MCI)
+      color: '#4750f6',
+      path: '../resumen_diario'
     }
   ];
 
@@ -50,7 +62,11 @@ export default function GastosHubScreen() {
         {options.map((opt, i) => (
           <TouchableOpacity key={i} style={styles.card} onPress={() => router.push(opt.path as any)}>
             <View style={[styles.iconBox, { backgroundColor: opt.color }]}>
-              <Feather name={opt.icon as any} size={28} color="#FFF" />
+              {opt.type === 'Feather' ? (
+                <Feather name={opt.icon as any} size={28} color="#FFF" />
+              ) : (
+                <MaterialCommunityIcons name={opt.icon as any} size={28} color="#FFF" />
+              )}  
             </View>
             <View style={styles.textBox}>
               <Text style={styles.cardTitle}>{opt.title}</Text>

@@ -2,7 +2,7 @@ export const generarPlantillaNomina = (workers: any[], weekLabel: string) => {
   
   // 1. Lógica matemática
   const calculateFinalSalary = (w: any) => {
-    const dailySalary = w.weekly_salary / 5;
+    const dailySalary = w.weekly_salary / 6;
     const attendanceArray = w.attendance || [true, true, true, true, true];
     const daysPresent = attendanceArray.filter(Boolean).length;
     const extraDeduction = Number(w.extraDeduction || 0);

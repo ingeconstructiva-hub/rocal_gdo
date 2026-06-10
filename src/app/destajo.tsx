@@ -1,6 +1,7 @@
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // <-- 1. IMPORTAMOS MEMORIA
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
+import * as FileSystem from 'expo-file-system/legacy'; // 👈 Importación correcta para evitar error de versión
 import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
@@ -29,7 +30,6 @@ interface WorkerSimple {
 export default function InventarioScreen() {
   const router = useRouter();
   
-  // 2. EXTRAEMOS isOffline
   const { activeProject, isOffline, lastSync } = useProject();
 
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -52,13 +52,11 @@ export default function InventarioScreen() {
   const [isExporting, setIsExporting] = useState(false);
   
   const [refreshing, setRefreshing] = useState(false);
-
-
   const [showSuggestions, setShowSuggestions] = useState(false);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchData(); // Forzamos a que vuelva a descargar todo
+    await fetchData(); 
     setRefreshing(false);
   }, [activeProject, isOffline]);
 
@@ -78,12 +76,11 @@ export default function InventarioScreen() {
       if (activeProject?.id) {
         fetchData();
       }
-    }, [activeProject]) // Se recarga si cambia el internet
+    }, [activeProject]) 
   );
 
   useEffect(() => {
     if (activeProject?.id) {
-      // Le damos 500 milisegundos para que Supabase termine de guardar lo del "Cerebro"
       setTimeout(() => {
         fetchData();
       }, 500); 
@@ -99,7 +96,6 @@ export default function InventarioScreen() {
     const storageKeyWorkers = `@workers_simple_cache_${projectId}`;
 
     if (isOffline) {
-      // 🔴 MODO LECTURA OFFLINE
       try {
         const cachedItems = await AsyncStorage.getItem(storageKeyItems);
         const cachedWorkers = await AsyncStorage.getItem(storageKeyWorkers);
@@ -112,7 +108,6 @@ export default function InventarioScreen() {
         setLoading(false);
       }
     } else {
-      // 🟢 MODO ONLINE NORMAL
       try {
         const { data: invData, error: invError } = await supabase
           .from('inventory')
@@ -256,7 +251,6 @@ export default function InventarioScreen() {
       project_id: projectId 
     };
 
-    // 🔴 SI NO HAY INTERNET: MODO BANDEJA DE SALIDA
     if (isOffline) {
       try {
         const offlineItem = {
@@ -267,15 +261,14 @@ export default function InventarioScreen() {
 
         const itemConUUID = {
         ...itemData,
-        local_uuid: Crypto.randomUUID() // <-- agregar esto
+        local_uuid: Crypto.randomUUID() 
         };
 
         const existing = await AsyncStorage.getItem('@bandeja_salida_inventario');
         const outbox = existing ? JSON.parse(existing) : [];
-        outbox.push(itemConUUID); // <-- usar itemConUUID en lugar de itemData
+        outbox.push(itemConUUID); 
         await AsyncStorage.setItem('@bandeja_salida_inventario', JSON.stringify(outbox));
 
-        // Reflejamos el cambio en pantalla inmediatamente para el usuario
         setItems(prev => [offlineItem as InventoryItem, ...prev]);
         setIsModalVisible(false);
         Alert.alert("Guardado Offline", "El gasto se ha registrado en tu celular y se sincronizará cuando regrese el internet.");
@@ -287,7 +280,6 @@ export default function InventarioScreen() {
       return;
     }
 
-    // 🟢 SI HAY INTERNET: MODO NORMAL
     try {
       if (editingId && !editingId.startsWith('temp_')) {
         const { error } = await supabase.from('inventory').update(itemData).eq('id', editingId);
@@ -311,7 +303,6 @@ export default function InventarioScreen() {
   const ejecutarGeneracionPDF = async () => {
     setIsExporting(true);
     try {
-      // Como no hay fotos complejas en el inventario, no necesitamos pasar isOffline aquí, pero lo mantenemos asíncrono
       const htmlContent = generarPlantillaInventario(filteredItems);
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
       await Sharing.shareAsync(uri, {
@@ -332,19 +323,49 @@ export default function InventarioScreen() {
       Alert.alert("Sin datos", "No hay registros en esta vista para exportar.");
       return;
     }
-    // PDF se genera sin problema offline, no hace falta advertencia de fotos.
     ejecutarGeneracionPDF();
   };
 
+  // 📊 FUNCIÓN PARA EXPORTAR EXCEL (NUEVA)
+  const handleExportarExcel = async () => {
+    if (filteredItems.length === 0) {
+      Alert.alert("Sin datos", "No hay registros en esta vista para exportar.");
+      return;
+    }
+
+    try {
+      const encabezados = ["Semana", "Concepto/Actividad", "Unidad", "Cantidad", "P.U./M.O ($)", "Importe Total ($)", "Encargado/Recibe", "Solicitado por\n"];
+      
+      const filas = filteredItems.map(item => {
+        const conceptoLimpio = item.name.replace(/,/g, ' ');
+        const encargadoLimpio = (item.in_charge || '').replace(/,/g, ' ');
+        const solicitadoLimpio = (item.requested_by || '').replace(/,/g, ' ');
+        const importe = item.quantity * item.unit_price;
+        
+        return `"${item.week_label || 'Sin definir'}","${conceptoLimpio}","${item.unit}",${item.quantity},${item.unit_price},${importe.toFixed(2)},"${encargadoLimpio}","${solicitadoLimpio}"`;
+      }).join("\n");
+
+      const contenidoCSV = "\uFEFF" + encabezados.join(",") + filas;
+      const nombreArchivo = `Destajos_Inventario_${activeProject?.name?.replace(/\s+/g, '_') || 'Obra'}.csv`;
+      
+      const fsModulo = FileSystem as any;
+      const fileUri = `${fsModulo.documentDirectory}${nombreArchivo}`;
+      
+      await fsModulo.writeAsStringAsync(fileUri, contenidoCSV, { encoding: 'utf8' });
+      await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Exportar a Excel' });
+
+    } catch (error: any) {
+      Alert.alert("Error Excel", "No se pudo generar la hoja de cálculo: " + error.message);
+    }
+  };
+
   return (
-    
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Feather name="chevron-left" size={28} color="#FFF" />
           </TouchableOpacity>
-          
           <View style={{ width: 28 }} />
         </View>
         <View style={styles.headerBottomRow}>
@@ -354,7 +375,6 @@ export default function InventarioScreen() {
 
       <View style={styles.body}>
         
-        {/* AVISO OFFLINE OPCIONAL EN LA PANTALLA */}
         {isOffline && (
           <View style={{ backgroundColor: '#FEF3C7', padding: 10, borderRadius: 8, marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
             <Feather name="wifi-off" size={16} color="#D97706" style={{ marginRight: 8 }} />
@@ -402,6 +422,7 @@ export default function InventarioScreen() {
               <Feather name="plus" size={14} color="#FFF" />
               <Text style={styles.addButtonText} adjustsFontSizeToFit numberOfLines={1}>Concepto</Text>
             </TouchableOpacity>
+            
             <TouchableOpacity style={[styles.addButton, styles.pdfButton]} onPress={handleExportPDF} disabled={isExporting}>
               {isExporting ? (
                 <ActivityIndicator size="small" color="#FFF" />
@@ -412,6 +433,12 @@ export default function InventarioScreen() {
                 </>
               )}
             </TouchableOpacity>
+
+            {/* 📊 NUEVO BOTÓN EXCEL (VERDE) */}
+            <TouchableOpacity style={[styles.addButton, styles.excelButton]} onPress={handleExportarExcel}>
+              <Feather name="grid" size={14} color="#FFF" />
+              <Text style={styles.addButtonText} adjustsFontSizeToFit numberOfLines={1}>Excel</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -419,7 +446,7 @@ export default function InventarioScreen() {
             <RefreshControl 
               refreshing={refreshing} 
               onRefresh={onRefresh} 
-              colors={['#2563EB']} // Ruedita color azul
+              colors={['#2563EB']} 
               tintColor="#2563EB"
             />}>
           {loading ? (
@@ -574,7 +601,7 @@ export default function InventarioScreen() {
                   />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.modalLabel}>Precio Unitario $</Text>
+                  <Text style={styles.modalLabel}>P.U / Mano de Obra $</Text>
                   <TextInput 
                     style={styles.modalInput} 
                     placeholder="Ej. 250" 
@@ -676,6 +703,7 @@ const styles = StyleSheet.create({
   addButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#059669', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10 },
   addButtonText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', marginLeft: 6 },
   pdfButton: { backgroundColor: '#DC2626' },
+  excelButton: { backgroundColor: '#10B981' }, // 📊 Estilo para el botón de Excel
 
   weekBlock: { marginBottom: 25 },
   weekHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#E0E7FF', padding: 10, borderTopLeftRadius: 10, borderTopRightRadius: 10, borderBottomWidth: 2, borderBottomColor: '#4F46E5' },
