@@ -29,9 +29,10 @@ export default function DashboardScreen() {
   const [notifications, setNotifications] = useState<any[]>([]);
   
   const [userProfile, setUserProfile] = useState({
-    name: "Cargando usuario...",
-    role: "Residente de Obra"
-  });
+  name: "Cargando usuario...",
+  role: "residente", // Este es el rol de BD: 'admin', 'residente', 'oficina'
+  displayRole: "Residente de Obra" // Este es para UI
+});
 
   const [isInviteModalVisible, setIsInviteModalVisible] = useState(false);
   const [isGeneratingCode, setIsGeneratingCode] = useState(false);
@@ -56,7 +57,33 @@ export default function DashboardScreen() {
       default: return { icon: "book-open", color: "#2563EB", bg: "#E0F2FE" }; 
     }
   };
+const canAccessGastosGenerales = () => {
+  return userProfile.role === 'admin' || userProfile.role === 'oficina';
+};
 
+const canAccessGastos = () => {
+  return userProfile.role === 'admin' || userProfile.role === 'residente' || userProfile.role === 'oficina';
+};
+
+const canInviteUsers = () => {
+  return userProfile.role === 'admin' || userProfile.role === 'residente';
+};
+
+const getAccessibleModules = () => {
+  const allModules = [
+    { name: "Bitácora", icon: "book-open", route: "/bitacora" }, 
+    { name: "Asistencia", icon: "users", route: "/lista" },
+    { name: "Gastos", icon: "dollar-sign", route: "/gastos" },
+    { name: "Documentación", icon: "layers", route: "/planos" }, 
+  ];
+  
+  // Filtrar según el rol
+  if (userProfile.role === 'admin') return allModules; // Admin ve todo
+  if (userProfile.role === 'residente') return allModules; // Residente ve todo
+  if (userProfile.role === 'oficina') return allModules.filter(m => m.route !== '/lista' && m.route !== '/bitacora'); // Oficina solo ve Gastos y Documentos
+  
+  return allModules;
+};
   useFocusEffect(
     useCallback(() => {
       async function loadData() {
@@ -90,15 +117,24 @@ export default function DashboardScreen() {
           if (projectData) setProject(projectData);
 
           // 2. CARGAMOS EL PERFIL
-          let newProfile = { name: "Ingeniero", role: "Residente de Obra" };
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user) {
-            const { data: profile } = await supabase.from('profiles').select('full_name, role').eq('id', session.user.id).single();
-            if (profile) {
-              newProfile = { name: profile.full_name, role: profile.role === 'admin' ? 'Administrador' : 'Ingeniero de Obra' };
-              setUserProfile(newProfile);
-            }
-          }
+          // 2. CARGAMOS EL PERFIL
+let newProfile = { name: "Ingeniero", role: "residente", displayRole: "Residente de Obra" };
+const { data: { session } } = await supabase.auth.getSession();
+if (session?.user) {
+  const { data: profile } = await supabase.from('profiles').select('full_name, role').eq('id', session.user.id).single();
+  if (profile) {
+    let displayRole = "Residente de Obra";
+    if (profile.role === 'admin') displayRole = "Administrador";
+    else if (profile.role === 'oficina') displayRole = "Personal de Oficina";
+    
+    newProfile = { 
+      name: profile.full_name, 
+      role: profile.role,
+      displayRole: displayRole
+    };
+    setUserProfile(newProfile);
+  }
+}
 
           // 3. CARGAMOS NOTIFICACIONES
           const limit = 4; 
@@ -184,12 +220,7 @@ export default function DashboardScreen() {
     } catch (error: any) {}
   };
 
-  const modules = [
-    { name: "Bitácora", icon: "book-open", route: "/bitacora" }, 
-    { name: "Asistencia", icon: "users", route: "/lista" },
-    { name: "Gastos", icon: "dollar-sign", route: "/gastos" },
-    { name: "Documentación", icon: "layers", route: "/planos" }, 
-  ];
+const modules = getAccessibleModules();
 
   return (
     <View style={{ flex: 1 }}>
@@ -208,7 +239,7 @@ export default function DashboardScreen() {
             <Text style={styles.date}>{today}</Text>
           </View>
           <Text style={styles.userName}>{userProfile.name}</Text>
-          <Text style={styles.role}>{userProfile.role}</Text>
+          <Text style={styles.role}>{userProfile.displayRole}</Text>
           
           <View style={styles.projectCard}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -234,7 +265,17 @@ export default function DashboardScreen() {
                 )}
 
               </View>
-              <TouchableOpacity onPress={handleOpenInviteModal} style={[styles.inviteButton, isOffline && { opacity: 0.5 }]}>
+              <TouchableOpacity 
+  onPress={() => {
+    if (!canInviteUsers()) {
+      Alert.alert("Sin permiso", "Solo administradores y residentes pueden invitar usuarios.");
+      return;
+    }
+    handleOpenInviteModal();
+  }} 
+  disabled={!canInviteUsers() || isOffline}
+  style={[styles.inviteButton, (!canInviteUsers() || isOffline) && { opacity: 0.5 }]}
+>
                 <Feather name="user-plus" size={16} color="#2563EB" />
                 <Text style={styles.inviteButtonText}>Invitar</Text>
               </TouchableOpacity>

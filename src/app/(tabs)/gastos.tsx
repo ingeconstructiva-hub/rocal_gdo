@@ -34,11 +34,19 @@ export default function GastosHubScreen() {
       path: '../gastos_generales'
     },
     {
+      title: 'Gastos de Maquinaria',
+      sub: 'Costos horarios, operación y mantenimiento',
+      type: 'material-community',
+      icon: 'tractor', // Cambiado a tractor (MCI)
+      color: '#4750f6',
+      path: '../gastos_maquinaria'
+    },
+    {
       title: 'Analisis de Costos',
       sub: 'Resumen total y gastos de administración',
       type: 'material-community',
       icon: 'chart-line', // Cambiado a chart-line (MCI)
-      color: '#4750f6',
+      color: '#1823f8',
       path: '../resumen_diario'
     }
   ];
