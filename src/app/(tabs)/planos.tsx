@@ -8,11 +8,13 @@ import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Linking, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useProject } from '../../context/ProjectContext';
+import { useUser } from '../../context/UserContext'; // 🧠 Importamos el motor de roles
 import { supabase } from '../../lib/supabase';
 
 export default function DocumentosScreen() {
   const router = useRouter();
   const { activeProject, isOffline, lastSync } = useProject();
+  const { profile } = useUser(); // 🧠 Extraemos el perfil activo
   
   const [scannedImages, setScannedImages] = useState<string[]>([]);
   const [docTitle, setDocTitle] = useState('');
@@ -22,6 +24,9 @@ export default function DocumentosScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const categories = ['Plano', 'Permiso', 'Factura', 'Contrato', 'Otro'];
+
+  // 🔒 Validador de permisos: Solo el admin puede borrar documentos
+  const isAdmin = profile?.role === 'admin';
 
   useFocusEffect(
     useCallback(() => {
@@ -51,7 +56,6 @@ export default function DocumentosScreen() {
 
     const storageKeyDocs = `@planos_cache_${projectId}`;
 
-    // --- 🛡️ SISTEMA ANTI-FANTASMAS: Leer siempre documentos pendientes locales ---
     let uiPending: any[] = [];
     try {
       const pendingData = await AsyncStorage.getItem('@bandeja_salida_planos');
@@ -62,8 +66,8 @@ export default function DocumentosScreen() {
           id: `temp_doc_${Date.now()}_${index}`,
           title: d.title,
           category: d.category,
-          file_url: d.local_file_uri, // Usamos la ruta local temporalmente
-          is_pending: true // Bandera visual opcional
+          file_url: d.local_file_uri,
+          is_pending: true 
         }));
       }
     } catch (e) { console.log("Error leyendo planos pendientes:", e); }
@@ -137,7 +141,6 @@ export default function DocumentosScreen() {
 
     setIsUploading(true);
     try {
-      // 1. GENERAR EL HTML DE IMÁGENES COMPARTIDO
       let htmlImages = '';
       for (const imgUri of scannedImages) {
         const base64Img = await FileSystem.readAsStringAsync(imgUri, { encoding: 'base64' });
@@ -160,19 +163,17 @@ export default function DocumentosScreen() {
 
       const { uri: tempPdfUri } = await Print.printToFileAsync({ html: htmlContent });
 
-      // 🔴 MODO OFFLINE: GUARDADO LOCAL EN DISCO DURO
       if (isOffline) {
         const permanentFileName = `offline_doc_${Date.now()}.pdf`;
         const permanentPdfUri = FileSystem.documentDirectory + permanentFileName;
         
-        // Movemos el archivo temporal a una carpeta permanente en el celular
         await FileSystem.moveAsync({ from: tempPdfUri, to: permanentPdfUri });
 
         const localDocData = {
           title: docTitle.trim(),
           category: docCategory,
           version: 'v1.0',
-          local_file_uri: permanentPdfUri, // Guardamos la ruta del archivo en el cel
+          local_file_uri: permanentPdfUri,
           project_id: projectId
         };
 
@@ -181,7 +182,7 @@ export default function DocumentosScreen() {
         outbox.push(localDocData);
         await AsyncStorage.setItem('@bandeja_salida_planos', JSON.stringify(outbox));
 
-        Alert.alert("Guardado Offline", "El documento PDF se generó y guardó en tu celular. Se subirá automáticamente al recuperar internet.");
+        Alert.alert("Guardado Offline", "El documento PDF se guardó localmente. Se subirá automáticamente al recuperar internet.");
         setScannedImages([]);
         setDocTitle('');
         setDocCategory('Plano');
@@ -190,7 +191,6 @@ export default function DocumentosScreen() {
         return;
       }
 
-      // 🟢 MODO ONLINE NORMAL
       const base64Pdf = await FileSystem.readAsStringAsync(tempPdfUri, { encoding: 'base64' });
       const arrayBuffer = decode(base64Pdf);
       const fileName = `doc_${Date.now()}.pdf`; 
@@ -225,7 +225,6 @@ export default function DocumentosScreen() {
   const handleViewDocument = async (url: string) => {
     if (!url) return;
     try {
-      // Si es un archivo local (offline), lo abrimos directo, si es HTTP abrimos el link
       await Linking.openURL(url);
     } catch (error) {
       Alert.alert("Error", "No se pudo abrir el documento.");
@@ -395,9 +394,13 @@ export default function DocumentosScreen() {
                   <TouchableOpacity style={styles.iconButton} onPress={() => handleViewDocument(doc.file_url)}>
                     <Feather name="file-text" size={20} color="#2563EB" />
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.iconButton, { marginLeft: 10 }]} onPress={() => handleDeleteDocument(doc.id, doc.file_url)}>
-                    <Feather name="trash-2" size={20} color="#DC2626" />
-                  </TouchableOpacity>
+
+                  {/* 🔒 El botón de borrar solo es visible si es Administrador */}
+                  {isAdmin && (
+                    <TouchableOpacity style={[styles.iconButton, { marginLeft: 10 }]} onPress={() => handleDeleteDocument(doc.id, doc.file_url)}>
+                      <Feather name="trash-2" size={20} color="#DC2626" />
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             ))

@@ -1,13 +1,14 @@
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
-import * as FileSystem from 'expo-file-system/legacy'; // 👈 Importación correcta para evitar error de versión
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useProject } from '../context/ProjectContext';
+import { useUser } from '../context/UserContext'; // 🧠 Importamos el motor de roles
 import { supabase } from '../lib/supabase';
 import { generarPlantillaInventario } from './utils/pdfInventario';
 
@@ -31,6 +32,10 @@ export default function InventarioScreen() {
   const router = useRouter();
   
   const { activeProject, isOffline, lastSync } = useProject();
+  const { profile } = useUser(); // 🧠 Extraemos el perfil
+
+  // 🔒 Validador de permisos
+  const isFinancialRole = profile?.role === 'admin' || profile?.role === 'oficina';
 
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [workers, setWorkers] = useState<WorkerSimple[]>([]);
@@ -326,7 +331,6 @@ export default function InventarioScreen() {
     ejecutarGeneracionPDF();
   };
 
-  // 📊 FUNCIÓN PARA EXPORTAR EXCEL (NUEVA)
   const handleExportarExcel = async () => {
     if (filteredItems.length === 0) {
       Alert.alert("Sin datos", "No hay registros en esta vista para exportar.");
@@ -418,27 +422,32 @@ export default function InventarioScreen() {
             {searchQuery ? 'Resultados de Búsqueda' : 'Reporte Histórico'}
           </Text>
           <View style={styles.actionsRow}>
+            {/* 🟢 Agregar Concepto: Visible para Todos */}
             <TouchableOpacity style={[styles.addButton, isOffline && {backgroundColor: '#D97706'}]} onPress={openAddModal}>
               <Feather name="plus" size={14} color="#FFF" />
               <Text style={styles.addButtonText} adjustsFontSizeToFit numberOfLines={1}>Concepto</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity style={[styles.addButton, styles.pdfButton]} onPress={handleExportPDF} disabled={isExporting}>
-              {isExporting ? (
-                <ActivityIndicator size="small" color="#FFF" />
-              ) : (
-                <>
-                  <Feather name="file-text" size={14} color="#FFF" />
-                  <Text style={styles.addButtonText} adjustsFontSizeToFit numberOfLines={1}>PDF</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {/* 🔒 Exportar PDF y Excel: Solo visibles para roles financieros */}
+            {isFinancialRole && (
+              <>
+                <TouchableOpacity style={[styles.addButton, styles.pdfButton]} onPress={handleExportPDF} disabled={isExporting}>
+                  {isExporting ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <>
+                      <Feather name="file-text" size={14} color="#FFF" />
+                      <Text style={styles.addButtonText} adjustsFontSizeToFit numberOfLines={1}>PDF</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
 
-            {/* 📊 NUEVO BOTÓN EXCEL (VERDE) */}
-            <TouchableOpacity style={[styles.addButton, styles.excelButton]} onPress={handleExportarExcel}>
-              <Feather name="grid" size={14} color="#FFF" />
-              <Text style={styles.addButtonText} adjustsFontSizeToFit numberOfLines={1}>Excel</Text>
-            </TouchableOpacity>
+                <TouchableOpacity style={[styles.addButton, styles.excelButton]} onPress={handleExportarExcel}>
+                  <Feather name="grid" size={14} color="#FFF" />
+                  <Text style={styles.addButtonText} adjustsFontSizeToFit numberOfLines={1}>Excel</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
 
@@ -493,12 +502,17 @@ export default function InventarioScreen() {
                           ) : null}
 
                           <View style={styles.actionButtons}>
+                            {/* 🟢 Botón Editar: Visible para Todos */}
                             <TouchableOpacity onPress={() => openEditModal(item)} style={[styles.editIcon, isOffline && {opacity: 0.5}]}>
                               <Feather name="edit-2" size={10} color="#2563EB" />
                             </TouchableOpacity>
-                            <TouchableOpacity onPress={() => confirmDelete(item.id, item.name)} style={[styles.deleteIcon, isOffline && {opacity: 0.5}]}>
-                              <Feather name="trash-2" size={10} color="#DC2626" />
-                            </TouchableOpacity>
+                            
+                            {/* 🔒 Botón Eliminar: Solo para Roles Financieros */}
+                            {isFinancialRole && (
+                              <TouchableOpacity onPress={() => confirmDelete(item.id, item.name)} style={[styles.deleteIcon, isOffline && {opacity: 0.5}]}>
+                                <Feather name="trash-2" size={10} color="#DC2626" />
+                              </TouchableOpacity>
+                            )}
                           </View>
                         </View>
 
@@ -703,7 +717,7 @@ const styles = StyleSheet.create({
   addButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#059669', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10 },
   addButtonText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', marginLeft: 6 },
   pdfButton: { backgroundColor: '#DC2626' },
-  excelButton: { backgroundColor: '#10B981' }, // 📊 Estilo para el botón de Excel
+  excelButton: { backgroundColor: '#10B981' },
 
   weekBlock: { marginBottom: 25 },
   weekHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#E0E7FF', padding: 10, borderTopLeftRadius: 10, borderTopRightRadius: 10, borderBottomWidth: 2, borderBottomColor: '#4F46E5' },

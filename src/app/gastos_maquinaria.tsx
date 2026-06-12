@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { useProject } from '../context/ProjectContext';
+import { useUser } from '../context/UserContext'; // 🧠 Importamos el motor de roles
 import { supabase } from '../lib/supabase';
 
 interface GastoMaquinaria {
@@ -29,7 +30,11 @@ interface GastoMaquinaria {
 export default function GastosMaquinariaScreen() {
   const router = useRouter();
   const { activeProject, isOffline } = useProject();
+  const { profile } = useUser(); // 🧠 Extraemos el rol
   
+  // 🔒 Validador de permisos
+  const isAdminOrOficina = profile?.role === 'admin' || profile?.role === 'oficina';
+
   const [gastos, setGastos] = useState<GastoMaquinaria[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -345,20 +350,23 @@ export default function GastosMaquinariaScreen() {
           </View>
         </View>
 
-        <View style={styles.exportContainer}>
-          <TouchableOpacity style={[styles.bigExportBtn, { backgroundColor: '#DC2626' }]} onPress={handleExportarPDF} disabled={isExportingPDF}>
-            {isExportingPDF ? <ActivityIndicator color="#FFF" /> : (
-              <>
-                <Feather name="file-text" size={20} color="#FFF" />
-                <Text style={styles.bigExportText}>Generar PDF</Text>
-              </>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.bigExportBtn, { backgroundColor: '#10B981' }]} onPress={handleExportarExcel}>
-            <Feather name="grid" size={20} color="#FFF" />
-            <Text style={styles.bigExportText}>Generar Excel</Text>
-          </TouchableOpacity>
-        </View>
+        {/* 🔒 Los botones de exportar solo los ve Admin u Oficina */}
+        {isAdminOrOficina && (
+          <View style={styles.exportContainer}>
+            <TouchableOpacity style={[styles.bigExportBtn, { backgroundColor: '#DC2626' }]} onPress={handleExportarPDF} disabled={isExportingPDF}>
+              {isExportingPDF ? <ActivityIndicator color="#FFF" /> : (
+                <>
+                  <Feather name="file-text" size={20} color="#FFF" />
+                  <Text style={styles.bigExportText}>Generar PDF</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.bigExportBtn, { backgroundColor: '#10B981' }]} onPress={handleExportarExcel}>
+              <Feather name="grid" size={20} color="#FFF" />
+              <Text style={styles.bigExportText}>Generar Excel</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Historial de Movimientos</Text>
@@ -401,9 +409,12 @@ export default function GastosMaquinariaScreen() {
                   <Text style={[styles.gastoMonto, {color: '#64748B', fontSize: 14}]}>Bitácora</Text>
                 )}
                 
-                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleEliminarGasto(g.id, g.equipo)}>
-                  <Feather name="trash-2" size={16} color="#FCA5A5" />
-                </TouchableOpacity>
+                {/* 🔒 El botón de borrar solo lo ven Admin u Oficina */}
+                {isAdminOrOficina && (
+                  <TouchableOpacity style={styles.deleteBtn} onPress={() => handleEliminarGasto(g.id, g.equipo)}>
+                    <Feather name="trash-2" size={16} color="#FCA5A5" />
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           ))
@@ -414,19 +425,16 @@ export default function GastosMaquinariaScreen() {
         <Feather name="plus" size={30} color="#FFF" />
       </TouchableOpacity>
 
-      {/* 📝 NUEVO DISEÑO: MODAL CON SCROLL INTERNO Y BOTONES FIJOS (Sticky Footer) */}
       <Modal visible={isModalVisible} animationType="slide" transparent={true} onRequestClose={() => { setIsModalVisible(false); limpiarFormulario(); }}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
           
           <Pressable style={{ flex: 1 }} onPress={() => { setIsModalVisible(false); limpiarFormulario(); }} />
           
           <View style={styles.modalWrapper}>
-            {/* Cabecera Fija */}
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Calculadora de Maquinaria</Text>
             </View>
 
-            {/* Contenido Deslizable */}
             <ScrollView style={styles.modalScrollInside} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               
               <Text style={[styles.modalLabel, {marginTop: 0}]}>Trato / Modalidad</Text>
@@ -475,8 +483,6 @@ export default function GastosMaquinariaScreen() {
 
                 {(modalidad === 'hora' || modalidad === 'bitacora' || modalidad === 'dia' || modalidad === 'semana' || modalidad === 'mes') && (
                   <>
-                    
-                    
                     <View style={styles.rowGrid}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.modalLabel}>Inicio (Opc.)</Text>
@@ -521,7 +527,6 @@ export default function GastosMaquinariaScreen() {
 
             </ScrollView>
 
-            {/* 🛠️ Pie Fijo (Sticky Footer) */}
             <View style={styles.modalFooter}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => { setIsModalVisible(false); limpiarFormulario(); }}>
                 <Text style={styles.cancelBtnText}>Cancelar</Text>
@@ -583,7 +588,6 @@ const styles = StyleSheet.create({
   
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   
-  // 🛠️ NUEVO DISEÑO DEL MODAL
   modalWrapper: { backgroundColor: '#FFF', borderTopLeftRadius: 25, borderTopRightRadius: 25, width: '100%', maxWidth: 600, alignSelf: 'center', maxHeight: '85%' },
   modalHeader: { padding: 20, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', alignItems: 'center' },
   modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#0F172A' },

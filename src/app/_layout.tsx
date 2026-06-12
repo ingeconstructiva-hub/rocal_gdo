@@ -1,6 +1,7 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ProjectProvider } from '../context/ProjectContext';
+import { UserProvider } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
 
 export default function RootLayout() {
@@ -39,12 +40,14 @@ export default function RootLayout() {
   if (!isInitialized) return null;
 
   return (
-    <ProjectProvider> 
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="login" />
-        <Stack.Screen name="proyectos" />
-        <Stack.Screen name="(tabs)" /> 
-      </Stack>
-    </ProjectProvider>
+    <UserProvider> {/* 👈 El Contexto de Usuario envuelve todo */}
+      <ProjectProvider> 
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="login" />
+          <Stack.Screen name="proyectos" />
+          <Stack.Screen name="(tabs)" /> 
+        </Stack>
+      </ProjectProvider>
+    </UserProvider>
   );
 }

@@ -7,29 +7,23 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useProject } from '../context/ProjectContext';
+import { useUser } from '../context/UserContext'; // 🧠 Importamos el motor de roles
 import { supabase } from '../lib/supabase';
 
 export default function ProyectosScreen() {
   const router = useRouter();
-  
   const { setActiveProject, isOffline } = useProject(); 
+  const { profile, isLoadingUser } = useUser(); // 🧠 Extraemos el perfil
 
   const [proyectos, setProyectos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
-
-  const [userProfile, setUserProfile] = useState({
-    name: "Cargando...",
-    role: "Residente de Obra"
-  });
 
   // ESTADOS PARA CREAR OBRA
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectLocation, setNewProjectLocation] = useState('');
-  
-  // NUEVOS ESTADOS AÑADIDOS
   const [clientName, setClientName] = useState('');
   const [contractNumber, setContractNumber] = useState('');
 
@@ -51,39 +45,8 @@ export default function ProyectosScreen() {
   const [permission, requestPermission] = useCameraPermissions();
 
   useEffect(() => {
-    cargarPerfil();
     cargarProyectos();
   }, [isOffline]);
-
-  const cargarPerfil = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        if (isOffline) {
-          const cachedProfile = await AsyncStorage.getItem(`@perfil_cache_${session.user.id}`);
-          if (cachedProfile) {
-            setUserProfile(JSON.parse(cachedProfile));
-          } else {
-            setUserProfile({ name: "Modo Offline", role: "Ingeniero" });
-          }
-        } else {
-          const { data: profile } = await supabase.from('profiles').select('full_name, role').eq('id', session.user.id).single();
-          if (profile) {
-            const profileData = {
-              name: profile.full_name,
-              role: profile.role === 'admin' ? 'Administrador' : 'Ingeniero de Obra'
-            };
-            setUserProfile(profileData);
-            await AsyncStorage.setItem(`@perfil_cache_${session.user.id}`, JSON.stringify(profileData));
-          }
-        }
-      }
-    } catch (error: any) {
-      if (error.message !== 'Network request failed' && error.message !== 'Failed to fetch') {
-        console.error("Error loading profile:", error.message);
-      }
-    }
-  };
 
   const cargarProyectos = async () => {
     try {
@@ -173,22 +136,6 @@ export default function ProyectosScreen() {
     }
   };
 
-  const onChangeDate = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false); 
-    if (selectedDate) {
-      setStartDate(selectedDate);
-      setDateSelected(true); 
-    }
-  };
-
-  const onChangeEndDate = (event: any, selectedDate?: Date) => {
-    setShowEndDatePicker(false); 
-    if (selectedDate) {
-      setEndDate(selectedDate);
-      setEndDateSelected(true); 
-    }
-  };
-
   const handleCrearObra = async () => {
     if (isOffline) {
       Alert.alert("Modo Offline", "Necesitas conexión a internet para crear un proyecto nuevo.");
@@ -222,6 +169,7 @@ export default function ProyectosScreen() {
 
       if (projectError) throw projectError;
 
+      // Al creador le asignamos rol de Administrador automáticamente en esa obra
       const { error: assignmentError } = await supabase
         .from('user_projects')
         .insert([{ user_id: userId, project_id: newProject.id, role: 'Administrador' }]);
@@ -275,12 +223,17 @@ export default function ProyectosScreen() {
         return;
       }
 
+      // 🧠 Asignación de rol por defecto al unirse (Será el de su Perfil de Supabase)
+      let roleToAssign = 'Residente de Obra';
+      if (profile?.role === 'oficina') roleToAssign = 'Personal de Oficina';
+      else if (profile?.role === 'admin') roleToAssign = 'Administrador';
+
       const { error: joinErr } = await supabase
         .from('user_projects')
         .insert([{
           user_id: userId,
           project_id: proj.id,
-          role: 'Ingeniero de Obra' 
+          role: roleToAssign 
         }]);
 
       if (joinErr) {
@@ -315,6 +268,15 @@ export default function ProyectosScreen() {
     setIsScanning(true);
   };
 
+  if (isLoadingUser) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#2563EB" />
+        <Text style={{ marginTop: 10, color: '#6B7280' }}>Cargando perfil...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -323,7 +285,8 @@ export default function ProyectosScreen() {
         <View style={styles.headerBottomRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>Mis Obras</Text>
-            <Text style={styles.headerSmall}>{userProfile.name.split(' ')[0]}</Text>
+            {/* Pintamos el nombre real directo del contexto global */}
+            <Text style={styles.headerSmall}>{profile?.name || 'Cargando...'}</Text>
           </View>
           <TouchableOpacity onPress={cerrarSesion} style={styles.logoutBtn}>
             <Feather name="log-out" size={20} color="#FFF" />
@@ -338,7 +301,11 @@ export default function ProyectosScreen() {
           <View style={styles.emptyContainer}>
             <Feather name="folder-minus" size={48} color="#9CA3AF" />
             <Text style={styles.emptyText}>No tienes obras asignadas aún.</Text>
-            <Text style={styles.emptySubText}>Crea una obra nueva o únete a una existente.</Text>
+            <Text style={styles.emptySubText}>
+              {profile?.role === 'admin' 
+                ? 'Toca el botón "+" para crear tu primera obra.' 
+                : 'Pídele al administrador el código QR para unirte a una obra.'}
+            </Text>
           </View>
         ) : (
           proyectos.map((proyecto) => (
@@ -365,21 +332,24 @@ export default function ProyectosScreen() {
         )}
       </ScrollView>
 
-      {/* BOTONES FLOTANTES - SE PONEN GRISES SI NO HAY INTERNET */}
+      {/* BOTONES FLOTANTES - BLINDADOS POR ROLES */}
       <View style={styles.fabContainer}>
         <TouchableOpacity 
-          style={[styles.fab, { backgroundColor: isOffline ? '#9CA3AF' : '#059669', marginBottom: 15 }]} 
+          style={[styles.fab, { backgroundColor: isOffline ? '#9CA3AF' : '#059669', marginBottom: profile?.role === 'admin' ? 15 : 0 }]} 
           onPress={() => isOffline ? Alert.alert("Modo Offline", "Conéctate a internet para unirte a una obra.") : setIsJoinModalVisible(true)}
         >
           <Feather name="camera" size={24} color="#FFF" />
         </TouchableOpacity>
         
-        <TouchableOpacity 
-          style={[styles.fab, { backgroundColor: isOffline ? '#9CA3AF' : '#2563EB' }]} 
-          onPress={() => isOffline ? Alert.alert("Modo Offline", "Conéctate a internet para crear obras.") : setIsModalVisible(true)}
-        >
-          <Feather name="plus" size={28} color="#FFF" />
-        </TouchableOpacity>
+        {/* 🔒 Este botón solo lo verá el Administrador */}
+        {profile?.role === 'admin' && (
+          <TouchableOpacity 
+            style={[styles.fab, { backgroundColor: isOffline ? '#9CA3AF' : '#2563EB' }]} 
+            onPress={() => isOffline ? Alert.alert("Modo Offline", "Conéctate a internet para crear obras.") : setIsModalVisible(true)}
+          >
+            <Feather name="plus" size={28} color="#FFF" />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* MODAL 1: CREAR OBRA */}
@@ -430,7 +400,7 @@ export default function ProyectosScreen() {
               </TouchableOpacity>
 
               {showDatePicker && (
-                <DateTimePicker value={startDate} mode="date" display="default" onChange={onChangeDate} />
+                <DateTimePicker value={startDate} mode="date" display="default" onChange={(e, d) => { setShowDatePicker(false); if(d){ setStartDate(d); setDateSelected(true); } }} />
               )}
 
               <Text style={styles.modalLabel}>Fecha de Entrega (Opcional)</Text>
@@ -445,7 +415,7 @@ export default function ProyectosScreen() {
               </TouchableOpacity>
 
               {showEndDatePicker && (
-                <DateTimePicker value={endDate} mode="date" display="default" onChange={onChangeEndDate} />
+                <DateTimePicker value={endDate} mode="date" display="default" onChange={(e, d) => { setShowEndDatePicker(false); if(d){ setEndDate(d); setEndDateSelected(true); } }} />
               )}
 
               <TouchableOpacity style={styles.modalButton} onPress={handleCrearObra} disabled={isSaving}>
@@ -530,16 +500,15 @@ const styles = StyleSheet.create({
   header: { backgroundColor: '#2563EB', paddingTop: 60, paddingBottom: 25, paddingHorizontal: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
   headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 },
   backButton: { padding: 4, marginLeft: -4 },
-  headerSubtitle: { color: 'rgba(255, 255, 255, 0.8)', fontSize: 13, fontWeight: '700', letterSpacing: 1 },
   headerBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerTitle: { color: '#FFF', fontSize: 26, fontWeight: 'bold' },
   headerSmall: { color: 'rgba(255,255,255,0.9)', fontSize: 14, marginTop: 4 },
   logoutBtn: { padding: 10, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12 },
   
   body: { padding: 20, paddingBottom: 150 },
-  emptyContainer: { alignItems: 'center', marginTop: 60 },
-  emptyText: { color: '#6B7280', fontSize: 18, fontWeight: 'bold', marginTop: 15 },
-  emptySubText: { color: '#9CA3AF', fontSize: 14, marginTop: 5, textAlign: 'center' },
+  emptyContainer: { alignItems: 'center', marginTop: 60, paddingHorizontal: 20 },
+  emptyText: { color: '#6B7280', fontSize: 18, fontWeight: 'bold', marginTop: 15, textAlign: 'center' },
+  emptySubText: { color: '#9CA3AF', fontSize: 14, marginTop: 8, textAlign: 'center', lineHeight: 20 },
   
   projectCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 20, marginBottom: 15, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8 },
   projectHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },

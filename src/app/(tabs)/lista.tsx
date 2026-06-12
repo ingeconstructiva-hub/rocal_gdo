@@ -7,6 +7,7 @@ import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useProject } from '../../context/ProjectContext';
+import { useUser } from '../../context/UserContext'; // 🧠 Importamos el motor de roles
 import { supabase } from '../../lib/supabase';
 import { generarPlantillaNomina } from '../utils/pdfNomina';
 
@@ -26,6 +27,10 @@ const DAYS = ['L', 'M', 'M', 'J', 'V', 'S'];
 export default function ListaScreen() {
   const router = useRouter();
   const { activeProject, isOffline } = useProject();
+  const { profile } = useUser(); // 🧠 Extraemos el perfil
+
+  // 🔒 Validadores de Permisos
+  const isFinancialRole = profile?.role === 'admin' || profile?.role === 'oficina';
 
   const [workers, setWorkers] = useState<WorkerState[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,14 +52,12 @@ export default function ListaScreen() {
   const [tempDiscount, setTempDiscount] = useState('0');
   const [tempReason, setTempReason] = useState('');
 
-  // Carga inicial
   useEffect(() => {
     if (activeProject?.id) {
       fetchWorkers();
     }
   }, [activeProject]);
 
-  // Autoguardado silencioso automatizado
   useEffect(() => {
     if (loading || workers.length === 0) return;
     
@@ -144,21 +147,18 @@ export default function ListaScreen() {
     }
   };
 
-  // Abrir modal de Horas Extra
   const openExtrasModal = (worker: WorkerState) => {
     setSelectedWorkerId(worker.id);
     setTempExtras(worker.extraHours);
     setIsExtrasModalOpen(true);
   };
 
-  // Guardar Horas Extra en el estado
   const saveExtrasChanges = () => {
     setWorkers(prev => prev.map(w => w.id === selectedWorkerId ? { ...w, extraHours: tempExtras || '0' } : w));
     setIsExtrasModalOpen(false);
     setSelectedWorkerId(null);
   };
 
-  // Abrir modal unificado de Descuento + Motivo
   const openDiscountModal = (worker: WorkerState) => {
     setSelectedWorkerId(worker.id);
     setTempDiscount(worker.discount);
@@ -166,7 +166,6 @@ export default function ListaScreen() {
     setIsDiscountModalOpen(true);
   };
 
-  // Guardar Descuento + Motivo en conjunto
   const saveDiscountChanges = () => {
     setWorkers(prev => prev.map(w => w.id === selectedWorkerId ? { ...w, discount: tempDiscount || '0', reason: tempReason } : w));
     setIsDiscountModalOpen(false);
@@ -224,37 +223,30 @@ export default function ListaScreen() {
     } catch (error: any) { Alert.alert("Error PDF", error.message); }
   };
 
- const handleExportarExcel = async () => {
+  const handleExportarExcel = async () => {
     if (workers.length === 0) { 
       Alert.alert("Sin datos", "No hay trabajadores en la lista."); 
       return; 
     }
     try {
-      // 📊 Encabezados limpios para formato CSV (compatible con Excel)
       const encabezados = ["Trabajador", "Puesto", "Sueldo Base Semanal ($)", "Dias Asistidos", "Horas Extra (Hrs)", "Descuento Aplicado ($)", "Motivo/Nota", "Total a Pagar ($)\n"];
       
       const filas = workers.map(w => {
         const asistencias = w.attendance.filter(Boolean).length;
         const total = calculateFinalTotal(w);
-        // Quitamos las comas de las notas para evitar que se rompan las columnas en Excel
         const notaLimpia = w.reason ? w.reason.replace(/,/g, ' ') : ''; 
         
         return `"${w.name}","${w.role}",${w.weekly_salary},${asistencias},${w.extraHours},${w.discount},"${notaLimpia}",${total.toFixed(2)}`;
       }).join("\n");
 
-      // El caracter \uFEFF obliga a Excel a reconocer los acentos correctamente (UTF-8 BOM)
       const contenidoCSV = "\uFEFF" + encabezados.join(",") + filas;
       const nombreArchivo = `Raya_${activeProject?.name?.replace(/\s+/g, '_') || 'Obra'}.csv`;
       
-      // 🛠️ Casteo directo de TypeScript en la asignación para burlar el error de compilación
       const fsModulo = FileSystem as any;
       const fileUri = `${fsModulo.documentDirectory}${nombreArchivo}`;
       
       await fsModulo.writeAsStringAsync(fileUri, contenidoCSV, { encoding: 'utf8' });
-      
-      // Abre el menú nativo para compartir (WhatsApp, Correo, Drive, etc.)
       await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Exportar Nómina' });
-
     } catch (error: any) {
       Alert.alert("Error Excel", "No se pudo generar la hoja de cálculo: " + error.message);
     }
@@ -280,16 +272,20 @@ export default function ListaScreen() {
           
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Pase de Lista</Text>
-            <View style={styles.exportButtonsContainer}>
-              <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#DC2626'}]} onPress={handleGeneratePDF}>
-                <Feather name="file-text" size={14} color="#FFF" />
-                <Text style={styles.exportBtnText}>PDF</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#10B981', marginLeft: 8}]} onPress={handleExportarExcel}>
-                <Feather name="grid" size={14} color="#FFF" />
-                <Text style={styles.exportBtnText}>Excel</Text>
-              </TouchableOpacity>
-            </View>
+            
+            {/* 🔒 Los botones de exportar y cerrar nómina solo los ve Admin u Oficina */}
+            {isFinancialRole && (
+              <View style={styles.exportButtonsContainer}>
+                <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#DC2626'}]} onPress={handleGeneratePDF}>
+                  <Feather name="file-text" size={14} color="#FFF" />
+                  <Text style={styles.exportBtnText}>PDF</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#10B981', marginLeft: 8}]} onPress={handleExportarExcel}>
+                  <Feather name="grid" size={14} color="#FFF" />
+                  <Text style={styles.exportBtnText}>Excel</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
 
           {loading ? (
@@ -300,15 +296,23 @@ export default function ListaScreen() {
                 <View style={styles.cardHeader}>
                   <View style={{flex: 1}}>
                     <Text style={styles.workerName}>{worker.name}</Text>
-                    <Text style={styles.workerRole}>{worker.role} • <Text style={{color: '#64748B', fontWeight: 'normal'}}>S. Día: ${(worker.weekly_salary / 6).toFixed(0)}</Text></Text>
+                    <Text style={styles.workerRole}>
+                      {worker.role} 
+                      {/* 🔒 Solo muestra el sueldo diario a roles financieros */}
+                      {isFinancialRole && <Text style={{color: '#64748B', fontWeight: 'normal'}}> • S. Día: ${(worker.weekly_salary / 6).toFixed(0)}</Text>}
+                    </Text>
                   </View>
-                  <View style={{alignItems: 'flex-end'}}>
-                    <Text style={styles.salaryLabel}>Base Semanal</Text>
-                    <Text style={styles.salaryValue}>${worker.weekly_salary}</Text>
-                  </View>
+                  
+                  {/* 🔒 Oculta el sueldo base al Residente */}
+                  {isFinancialRole && (
+                    <View style={{alignItems: 'flex-end'}}>
+                      <Text style={styles.salaryLabel}>Base Semanal</Text>
+                      <Text style={styles.salaryValue}>${worker.weekly_salary}</Text>
+                    </View>
+                  )}
                 </View>
 
-                {/* Asistencia Horizontal */}
+                {/* Asistencia Horizontal (Visible para todos) */}
                 <View style={styles.attendanceRow}>
                   {DAYS.map((day, idx) => (
                     <TouchableOpacity 
@@ -326,9 +330,8 @@ export default function ListaScreen() {
                   ))}
                 </View>
 
-                {/* 🛠️ NUEVA FILA DE BOTONES DE ACCIÓN COMPACTOS */}
                 <View style={styles.actionsContainerRow}>
-                  {/* Botón 1: Horas Extra */}
+                  {/* Botón 1: Horas Extra (Visible para Residente para que reporte tiempo extra) */}
                   <TouchableOpacity style={styles.actionCardBtn} onPress={() => openExtrasModal(worker)}>
                     <View style={styles.actionBtnIconBox}>
                       <Feather name="clock" size={16} color="#2563EB" />
@@ -339,36 +342,46 @@ export default function ListaScreen() {
                     </View>
                   </TouchableOpacity>
 
-                  {/* Botón 2: Descuento + Motivo en Conjunto */}
-                  <TouchableOpacity style={[styles.actionCardBtn, {marginLeft: 10}]} onPress={() => openDiscountModal(worker)}>
-                    <View style={[styles.actionBtnIconBox, {backgroundColor: '#FEF2F2'}]}>
-                      <Feather name="alert-circle" size={16} color="#EF4444" />
-                    </View>
-                    <View style={{flex: 1, marginLeft: 8}}>
-                      <Text style={[styles.actionBtnLabel, {color: '#EF4444'}]}>Descuento / Nota</Text>
-                      <Text style={styles.actionBtnValue} numberOfLines={1}>
-                        {Number(worker.discount) > 0 ? `-$${worker.discount}` : worker.reason ? 'Nota activa' : 'Sin cambios'}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
+                  {/* 🔒 Botón 2: Descuento / Nota (Solo visible para Admin/Oficina por manejar dinero) */}
+                  {isFinancialRole ? (
+                    <TouchableOpacity style={[styles.actionCardBtn, {marginLeft: 10}]} onPress={() => openDiscountModal(worker)}>
+                      <View style={[styles.actionBtnIconBox, {backgroundColor: '#FEF2F2'}]}>
+                        <Feather name="alert-circle" size={16} color="#EF4444" />
+                      </View>
+                      <View style={{flex: 1, marginLeft: 8}}>
+                        <Text style={[styles.actionBtnLabel, {color: '#EF4444'}]}>Descuento / Nota</Text>
+                        <Text style={styles.actionBtnValue} numberOfLines={1}>
+                          {Number(worker.discount) > 0 ? `-$${worker.discount}` : worker.reason ? 'Nota activa' : 'Sin cambios'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ) : (
+                    /* Si es Residente, mostramos un espacio vacío o un aviso visual que su tarea está completada */
+                    <View style={[styles.actionCardBtn, {marginLeft: 10, borderColor: 'transparent', backgroundColor: 'transparent'}]} />
+                  )}
                 </View>
 
-                {/* Fila de Sumatoria Total de la Tarjeta */}
-                <View style={styles.totalRow}>
-                  <Text style={styles.totalLabel}>A PAGAR:</Text>
-                  <Text style={styles.totalValue}>${calculateFinalTotal(worker).toLocaleString('es-MX', {minimumFractionDigits: 2})}</Text>
-                </View>
+                {/* 🔒 Fila de Sumatoria Total de la Tarjeta (Oculta al Residente) */}
+                {isFinancialRole && (
+                  <View style={styles.totalRow}>
+                    <Text style={styles.totalLabel}>A PAGAR:</Text>
+                    <Text style={styles.totalValue}>${calculateFinalTotal(worker).toLocaleString('es-MX', {minimumFractionDigits: 2})}</Text>
+                  </View>
+                )}
               </View>
             ))
           )}
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <View style={styles.fabContainer}>
-        <TouchableOpacity style={styles.fabPrimary} onPress={() => setIsModalVisible(true)}>
-          <Feather name="plus" size={30} color="#FFF" />
-        </TouchableOpacity>
-      </View>
+      {/* 🔒 El botón para agregar trabajadores (con sueldo base) solo lo ve Admin / Oficina */}
+      {isFinancialRole && (
+        <View style={styles.fabContainer}>
+          <TouchableOpacity style={styles.fabPrimary} onPress={() => setIsModalVisible(true)}>
+            <Feather name="plus" size={30} color="#FFF" />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* 🕒 SUB-MODAL 1: COBRAR HORAS EXTRA */}
       <Modal visible={isExtrasModalOpen} transparent={true} animationType="fade" onRequestClose={() => setIsExtrasModalOpen(false)}>
@@ -393,36 +406,38 @@ export default function ListaScreen() {
       </Modal>
 
       {/* 💸 SUB-MODAL 2: DESCUENTO + MOTIVO EN CONJUNTO */}
-      <Modal visible={isDiscountModalOpen} transparent={true} animationType="fade" onRequestClose={() => setIsDiscountModalOpen(false)}>
-        <View style={styles.modalOverlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsDiscountModalOpen(false)} />
-          <View style={styles.modalContent}>
-            <Text style={[styles.modalTitle, {color: '#EF4444'}]}>💸 Deducción y Observación</Text>
-            
-            <Text style={styles.subModalLabel}>Monto del Descuento ($):</Text>
-            <TextInput 
-              style={styles.modalInput} 
-              keyboardType="numeric" 
-              value={tempDiscount} 
-              onChangeText={(v) => setTempDiscount(v.replace(/[^0-9.]/g, ''))} // 👈 Filtro numérico estricto contra dobles signos
-              placeholder="Ej. 150"
-            />
+      {isFinancialRole && (
+        <Modal visible={isDiscountModalOpen} transparent={true} animationType="fade" onRequestClose={() => setIsDiscountModalOpen(false)}>
+          <View style={styles.modalOverlay}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsDiscountModalOpen(false)} />
+            <View style={styles.modalContent}>
+              <Text style={[styles.modalTitle, {color: '#EF4444'}]}>💸 Deducción y Observación</Text>
+              
+              <Text style={styles.subModalLabel}>Monto del Descuento ($):</Text>
+              <TextInput 
+                style={styles.modalInput} 
+                keyboardType="numeric" 
+                value={tempDiscount} 
+                onChangeText={(v) => setTempDiscount(v.replace(/[^0-9.]/g, ''))} 
+                placeholder="Ej. 150"
+              />
 
-            <Text style={styles.subModalLabel}>Motivo o Nota justificante:</Text>
-            <TextInput 
-              style={[styles.modalInput, {height: 50, textAlignVertical: 'top'}]} 
-              value={tempReason} 
-              onChangeText={setTempReason} 
-              placeholder="Ej. Retardo el día miércoles / Faltante de equipo"
-              multiline
-            />
+              <Text style={styles.subModalLabel}>Motivo o Nota justificante:</Text>
+              <TextInput 
+                style={[styles.modalInput, {height: 50, textAlignVertical: 'top'}]} 
+                value={tempReason} 
+                onChangeText={setTempReason} 
+                placeholder="Ej. Retardo el día miércoles / Faltante de equipo"
+                multiline
+              />
 
-            <TouchableOpacity style={[styles.saveBtn, {backgroundColor: '#EF4444'}]} onPress={saveDiscountChanges}>
-              <Text style={styles.saveBtnText}>Aplicar Descuento y Nota</Text>
-            </TouchableOpacity>
+              <TouchableOpacity style={[styles.saveBtn, {backgroundColor: '#EF4444'}]} onPress={saveDiscountChanges}>
+                <Text style={styles.saveBtnText}>Aplicar Descuento y Nota</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
 
       {/* MODAL: TRABAJADOR NUEVO */}
       <Modal visible={isModalVisible} animationType="slide" transparent={true} onRequestClose={() => setIsModalVisible(false)}>
@@ -467,7 +482,6 @@ const styles = StyleSheet.create({
   dayBox: { alignItems: 'center' },
   dayText: { fontSize: 11, fontWeight: 'bold', color: '#64748B', marginBottom: 4 },
 
-  // Estilos de la Fila de Botones de Acción
   actionsContainerRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
   actionCardBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', padding: 8, borderRadius: 12 },
   actionBtnIconBox: { backgroundColor: '#EFF6FF', padding: 6, borderRadius: 8 },

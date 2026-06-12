@@ -6,16 +6,21 @@ import * as Sharing from 'expo-sharing';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useProject } from '../../context/ProjectContext';
+import { useUser } from '../../context/UserContext'; // 🧠 Importamos el motor de roles
 import { supabase } from '../../lib/supabase';
 import { generarPlantillaBitacora } from '../utils/pdfTemplate';
 
 export default function BitacoraScreen() {
   const router = useRouter();
   const { activeProject, isOffline } = useProject();
+  const { profile } = useUser(); // 🧠 Obtenemos el rol del usuario
 
   const [logs, setLogs] = useState<any[]>([]);
   const [categoryStats, setCategoryStats] = useState<any[]>([]);
   const [isExporting, setIsExporting] = useState(false);
+
+  // Validador rápido de permisos
+  const isAdmin = profile?.role === 'admin';
 
   const getCategoryColor = (category: string) => {
     switch (category) {
@@ -57,13 +62,11 @@ export default function BitacoraScreen() {
     if (!activeProject?.id) return;
     const storageKey = `@bitacora_cache_${activeProject.id}`;
 
-    // 1. FUNCIÓN AUXILIAR PARA LEER LA "BANDEJA DE SALIDA"
     const getOutboxLogs = async () => {
       try {
         const outboxData = await AsyncStorage.getItem('@bandeja_salida_logs');
         if (outboxData) {
           const parsed = JSON.parse(outboxData);
-          // Filtramos los de esta obra y les ponemos una marca "isPending"
           return parsed
             .filter((log: any) => log.project_id === activeProject.id)
             .map((log: any) => ({ ...log, isPending: true }));
@@ -77,11 +80,9 @@ export default function BitacoraScreen() {
         const cachedData = await AsyncStorage.getItem(storageKey);
         let finalLogs = cachedData ? JSON.parse(cachedData) : [];
 
-        // 🌟 MAGIA: SUMAMOS LA BANDEJA DE SALIDA A LA VISTA
         const pendingLogs = await getOutboxLogs();
         finalLogs = [...pendingLogs, ...finalLogs];
         
-        // Ordenamos para que los nuevos salgan arriba
         finalLogs.sort((a: any , b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
         processData(finalLogs);
@@ -99,13 +100,12 @@ export default function BitacoraScreen() {
         if (error) throw error;
         
         if (data) {
-          // Aunque haya internet, revisamos si hay algo atorado en la bandeja
           const pendingLogs = await getOutboxLogs();
           let finalLogs = [...pendingLogs, ...data];
           finalLogs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
           
           processData(finalLogs);
-          await AsyncStorage.setItem(storageKey, JSON.stringify(data)); // Solo guardamos en caché los de la nube
+          await AsyncStorage.setItem(storageKey, JSON.stringify(data)); 
         }
       } catch (error: any) {
         if (error.message !== 'Network request failed' && error.message !== 'Failed to fetch') {
@@ -222,13 +222,17 @@ export default function BitacoraScreen() {
 
         <View style={styles.sectionHeaderRow}>
           <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>HISTORIAL DE ENTRADAS</Text>
-          <TouchableOpacity style={styles.pdfButton} onPress={handleExportPDF} disabled={isExporting}>
-            {isExporting ? (
-              <ActivityIndicator size="small" color="#FFF" />
-            ) : (
-              <><Feather name="file-text" size={14} color="#FFF" /><Text style={styles.saveButtonText}>Exportar PDF</Text></>
-            )}
-          </TouchableOpacity>
+          
+          {/* 🔒 El botón de Exportar PDF solo es visible para el Administrador */}
+          {isAdmin && (
+            <TouchableOpacity style={styles.pdfButton} onPress={handleExportPDF} disabled={isExporting}>
+              {isExporting ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <><Feather name="file-text" size={14} color="#FFF" /><Text style={styles.saveButtonText}>Exportar PDF</Text></>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
 
         {logs.length === 0 ? (
@@ -251,7 +255,6 @@ export default function BitacoraScreen() {
                 <Text style={styles.entryMetaText}>Ingeniero</Text>
                 <Text style={styles.entryMetaDot}>•</Text>
                 
-                {/* 🌟 INDICADOR DE QUE ESTÁ EN LA BANDEJA DE SALIDA */}
                 {log.isPending ? (
                   <>
                     <Feather name="refresh-cw" size={14} color="#D97706" />
@@ -306,7 +309,7 @@ const styles = StyleSheet.create({
   saveButtonText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', marginLeft: 4 },
 
   entryCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 18, marginBottom: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
-  entryCardPending: { borderWidth: 1, borderColor: '#FCD34D', backgroundColor: '#FFFBEB' }, // 🌟 FONDO AMARILLENTO PARA LAS PENDIENTES
+  entryCardPending: { borderWidth: 1, borderColor: '#FCD34D', backgroundColor: '#FFFBEB' },
   entryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
   entryTitle: { flex: 1, fontSize: 16, fontWeight: 'bold', color: '#111827', marginRight: 10, lineHeight: 22 },
   photoBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB' },

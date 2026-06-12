@@ -7,6 +7,7 @@ import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useProject } from '../context/ProjectContext';
+import { useUser } from '../context/UserContext'; // 🧠 Importamos el motor de roles
 import { supabase } from '../lib/supabase';
 
 interface MovimientoFinanciero {
@@ -28,13 +29,13 @@ interface MovimientoFinanciero {
 export default function CajaChicaScreen() {
   const router = useRouter();
   const { activeProject, isOffline } = useProject();
+  const { profile } = useUser(); // 🧠 Obtenemos el perfil y el rol del usuario
 
   const [movimientos, setMovimientos] = useState<MovimientoFinanciero[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
 
-  // 👷 NUEVOS ESTADOS PARA LOS TRABAJADORES
   const [trabajadores, setTrabajadores] = useState<any[]>([]);
   const [showTrabajadorModal, setShowTrabajadorModal] = useState(false);
 
@@ -51,14 +52,17 @@ export default function CajaChicaScreen() {
   const [precioUnitario, setPrecioUnitario] = useState('');
   const [importeInvertido, setImporteInvertido] = useState('');
 
+  // Validadores rápidos de permisos
+  const isResidente = profile?.role === 'residente';
+  const isAdminOrOficina = profile?.role === 'admin' || profile?.role === 'oficina';
+
   useEffect(() => {
     if (activeProject?.id) {
       loadLibroMayor();
-      loadTrabajadores(); // 👈 Cargamos los trabajadores al entrar
+      loadTrabajadores(); 
     }
   }, [activeProject, isOffline]);
 
-  // 👷 FUNCIÓN PARA CARGAR TRABAJADORES DESDE LA NUBE O CACHÉ
   const loadTrabajadores = async () => {
     const pid = activeProject?.id;
     if (!pid) return;
@@ -173,7 +177,6 @@ export default function CajaChicaScreen() {
     if (!pid) return;
 
     setIsSaving(true);
-    const uniqueId = `mov_${Date.now()}`;
 
     try {
       if (tipoMovimientoForm === 'ingreso') {
@@ -247,6 +250,37 @@ export default function CajaChicaScreen() {
     }
   };
 
+  // 🗑️ FUNCIÓN PARA ELIMINAR (Solo para Admins y Oficina)
+  const handleEliminarMovimiento = async (id: string, tipo: 'ingreso' | 'egreso') => {
+    if (isOffline) {
+      Alert.alert("Modo Offline", "Necesitas internet para eliminar registros.");
+      return;
+    }
+
+    Alert.alert(
+      "Confirmar Eliminación", 
+      "¿Estás seguro de que quieres borrar este movimiento? Esto afectará los saldos.", 
+      [
+        { text: "Cancelar", style: "cancel" },
+        { 
+          text: "Sí, Eliminar", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const tabla = tipo === 'ingreso' ? 'ingresos_obra' : 'caja_chica';
+              const { error } = await supabase.from(tabla).update({ is_active: false }).eq('id', id);
+              if (error) throw error;
+              
+              setMovimientos(prev => prev.filter(m => m.id !== id));
+            } catch (error: any) {
+              Alert.alert("Error", error.message);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const limpiarFormulario = () => {
     setNumeroNota('');
     setEncargado('');
@@ -256,18 +290,16 @@ export default function CajaChicaScreen() {
     setCantidad('1');
     setPrecioUnitario('');
     setImporteInvertido('');
+    setTipoMovimientoForm('egreso'); // Resetear siempre a Egreso por si el admin entró a ingreso
   };
 
-  // 📊 FUNCIÓN PARA EXPORTAR EXCEL DE CAJA CHICA (NUEVA)
   const handleExportarExcel = async () => {
     if (movimientos.length === 0) {
       Alert.alert("Sin datos", "No hay movimientos registrados para exportar.");
       return;
     }
-
     try {
       const encabezados = ["Fecha", "Tipo", "No. Nota", "Concepto/Justificacion", "Responsable", "Unidad/Frente", "Metodo Pago", "Cantidad", "P.U. ($)", "Monto Total ($)\n"];
-      
       const filas = movimientos.map(g => {
         const fechaFormateada = new Date(g.fecha).toLocaleDateString('es-MX');
         const conceptoLimpio = g.concepto.replace(/,/g, ' ');
@@ -285,10 +317,7 @@ export default function CajaChicaScreen() {
       
       await fsModulo.writeAsStringAsync(fileUri, contenidoCSV, { encoding: 'utf8' });
       await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Exportar Reporte Financiero' });
-
-    } catch (error: any) {
-      Alert.alert("Error Excel", "No se pudo generar la hoja de cálculo: " + error.message);
-    }
+    } catch (error: any) { Alert.alert("Error", error.message); }
   };
 
   const totalIngresos = movimientos.filter(m => m.tipo === 'ingreso').reduce((sum, m) => sum + m.monto, 0);
@@ -325,10 +354,14 @@ export default function CajaChicaScreen() {
         
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Historial de Movimientos</Text>
-          <TouchableOpacity onPress={handleExportarExcel} style={styles.excelBtnHeader}>
-            <Feather name="grid" size={14} color="#FFF" />
-            <Text style={styles.excelBtnText}>Excel</Text>
-          </TouchableOpacity>
+          
+          {/* 🔒 Solo Admin/Oficina pueden descargar el Excel global */}
+          {isAdminOrOficina && (
+            <TouchableOpacity onPress={handleExportarExcel} style={styles.excelBtnHeader}>
+              <Feather name="grid" size={14} color="#FFF" />
+              <Text style={styles.excelBtnText}>Excel</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {loading ? (
@@ -355,9 +388,19 @@ export default function CajaChicaScreen() {
                     </Text>
                   )}
                 </View>
-                <Text style={[styles.gastoMonto, { color: mov.tipo === 'ingreso' ? '#10B981' : '#DC2626' }]}>
-                  {mov.tipo === 'ingreso' ? '+' : '-'}${mov.monto.toFixed(2)}
-                </Text>
+
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={[styles.gastoMonto, { color: mov.tipo === 'ingreso' ? '#10B981' : '#DC2626' }]}>
+                    {mov.tipo === 'ingreso' ? '+' : '-'}${mov.monto.toFixed(2)}
+                  </Text>
+                  
+                  {/* 🔒 Botón de Eliminar solo para Administradores y Oficina */}
+                  {isAdminOrOficina && (
+                    <TouchableOpacity onPress={() => handleEliminarMovimiento(mov.id, mov.tipo)} style={{ marginTop: 8, padding: 4 }}>
+                      <Feather name="trash-2" size={16} color="#FCA5A5" />
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
             </View>
           ))
@@ -368,7 +411,6 @@ export default function CajaChicaScreen() {
         <Feather name="plus" size={28} color="#FFF" />
       </TouchableOpacity>
 
-      {/* MODAL PRINCIPAL (El único que debe existir) */}
       <Modal visible={isModalVisible} animationType="slide" transparent={true} onRequestClose={() => { setIsModalVisible(false); limpiarFormulario(); }}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
           <ScrollView contentContainerStyle={styles.modalScroll} keyboardShouldPersistTaps="handled">
@@ -377,14 +419,23 @@ export default function CajaChicaScreen() {
 
             <View style={styles.modalContent}>
               
-              <View style={styles.formToggleContainer}>
-                <TouchableOpacity style={[styles.formToggleBtn, tipoMovimientoForm === 'ingreso' && styles.toggleActiveIngreso]} onPress={() => setTipoMovimientoForm('ingreso')}>
-                  <Text style={[styles.toggleText, tipoMovimientoForm === 'ingreso' && styles.toggleTextActive]}>📥 Registrar Inversión</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.formToggleBtn, tipoMovimientoForm === 'egreso' && styles.toggleActiveEgreso]} onPress={() => setTipoMovimientoForm('egreso')}>
-                  <Text style={[styles.toggleText, tipoMovimientoForm === 'egreso' && styles.toggleTextActive]}>📤 Registrar Gasto</Text>
-                </TouchableOpacity>
-              </View>
+              {/* 🔒 Pestañas de Ingreso/Egreso. El residente solo ve la de Egreso y no puede cambiarla */}
+              {isAdminOrOficina ? (
+                <View style={styles.formToggleContainer}>
+                  <TouchableOpacity style={[styles.formToggleBtn, tipoMovimientoForm === 'ingreso' && styles.toggleActiveIngreso]} onPress={() => setTipoMovimientoForm('ingreso')}>
+                    <Text style={[styles.toggleText, tipoMovimientoForm === 'ingreso' && styles.toggleTextActive]}>📥 Registrar Inversión</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.formToggleBtn, tipoMovimientoForm === 'egreso' && styles.toggleActiveEgreso]} onPress={() => setTipoMovimientoForm('egreso')}>
+                    <Text style={[styles.toggleText, tipoMovimientoForm === 'egreso' && styles.toggleTextActive]}>📤 Registrar Gasto</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={[styles.formToggleContainer, { backgroundColor: '#FEE2E2' }]}>
+                  <View style={[styles.formToggleBtn, styles.toggleActiveEgreso]}>
+                    <Text style={[styles.toggleText, styles.toggleTextActive]}>📤 Registrar Gasto de Campo</Text>
+                  </View>
+                </View>
+              )}
 
               {tipoMovimientoForm === 'ingreso' ? (
                 <View>
@@ -480,7 +531,7 @@ export default function CajaChicaScreen() {
             </View>
           </ScrollView>
 
-          {/* 👷 MAGIA: LA LISTA DE TRABAJADORES AHORA ES UNA CAPA INTERNA, NO UN MODAL */}
+          {/* 👷 MODAL DE TRABAJADORES */}
           {showTrabajadorModal && (
             <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', zIndex: 999 }]}>
               <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowTrabajadorModal(false)} />
@@ -529,7 +580,6 @@ const styles = StyleSheet.create({
   headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   backButton: { padding: 4, marginLeft: -4 },
   headerSubtitle: { color: 'rgba(255, 255, 255, 0.6)', fontSize: 11, fontWeight: '700', letterSpacing: 5, textAlign: 'center', flex: 1 },
-  // 📊 ESTILOS PARA EL BOTÓN DE EXCEL
   excelBtnHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#10B981', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8 },
   excelBtnText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', marginLeft: 4 },
   headerTitle: { color: '#94A3B8', fontSize: 13, fontWeight: '500', marginTop: 5 },

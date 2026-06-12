@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { PieChart } from 'react-native-chart-kit';
 import { useProject } from '../context/ProjectContext';
+import { useUser } from '../context/UserContext'; // 🧠 Importamos el motor de roles
 import { supabase } from '../lib/supabase';
 
 const screenWidth = Dimensions.get('window').width;
@@ -32,6 +33,7 @@ interface CategoriaCosto {
 export default function ResumenDiarioScreen() {
   const router = useRouter();
   const { activeProject, isOffline } = useProject();
+  const { profile } = useUser(); // 🧠 Extraemos el perfil activo
   
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'general' | 'analisis'>('general');
@@ -228,29 +230,27 @@ export default function ResumenDiarioScreen() {
 
         {analisisCostos.length > 0 ? (
           <View style={styles.chartContainer}>
-            {/* 🛠️ GRÁFICA RESPONSIVA: Adaptamos el tamaño y la posición para que no se amontone */}
             <View style={styles.pieWrapper}>
               <PieChart
                 data={analisisCostos.map(c => ({
-                  name: ' ', // Ocultamos los nombres aquí para usar nuestra propia leyenda
+                  name: ' ', 
                   population: c.importe,
                   color: c.color,
                   legendFontColor: c.legendFontColor,
                   legendFontSize: c.legendFontSize
                 }))}
-                width={screenWidth * 0.45} // La gráfica toma el 45% del ancho de pantalla
+                width={screenWidth * 0.45} 
                 height={160}
                 chartConfig={{ color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})` }}
                 accessor={"population"}
                 backgroundColor={"transparent"}
                 paddingLeft={"0"}
-                center={[screenWidth * 0.1, 0]} // Ajuste clave para centrar el círculo de forma independiente
-                hasLegend={false} // 👈 Apagamos la leyenda nativa del Chart Kit para usar la nuestra
+                center={[screenWidth * 0.1, 0]} 
+                hasLegend={false} 
                 absolute
               />
             </View>
 
-            {/* 🛠️ LEYENDA RESPONSIVA: Ocupa el 50% restante y centra los elementos verticalmente */}
             <View style={styles.legendContainer}>
               {analisisCostos.map((item, index) => (
                 <View key={index} style={styles.legendRow}>
@@ -317,6 +317,11 @@ export default function ResumenDiarioScreen() {
           </TouchableOpacity>
         </View>
         <Text style={styles.headerTitle}>{activeProject?.name || "Cargando Obra..."}</Text>
+        
+        {/* 🧠 Saludo Personalizado del Contexto de Usuario */}
+        <Text style={{color: 'rgba(255,255,255,0.8)', fontSize: 12, marginTop: 4}}>
+          Reporte visualizado por: <Text style={{fontWeight: 'bold'}}>{profile?.name || 'Oficina'}</Text>
+        </Text>
       </View>
 
       {/* TABS DE SELECCIÓN */}
@@ -345,7 +350,7 @@ export default function ResumenDiarioScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: { backgroundColor: '#2563EB', paddingTop: 60, paddingBottom: 20, paddingHorizontal: 20, borderRadius: 20 },
+  header: { backgroundColor: '#2563EB', paddingTop: 60, paddingBottom: 20, paddingHorizontal: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
   headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backButton: { padding: 4, marginLeft: -4 },
   headerSubtitle: { color: 'rgba(255, 255, 255, 0.6)', fontSize: 10, fontWeight: '700', letterSpacing: 1 },
@@ -383,7 +388,6 @@ const styles = StyleSheet.create({
   analisisTotal: { fontSize: 22, fontWeight: 'bold', color: '#0F172A', marginTop: 4 },
   analisisCount: { fontSize: 22, fontWeight: 'bold', color: '#2563EB', marginTop: 4 },
   
-  // 🛠️ CONTENEDORES DE GRÁFICA AJUSTADOS 
   chartContainer: { backgroundColor: '#FFF', paddingVertical: 15, paddingHorizontal: 15, borderRadius: 16, alignItems: 'center', justifyContent: 'space-between', marginBottom: 15, borderWidth: 1, borderColor: '#E2E8F0', flexDirection: 'row' },
   pieWrapper: { width: '50%', alignItems: 'center', justifyContent: 'center' },
   legendContainer: { width: '50%', paddingLeft: 10, justifyContent: 'center' },

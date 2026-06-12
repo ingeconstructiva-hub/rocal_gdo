@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { useProject } from '../context/ProjectContext';
+import { useUser } from '../context/UserContext'; // 🧠 Importamos el motor de roles
 import { supabase } from '../lib/supabase';
 
 interface GastoEstructural {
@@ -24,9 +25,13 @@ interface GastoEstructural {
 export default function GastosGeneralesScreen() {
   const router = useRouter();
   const { activeProject, isOffline } = useProject();
+  const { profile } = useUser(); // 🧠 Extraemos el rol
   
   const [gastos, setGastos] = useState<GastoEstructural[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // 🔒 Validadores de Permisos
+  const isAdmin = profile?.role === 'admin';
 
   // Estados del Formulario Dinámico
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -326,9 +331,13 @@ export default function GastosGeneralesScreen() {
               
               <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
                 <Text style={styles.gastoMonto}>${g.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Text>
-                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleEliminarGasto(g.id, g.concepto)}>
-                  <Feather name="trash-2" size={16} color="#FCA5A5" />
-                </TouchableOpacity>
+                
+                {/* 🔒 El botón de borrar solo lo ve el Administrador */}
+                {isAdmin && (
+                  <TouchableOpacity style={styles.deleteBtn} onPress={() => handleEliminarGasto(g.id, g.concepto)}>
+                    <Feather name="trash-2" size={16} color="#FCA5A5" />
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           ))

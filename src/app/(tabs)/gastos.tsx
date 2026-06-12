@@ -3,53 +3,64 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter } from 'expo-router';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useProject } from '../../context/ProjectContext';
+import { useUser } from '../../context/UserContext'; // 🧠 Importamos el motor de roles
 
 export default function GastosHubScreen() {
   const router = useRouter();
   const { activeProject } = useProject();
+  const { profile } = useUser(); // 🧠 Extraemos el rol del usuario actual
 
-  const options = [
+  // 1. Agregamos el arreglo "roles" a cada opción para definir quién puede ver qué
+  const allOptions = [
     {
       title: 'Control de Destajos',
       sub: 'Materiales, volúmenes y mano de obra',
       type: 'Feather',
-      icon: 'package', // Cambiado a package (MCI)
+      icon: 'package', 
       color: '#F59E0B',
-      path: '../destajo'
+      path: '../destajo',
+      roles: ['admin', 'residente', 'oficina'] // Todos
     },
     {
       title: 'Caja Chica',
       sub: 'Gastos menores del día a día',
       type: 'Feather',
-      icon: 'dollar-sign', // Cambiado a currency-usd (MCI)
+      icon: 'dollar-sign', 
       color: '#EC4899',
-      path: '../caja_chica'
-    },
-    {
-      title: 'Gastos Generales',
-      sub: 'Resumen total y gastos de administración',
-      type: 'material-community', 
-      icon: 'office-building-cog', // Cambiado a office-building-cog (MCI)
-      color: '#8B5CF6',
-      path: '../gastos_generales'
+      path: '../caja_chica',
+      roles: ['admin', 'residente', 'oficina'] // Todos
     },
     {
       title: 'Gastos de Maquinaria',
       sub: 'Costos horarios, operación y mantenimiento',
       type: 'material-community',
-      icon: 'tractor', // Cambiado a tractor (MCI)
+      icon: 'tractor', 
       color: '#4750f6',
-      path: '../gastos_maquinaria'
+      path: '../gastos_maquinaria',
+      roles: ['admin', 'residente', 'oficina'] // Todos
     },
     {
-      title: 'Analisis de Costos',
-      sub: 'Resumen total y gastos de administración',
+      title: 'Gastos Generales',
+      sub: 'Trámites, facturas y administración central',
+      type: 'material-community', 
+      icon: 'office-building-cog', 
+      color: '#8B5CF6',
+      path: '../gastos_generales',
+      roles: ['admin', 'oficina'] // 🔒 Oculto para Residentes
+    },
+    {
+      title: 'Análisis de Costos',
+      sub: 'Rentabilidad, gráficas y balance general', // Texto mejorado
       type: 'material-community',
-      icon: 'chart-line', // Cambiado a chart-line (MCI)
+      icon: 'chart-line', 
       color: '#1823f8',
-      path: '../resumen_diario'
+      path: '../resumen_diario',
+      roles: ['admin', 'oficina'] // 🔒 Oculto para Residentes
     }
   ];
+
+  // 2. Filtramos las opciones para que solo se dibujen las permitidas
+  const visibleOptions = allOptions.filter(opt => opt.roles.includes(profile?.role || 'residente'));
 
   return (
     <View style={styles.container}>
@@ -67,7 +78,7 @@ export default function GastosHubScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.body}>
-        {options.map((opt, i) => (
+        {visibleOptions.map((opt, i) => (
           <TouchableOpacity key={i} style={styles.card} onPress={() => router.push(opt.path as any)}>
             <View style={[styles.iconBox, { backgroundColor: opt.color }]}>
               {opt.type === 'Feather' ? (

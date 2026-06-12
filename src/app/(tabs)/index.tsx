@@ -7,88 +7,62 @@ import QRCode from 'react-native-qrcode-svg';
 import { NotificationItem } from '../../components/NotificationItem';
 import { Colors } from '../../constants/theme';
 import { useProject } from '../../context/ProjectContext';
+import { useUser } from '../../context/UserContext';
 import { supabase } from '../../lib/supabase';
 
 export default function DashboardScreen() {
-  const [hasPendingItems, setHasPendingItems] = useState(false);
+  const router = useRouter();
+  const { activeProject, isOffline } = useProject(); 
+  const { profile } = useUser(); // 🧠 Importamos el Rol Global
 
+  const [hasPendingItems, setHasPendingItems] = useState(false);
+  const [project, setProject] = useState<any>(null);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  
+  const [isInviteModalVisible, setIsInviteModalVisible] = useState(false);
+  const [isGeneratingCode, setIsGeneratingCode] = useState(false);
+
+  // 1. REVISIÓN DE BANDEJA DE SALIDA (OFFLINE)
   useFocusEffect(
     useCallback(() => {
       const checkOutbox = async () => {
         const logs = await AsyncStorage.getItem('@bandeja_salida_logs');
-        const inv = await AsyncStorage.getItem('@bandeja_salida_inventario');
+        const inv = await AsyncStorage.getItem('@bandeja_salida_caja');
         setHasPendingItems(!!logs || !!inv);
       };
       checkOutbox();  
     }, [])
   );
 
-  const { activeProject, isOffline } = useProject(); 
-
-  const [project, setProject] = useState<any>(null);
-  const [notifications, setNotifications] = useState<any[]>([]);
-  
-  const [userProfile, setUserProfile] = useState({
-  name: "Cargando usuario...",
-  role: "residente", // Este es el rol de BD: 'admin', 'residente', 'oficina'
-  displayRole: "Residente de Obra" // Este es para UI
-});
-
-  const [isInviteModalVisible, setIsInviteModalVisible] = useState(false);
-  const [isGeneratingCode, setIsGeneratingCode] = useState(false);
-  
-  const getFormattedDate = () => {
-    const date = new Date();
-    const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-    const months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-    return `${days[date.getDay()]} ${date.getDate()} de ${months[date.getMonth()]}, ${date.getFullYear()}`;
+  // 2. MATRIZ DE PERMISOS PARA LOS BOTONES DEL MENÚ
+  const getAccessibleModules = () => {
+    const allModules = [
+      // Operación en Campo
+      { name: "Asistencia", icon: "users", route: "/lista", roles: ['admin', 'residente'] },
+      { name: "Bitácora", icon: "book-open", route: "/bitacora", roles: ['admin', 'residente'] },
+      { name: "Planos", icon: "layers", route: "/planos", roles: ['admin', 'residente', 'oficina'] },
+      
+      // Finanzas y Control
+      { name: "Caja Chica", icon: "wallet", route: "/gastos", roles: ['admin', 'residente', 'oficina'] },
+      { name: "Maquinaria", icon: "truck", route: "/gastos_maquinaria", roles: ['admin', 'residente', 'oficina'] },
+      { name: "G. Generales", icon: "file-text", route: "/gastos_generales", roles: ['admin', 'oficina'] },
+      { name: "Ingresos", icon: "trending-up", route: "/ingresos", roles: ['admin', 'oficina'] },
+      
+      // Alta Gerencia
+      { name: "Estado de Obra", icon: "pie-chart", route: "/resumen_diario", roles: ['admin', 'oficina'] },
+    ];
+    
+    // Filtramos los botones según el rol actual
+    return allModules.filter(m => m.roles.includes(profile?.role || 'residente'));
   };
 
-  const today = getFormattedDate();
-  const router = useRouter();
+  const modules = getAccessibleModules();
   
-  const getCategoryStyles = (category: string) => {
-    switch (category) {
-      case 'Estructura': return { icon: "layers", color: "#4F46E5", bg: "#E0E7FF" }; 
-      case 'Concreto': return { icon: "box", color: "#059669", bg: "#D1FAE5" };   
-      case 'Eléctrico': return { icon: "zap", color: "#D97706", bg: "#FEF3C7" };   
-      case 'Seguridad': return { icon: "shield", color: "#DC2626", bg: "#FEE2E2" }; 
-      case 'Acabados': return { icon: "brush", color: "#8B5CF6", bg: "#EDE9FE" };  
-      default: return { icon: "book-open", color: "#2563EB", bg: "#E0F2FE" }; 
-    }
-  };
-const canAccessGastosGenerales = () => {
-  return userProfile.role === 'admin' || userProfile.role === 'oficina';
-};
-
-const canAccessGastos = () => {
-  return userProfile.role === 'admin' || userProfile.role === 'residente' || userProfile.role === 'oficina';
-};
-
-const canInviteUsers = () => {
-  return userProfile.role === 'admin' || userProfile.role === 'residente';
-};
-
-const getAccessibleModules = () => {
-  const allModules = [
-    { name: "Bitácora", icon: "book-open", route: "/bitacora" }, 
-    { name: "Asistencia", icon: "users", route: "/lista" },
-    { name: "Gastos", icon: "dollar-sign", route: "/gastos" },
-    { name: "Documentación", icon: "layers", route: "/planos" }, 
-  ];
-  
-  // Filtrar según el rol
-  if (userProfile.role === 'admin') return allModules; // Admin ve todo
-  if (userProfile.role === 'residente') return allModules; // Residente ve todo
-  if (userProfile.role === 'oficina') return allModules.filter(m => m.route !== '/lista' && m.route !== '/bitacora'); // Oficina solo ve Gastos y Documentos
-  
-  return allModules;
-};
+  // 3. CARGA DE DATOS DEL PROYECTO Y NOTIFICACIONES
   useFocusEffect(
     useCallback(() => {
       async function loadData() {
         if (!activeProject?.id) return;
-        
         const storageKey = `@dashboard_cache_${activeProject.id}`;
 
         if (isOffline) {
@@ -97,17 +71,13 @@ const getAccessibleModules = () => {
             if (cachedData) {
               const parsed = JSON.parse(cachedData);
               setProject(parsed.project);
-              setUserProfile(parsed.profile);
               setNotifications(parsed.notifications);
             }
-          } catch (e) {
-            console.error("Error leyendo caché del dashboard", e);
-          }
+          } catch (e) { console.error("Error leyendo caché", e); }
           return; 
         }
 
         try {
-          // 1. CARGAMOS INFO DEL PROYECTO (¡AGREGAMOS CLIENTE Y CONTRATO AQUÍ!)
           const { data: projectData } = await supabase
             .from('projects')
             .select('id, name, location, start_date, end_date, invite_code, client_name, contract_number') 
@@ -116,84 +86,44 @@ const getAccessibleModules = () => {
           
           if (projectData) setProject(projectData);
 
-          // 2. CARGAMOS EL PERFIL
-          // 2. CARGAMOS EL PERFIL
-let newProfile = { name: "Ingeniero", role: "residente", displayRole: "Residente de Obra" };
-const { data: { session } } = await supabase.auth.getSession();
-if (session?.user) {
-  const { data: profile } = await supabase.from('profiles').select('full_name, role').eq('id', session.user.id).single();
-  if (profile) {
-    let displayRole = "Residente de Obra";
-    if (profile.role === 'admin') displayRole = "Administrador";
-    else if (profile.role === 'oficina') displayRole = "Personal de Oficina";
-    
-    newProfile = { 
-      name: profile.full_name, 
-      role: profile.role,
-      displayRole: displayRole
-    };
-    setUserProfile(newProfile);
-  }
-}
-
-          // 3. CARGAMOS NOTIFICACIONES
           const limit = 4; 
-          const [ { data: logsData }, { data: planosData }, { data: workersData }, { data: cajaData } ] = await Promise.all([
+          const [ { data: logsData }, { data: cajaData } ] = await Promise.all([
             supabase.from('logs').select('category, description, created_at').eq('project_id', activeProject.id).order('created_at', { ascending: false }).limit(limit),
-            supabase.from('planos').select('title, created_at').eq('project_id', activeProject.id).order('created_at', { ascending: false }).limit(limit),
-            supabase.from('workers').select('name, role, created_at').eq('project_id', activeProject.id).order('created_at', { ascending: false }).limit(limit),
             supabase.from('caja_chica').select('concepto, monto, fecha').eq('project_id', activeProject.id).order('fecha', { ascending: false }).limit(limit)
           ]);
-          
-          const todayDate = new Date();
-          todayDate.setHours(0, 0, 0, 0);
-          const yesterday = new Date(todayDate);
-          yesterday.setDate(yesterday.getDate() - 1);
 
-          const formatNotificationTime = (createdAt: string) => {
-            if (!createdAt) return '--:--';
-            const dateObj = new Date(createdAt);
-            const dateOnly = new Date(dateObj);
-            dateOnly.setHours(0, 0, 0, 0);
-            const hours = String(dateObj.getHours()).padStart(2, '0');
-            const minutes = String(dateObj.getMinutes()).padStart(2, '0');
-            if (dateOnly.getTime() === todayDate.getTime()) return `Hoy ${hours}:${minutes}`;
-            if (dateOnly.getTime() === yesterday.getTime()) return `Ayer ${hours}:${minutes}`;
-            return `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')} ${hours}:${minutes}`;
+          const getCategoryStyles = (category: string) => {
+            switch (category) {
+              case 'Estructura': return { icon: "layers", color: "#4F46E5", bg: "#E0E7FF" }; 
+              case 'Concreto': return { icon: "box", color: "#059669", bg: "#D1FAE5" };   
+              case 'Eléctrico': return { icon: "zap", color: "#D97706", bg: "#FEF3C7" };   
+              default: return { icon: "book-open", color: "#2563EB", bg: "#E0F2FE" }; 
+            }
           };
 
-          const mappedLogs = (logsData || []).map((log: any) => ({ icon: getCategoryStyles(log.category).icon, title: `[Bitácora] ${log.category}: ${log.description}`, time: formatNotificationTime(log.created_at), iconColor: getCategoryStyles(log.category).color, bgColor: getCategoryStyles(log.category).bg, timestamp: new Date(log.created_at).getTime() }));
-          const mappedPlanos = (planosData || []).map((plano: any) => ({ icon: "folder-plus", title: `[Planos] Nuevo documento: ${plano.title}`, time: formatNotificationTime(plano.created_at), iconColor: "#059669", bgColor: "#D1FAE5", timestamp: new Date(plano.created_at).getTime() }));
-          const mappedWorkers = (workersData || []).map((worker: any) => ({ icon: "user-plus", title: `[Personal] Nuevo ingreso: ${worker.name} (${worker.role})`, time: formatNotificationTime(worker.created_at), iconColor: "#2563EB", bgColor: "#DBEAFE", timestamp: new Date(worker.created_at).getTime() }));
-          const mappedCaja = (cajaData || []).map((gasto: any) => ({ icon: "shopping-cart", title: `[Caja Chica] Compra: ${gasto.concepto} por $${gasto.monto}`, time: formatNotificationTime(gasto.fecha), iconColor: "#DB2777", bgColor: "#FCE7F3", timestamp: new Date(gasto.fecha).getTime() }));
+          const mappedLogs = (logsData || []).map((log: any) => ({ icon: getCategoryStyles(log.category).icon, title: `[Bitácora] ${log.description}`, time: new Date(log.created_at).toLocaleDateString('es-MX'), iconColor: getCategoryStyles(log.category).color, bgColor: getCategoryStyles(log.category).bg, timestamp: new Date(log.created_at).getTime() }));
+          const mappedCaja = (cajaData || []).map((gasto: any) => ({ icon: "shopping-cart", title: `[Gasto] ${gasto.concepto} ($${gasto.monto})`, time: new Date(gasto.fecha).toLocaleDateString('es-MX'), iconColor: "#DB2777", bgColor: "#FCE7F3", timestamp: new Date(gasto.fecha).getTime() }));
 
-          const combinedNotifications = [...mappedLogs, ...mappedPlanos, ...mappedWorkers, ...mappedCaja]
-            .sort((a, b) => b.timestamp - a.timestamp)
-            .slice(0, 4); 
+          const combinedNotifications = [...mappedLogs, ...mappedCaja].sort((a, b) => b.timestamp - a.timestamp).slice(0, 4); 
 
           setNotifications(combinedNotifications);
-
-          await AsyncStorage.setItem(storageKey, JSON.stringify({
-            project: projectData,
-            profile: newProfile,
-            notifications: combinedNotifications
-          }));
+          await AsyncStorage.setItem(storageKey, JSON.stringify({ project: projectData, notifications: combinedNotifications }));
 
         } catch (err: any) {
-          if (err.message !== 'Network request failed' && err.message !== 'Failed to fetch') {
-            console.error("❌ Error en loadData:", err);
-          }
+          if (err.message !== 'Network request failed' && err.message !== 'Failed to fetch') console.error(err);
         }
       }
-      
       loadData();
     }, [activeProject, isOffline]) 
   );
 
+  // 4. FUNCIONES DE INVITACIÓN
   const handleOpenInviteModal = async () => {
     if (isOffline) { Alert.alert("Modo Offline", "Necesitas internet para generar invitaciones."); return; }
-    const projectId = activeProject?.id;
-    if (!projectId) return;
+    if (profile?.role !== 'admin' && profile?.role !== 'residente') {
+      Alert.alert("Acceso Restringido", "Solo administradores y residentes pueden invitar personal.");
+      return;
+    }
 
     setIsInviteModalVisible(true);
     if (project?.invite_code) return;
@@ -201,94 +131,66 @@ if (session?.user) {
     setIsGeneratingCode(true);
     try {
       const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-      const { error } = await supabase.from('projects').update({ invite_code: newCode }).eq('id', projectId);
+      const { error } = await supabase.from('projects').update({ invite_code: newCode }).eq('id', activeProject?.id);
       if (error) throw error;
       setProject({ ...project, invite_code: newCode });
-    } catch (error: any) {
-      Alert.alert("Error", "No se pudo generar el código.");
-    } finally {
-      setIsGeneratingCode(false);
-    }
+    } catch (error: any) { Alert.alert("Error", "No se pudo generar el código."); } 
+    finally { setIsGeneratingCode(false); }
   };
 
   const handleShareCode = async () => {
     if (!project?.invite_code) return;
     try {
-      await Share.share({
-        message: `🏗️ ¡Únete a mi equipo en la obra "${project.name}"!\n\nTu código de acceso es: *${project.invite_code}*\n\nAbre la aplicación, ve a "Mis Obras", toca el botón de "Unirse a Obra" y usa este código.`,
-      });
+      await Share.share({ message: `🏗️ ¡Únete a mi equipo en "${project.name}"!\n\nTu código de acceso es: *${project.invite_code}*\n\nAbre la aplicación, ve a "Mis Obras", toca "Unirse a Obra" y usa este código.`});
     } catch (error: any) {}
   };
 
-const modules = getAccessibleModules();
+  const today = new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   return (
     <View style={{ flex: 1 }}>
       {hasPendingItems && !isOffline && (
-      <View style={styles.syncBanner}>
-        <Feather name="refresh-cw" size={14} color="#FFF" />
-        <Text style={styles.syncText}>Sincronizando cambios...</Text>
-      </View>
-    )}
+        <View style={styles.syncBanner}>
+          <Feather name="refresh-cw" size={14} color="#FFF" />
+          <Text style={styles.syncText}>Sincronizando cambios pendientes...</Text>
+        </View>
+      )}
+
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
             <TouchableOpacity onPress={() => router.replace('/proyectos')} style={{ marginRight: 15 }}>
               <Feather name="arrow-left" size={28} color="#FFF" />
             </TouchableOpacity>
-            <Text style={styles.date}>{today}</Text>
+            <Text style={styles.date}>{today.charAt(0).toUpperCase() + today.slice(1)}</Text>
           </View>
-          <Text style={styles.userName}>{userProfile.name}</Text>
-          <Text style={styles.role}>{userProfile.displayRole}</Text>
+          
+          <Text style={styles.userName}>{profile?.name || "Cargando..."}</Text>
+          <Text style={styles.role}>{profile?.displayRole || "Cargando permisos..."}</Text>
           
           <View style={styles.projectCard}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <View style={{ flex: 1 }}>
+              <View style={{ flex: 1, paddingRight: 10 }}>
                 <Text style={styles.projectTitle}>{project?.name || "Cargando proyecto..."}</Text>
-                
-                {/* UBICACIÓN */}
-                <Text style={styles.projectSub}>
-                  <Feather name="map-pin" size={12} color={Colors.textSub} /> {project?.location || "Cargando ubicación..."}
-                </Text>
+                <Text style={styles.projectSub}><Feather name="map-pin" size={12} color={Colors.textSub} /> {project?.location || "Ubicación..."}</Text>
 
-                {/* CLIENTE Y CONTRATO AGREGADOS AQUÍ */}
                 {project?.client_name && (
-                  <Text style={[styles.projectSub, { marginTop: 4 }]}>
-                    <Feather name="user" size={12} color="#475569" /> Cliente: <Text style={{fontWeight: '600', color: '#1E293B'}}>{project.client_name}</Text>
-                  </Text>
+                  <Text style={[styles.projectSub, { marginTop: 4 }]}><Feather name="user" size={12} color="#475569" /> Cliente: <Text style={{fontWeight: '600', color: '#1E293B'}}>{project.client_name}</Text></Text>
                 )}
-                
                 {project?.contract_number && (
-                  <Text style={styles.projectSub}>
-                    <Feather name="file-text" size={12} color="#475569" /> Contrato: <Text style={{fontWeight: '600', color: '#1E293B'}}>{project.contract_number}</Text>
-                  </Text>
+                  <Text style={styles.projectSub}><Feather name="file-text" size={12} color="#475569" /> Contrato: <Text style={{fontWeight: '600', color: '#1E293B'}}>{project.contract_number}</Text></Text>
                 )}
-
               </View>
-              <TouchableOpacity 
-  onPress={() => {
-    if (!canInviteUsers()) {
-      Alert.alert("Sin permiso", "Solo administradores y residentes pueden invitar usuarios.");
-      return;
-    }
-    handleOpenInviteModal();
-  }} 
-  disabled={!canInviteUsers() || isOffline}
-  style={[styles.inviteButton, (!canInviteUsers() || isOffline) && { opacity: 0.5 }]}
->
+              
+              <TouchableOpacity onPress={handleOpenInviteModal} style={[styles.inviteButton, (profile?.role === 'oficina' || isOffline) && { opacity: 0.5 }]}>
                 <Feather name="user-plus" size={16} color="#2563EB" />
                 <Text style={styles.inviteButtonText}>Invitar</Text>
               </TouchableOpacity>
             </View>
+
             <View style={styles.datesContainer}>
-              <View style={styles.dateBadge}>
-                <Feather name="calendar" size={12} color={Colors.primary} />
-                <Text style={styles.dateText}>Inicio: {project?.start_date || "--/--/--"}</Text>
-              </View>
-              <View style={styles.dateBadge}>
-                <Feather name="flag" size={12} color="#DC2626" />
-                <Text style={[styles.dateText, { color: '#DC2626' }]}>Entrega: {project?.end_date || "--/--/--"}</Text>
-              </View>
+              <View style={styles.dateBadge}><Feather name="calendar" size={12} color={Colors.primary} /><Text style={styles.dateText}>Inicio: {project?.start_date || "--/--/--"}</Text></View>
+              <View style={styles.dateBadge}><Feather name="flag" size={12} color="#DC2626" /><Text style={[styles.dateText, { color: '#DC2626' }]}>Entrega: {project?.end_date || "--/--/--"}</Text></View>
             </View>
           </View>
         </View>
@@ -299,7 +201,7 @@ const modules = getAccessibleModules();
             {notifications.length > 0 ? notifications.map((n, i) => <NotificationItem key={i} {...n} />) : <Text style={styles.emptyText}>No hay notificaciones recientes.</Text>}
           </View>
 
-          <Text style={styles.sectionTitle}>Módulos de Control</Text>
+          <Text style={styles.sectionTitle}>Módulos Operativos</Text>
           <View style={styles.grid}>
             {modules.map((m, i) => (
               <TouchableOpacity key={i} style={styles.card} onPress={() => { if (m.route) router.push(m.route as any); }}>
@@ -328,7 +230,7 @@ const modules = getAccessibleModules();
             {project?.invite_code && (
               <TouchableOpacity style={styles.shareButton} onPress={handleShareCode}>
                 <Feather name="share-2" size={18} color="#FFF" />
-                <Text style={styles.shareButtonText}>Enviar por mensaje</Text>
+                <Text style={styles.shareButtonText}>Enviar por WhatsApp</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -347,17 +249,17 @@ const styles = StyleSheet.create({
   projectCard: { backgroundColor: '#FFF', padding: 20, borderRadius: 20, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1 },
   projectTitle: { fontSize: 16, fontWeight: 'bold', color: Colors.text, marginBottom: 4 },
   projectSub: { fontSize: 12, color: Colors.textSub, marginTop: 2 },
-  inviteButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: '#BFDBFE' },
-  inviteButtonText: { color: '#2563EB', fontSize: 12, fontWeight: 'bold', marginLeft: 4 },
-  datesContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, borderTopWidth: 1, borderTopColor: '#F0F0F0', paddingTop: 10 },
-  dateBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8F9FA', padding: 6, borderRadius: 8 },
-  dateText: { fontSize: 11, fontWeight: '600', color: '#666', marginLeft: 5 },
+  inviteButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: '#BFDBFE' },
+  inviteButtonText: { color: '#2563EB', fontSize: 12, fontWeight: 'bold', marginLeft: 6 },
+  datesContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 15 },
+  dateBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 6, borderRadius: 8 },
+  dateText: { fontSize: 11, fontWeight: '600', color: '#64748B', marginLeft: 5 },
   body: { padding: 24 },
   emptyText: { color: Colors.textSub, fontSize: 13, marginBottom: 15 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, color: Colors.text },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12 },
-  card: { width: '47%', backgroundColor: '#FFF', padding: 20, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: '#EEE' },
-  cardText: { marginTop: 10, fontWeight: '600', color: Colors.text },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', gap: 12 },
+  card: { width: '48%', backgroundColor: '#FFF', padding: 20, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: '#F1F5F9', elevation: 1 },
+  cardText: { marginTop: 10, fontWeight: '600', color: Colors.text, fontSize: 13, textAlign: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { width: '100%', backgroundColor: '#FFF', borderRadius: 24, padding: 25, alignItems: 'center' },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#111827' },
@@ -368,25 +270,6 @@ const styles = StyleSheet.create({
   codeText: { fontSize: 24, fontWeight: '900', color: '#111827', letterSpacing: 5 },
   shareButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2563EB', paddingVertical: 14, paddingHorizontal: 25, borderRadius: 14, marginTop: 25, width: '100%', justifyContent: 'center' },
   shareButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 15, marginLeft: 10 },
-  syncBanner: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
-    backgroundColor: '#059669',
-    padding: 12,
-    borderRadius: 12,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-  },
-  syncText: {
-    color: '#FFF',
-    fontWeight: 'bold',
-    marginLeft: 8
-  }
+  syncBanner: { position: 'absolute', bottom: 20, left: 20, right: 20, backgroundColor: '#059669', padding: 12, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', elevation: 5, zIndex: 100 },
+  syncText: { color: '#FFF', fontWeight: 'bold', marginLeft: 8 }
 });
