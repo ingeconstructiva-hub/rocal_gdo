@@ -199,7 +199,7 @@ export default function BitacoraScreen() {
       <ScrollView style={styles.body} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
         
         <View style={styles.chartCard}>
-          <Text style={styles.sectionTitle}>ACTIVIDAD POR CATEGORÍA</Text>
+          <Text style={styles.sectionTitle}>ACTIVIDAD POR CONCEPTO</Text>
           {categoryStats.length === 0 ? (
             <Text style={styles.emptyStateText}>Registra tu primera nota para ver la actividad.</Text>
           ) : (

@@ -49,7 +49,7 @@ export default function GastosHubScreen() {
       roles: ['admin', 'oficina'] // 🔒 Oculto para Residentes
     },
     {
-      title: 'Análisis de Costos',
+      title: 'Análisis de Gastos',
       sub: 'Rentabilidad, gráficas y balance general', // Texto mejorado
       type: 'material-community',
       icon: 'chart-line', 

@@ -205,7 +205,7 @@ export function LogForm() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Categoría</Text>
+            <Text style={styles.label}>Concepto *</Text>
             <View style={styles.categoryContainer}>
               {categoriesList.map((cat) => {
                 const isDefault = defaultCategories.includes(cat);
@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
   thumbnailImage: { width: 100, height: 140, borderRadius: 10, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },
   removeBtn: { position: 'absolute', top: -8, right: -8, backgroundColor: '#DC2626', borderRadius: 12, padding: 4 },
   inputGroup: { backgroundColor: '#FFF', borderRadius: 16, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: '#F3F4F6' },
-  label: { fontSize: 14, color: '#9CA3AF', marginBottom: 10, fontWeight: "bold" },
+  label: { fontSize: 14, color: '#6B7280', marginBottom: 10, fontWeight: "bold" },
   textArea: { height: 100, textAlignVertical: 'top', fontSize: 16 },
   categoryContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   categoryBadge: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },

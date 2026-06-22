@@ -163,7 +163,7 @@ export const generarPlantillaBitacora = async (logs: any[], isOffline: boolean =
 
         <div class="header-container">
             <div>
-                <div class="company-title">ROCAL Móvil</div>
+                <div class="company-title">ROCAL</div>
                 <div class="report-title">Bitácora de Obra y Avances</div>
             </div>
             <div class="project-info">

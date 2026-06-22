@@ -6,8 +6,9 @@ import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import SummaryCard from '../../components/SummaryCard';
 import { useProject } from '../../context/ProjectContext';
-import { useUser } from '../../context/UserContext'; // 🧠 Importamos el motor de roles
+import { useUser } from '../../context/UserContext';
 import { supabase } from '../../lib/supabase';
 import { generarPlantillaNomina } from '../utils/pdfNomina';
 
@@ -20,6 +21,7 @@ interface WorkerState {
   extraHours: string;
   discount: string;
   reason: string;
+  categoria: string;
 }
 
 const DAYS = ['L', 'M', 'M', 'J', 'V', 'S'];
@@ -27,27 +29,29 @@ const DAYS = ['L', 'M', 'M', 'J', 'V', 'S'];
 export default function ListaScreen() {
   const router = useRouter();
   const { activeProject, isOffline } = useProject();
-  const { profile } = useUser(); // 🧠 Extraemos el perfil
+  const { profile } = useUser();
 
-  // 🔒 Validadores de Permisos
   const isFinancialRole = profile?.role === 'admin' || profile?.role === 'oficina';
 
-  const [workers, setWorkers] = useState<WorkerState[]>([]);
+  const [allWorkers, setAllWorkers] = useState<WorkerState[]>([]); 
+  const [activeCategory, setActiveCategory] = useState<'obrero' | 'tecnico'>('obrero'); 
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   
-  // MODAL TRABAJADOR NUEVO
+  const displayedWorkers = allWorkers.filter(w => w.categoria === activeCategory);
+
+  const nominaBase = displayedWorkers.reduce((sum, w) => sum + (Number(w.weekly_salary) || 0), 0);
+  const proyeccionFinal = displayedWorkers.reduce((sum, w) => sum + calculateFinalTotal(w), 0);
+
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('');
   const [newSalary, setNewSalary] = useState('');
 
-  // 🕒 CONJUNTO DE ESTADOS PARA ACCIONES INTERNAS
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
   const [isExtrasModalOpen, setIsExtrasModalOpen] = useState(false);
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
 
-  // Campos temporales para los modales de edición
   const [tempExtras, setTempExtras] = useState('0');
   const [tempDiscount, setTempDiscount] = useState('0');
   const [tempReason, setTempReason] = useState('');
@@ -58,15 +62,14 @@ export default function ListaScreen() {
     }
   }, [activeProject]);
 
+  // Autoguardado silencioso cada 2 segundos tras un cambio
   useEffect(() => {
-    if (loading || workers.length === 0) return;
-    
+    if (loading || allWorkers.length === 0) return;
     const autoSaveTimer = setTimeout(() => {
       handleSavePayroll(true); 
     }, 2000);
-    
     return () => clearTimeout(autoSaveTimer);
-  }, [workers]);
+  }, [allWorkers]);
 
   const fetchWorkers = async () => {
     setLoading(true);
@@ -91,10 +94,11 @@ export default function ListaScreen() {
         attendance: [true, true, true, true, true, true],
         extraHours: '0',
         discount: '0',
-        reason: ''
+        reason: '',
+        categoria: w.categoria || 'obrero'
       }));
 
-      setWorkers(initialUI);
+      setAllWorkers(initialUI);
     } catch (e) {
       console.log(e);
     } finally {
@@ -103,7 +107,7 @@ export default function ListaScreen() {
   };
 
   const toggleAttendance = (workerId: string, dayIdx: number) => {
-    setWorkers(prev => prev.map(w => {
+    setAllWorkers(prev => prev.map(w => {
       if (w.id === workerId) {
         const newAtt = [...w.attendance];
         newAtt[dayIdx] = !newAtt[dayIdx];
@@ -122,13 +126,14 @@ export default function ListaScreen() {
         role: newRole,
         weekly_salary: Number(newSalary),
         project_id: activeProject?.id,
+        categoria: activeCategory,
         is_active: true
       }]).select();
 
       if (error) throw error;
       
       const nw = data[0];
-      setWorkers(prev => [...prev, {
+      setAllWorkers(prev => [...prev, {
         id: nw.id,
         name: nw.name,
         role: nw.role,
@@ -136,7 +141,8 @@ export default function ListaScreen() {
         attendance: [true, true, true, true, true, true],
         extraHours: '0',
         discount: '0',
-        reason: ''
+        reason: '',
+        categoria: nw.categoria
       }]);
       setIsModalVisible(false);
       setNewName(''); setNewRole(''); setNewSalary('');
@@ -154,7 +160,7 @@ export default function ListaScreen() {
   };
 
   const saveExtrasChanges = () => {
-    setWorkers(prev => prev.map(w => w.id === selectedWorkerId ? { ...w, extraHours: tempExtras || '0' } : w));
+    setAllWorkers(prev => prev.map(w => w.id === selectedWorkerId ? { ...w, extraHours: tempExtras || '0' } : w));
     setIsExtrasModalOpen(false);
     setSelectedWorkerId(null);
   };
@@ -167,71 +173,84 @@ export default function ListaScreen() {
   };
 
   const saveDiscountChanges = () => {
-    setWorkers(prev => prev.map(w => w.id === selectedWorkerId ? { ...w, discount: tempDiscount || '0', reason: tempReason } : w));
+    setAllWorkers(prev => prev.map(w => w.id === selectedWorkerId ? { ...w, discount: tempDiscount || '0', reason: tempReason } : w));
     setIsDiscountModalOpen(false);
     setSelectedWorkerId(null);
   };
 
-  const calculateFinalTotal = (w: WorkerState) => {
+  function calculateFinalTotal(w: WorkerState) {
     const daily = w.weekly_salary / 6;
     const daysPresent = w.attendance.filter(Boolean).length;
     const extraH = Number(w.extraHours || 0);
     const disc = Number(w.discount || 0);
     const hourlyRate = (daily / 8) * 2; 
-    
     return (daily * daysPresent) + (extraH * hourlyRate) - disc;
-  };
+  }
 
+  // ☁️ FUNCIÓN MÁGICA: Empaqueta y sube los datos a Supabase
   const handleSavePayroll = async (isSilent = false) => {
     if (!isSilent) setIsSaving(true);
     try {
       const today = new Date();
       const weekStart = today.toISOString().split('T')[0];
 
-      const recordsToSave = workers.map(w => {
+      const recordsToSave = allWorkers.map(w => {
         const daysAbsent = 6 - w.attendance.filter(Boolean).length;
         return { 
           worker_id: w.id, 
           project_id: activeProject?.id,
+          residente_id: profile?.id,
           week_start: weekStart, 
           days_absent: daysAbsent, 
           deduction_amount: Number(w.discount || 0), 
-          deduction_reason: w.reason, 
-          final_salary: calculateFinalTotal(w) 
+          final_salary: calculateFinalTotal(w),
+          // 🟢 ESTOS SON LOS CAMPOS QUE LA WEB ESTÁ ESPERANDO:
+          attendance: JSON.stringify(w.attendance), 
+          reason: w.reason 
         };
       }).filter(r => !r.worker_id.startsWith('temp_'));
 
       if (isOffline) {
         await AsyncStorage.setItem(`@nomina_cache_${activeProject?.id}`, JSON.stringify(recordsToSave));
+        if (!isSilent) Alert.alert("Guardado Local", "Estás sin conexión. Se sincronizará al tener internet.");
         return;
       }
-      await supabase.from('payroll_records').upsert(recordsToSave, { onConflict: 'worker_id,week_start' });
-    } catch (e) {
+      
+      const { error } = await supabase.from('payroll_records').upsert(recordsToSave, { onConflict: 'worker_id,week_start' });
+      if (error) throw error;
+
+      // Si el usuario apretó el botón manual, le damos feedback visual
+      if (!isSilent) {
+        Alert.alert("¡Éxito!", "La lista de asistencia y nómina ha sido enviada a la oficina de forma segura.");
+      }
+
+    } catch (e: any) {
       console.log(e);
+      if (!isSilent) Alert.alert("Error de sincronización", e.message);
     } finally {
       if (!isSilent) setIsSaving(false);
     }
   };
 
   const handleGeneratePDF = async () => {
-    if (workers.length === 0) return;
+    if (displayedWorkers.length === 0) return;
     try {
       const weekLabel = new Date().toLocaleDateString('es-MX');
-      const htmlContent = generarPlantillaNomina(workers, weekLabel);
+      const htmlContent = generarPlantillaNomina(displayedWorkers, weekLabel);
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
       await Sharing.shareAsync(uri, { mimeType: 'application/pdf' });
     } catch (error: any) { Alert.alert("Error PDF", error.message); }
   };
 
   const handleExportarExcel = async () => {
-    if (workers.length === 0) { 
-      Alert.alert("Sin datos", "No hay trabajadores en la lista."); 
+    if (displayedWorkers.length === 0) { 
+      Alert.alert("Sin datos", "No hay trabajadores en la lista activa."); 
       return; 
     }
     try {
       const encabezados = ["Trabajador", "Puesto", "Sueldo Base Semanal ($)", "Dias Asistidos", "Horas Extra (Hrs)", "Descuento Aplicado ($)", "Motivo/Nota", "Total a Pagar ($)\n"];
       
-      const filas = workers.map(w => {
+      const filas = displayedWorkers.map(w => {
         const asistencias = w.attendance.filter(Boolean).length;
         const total = calculateFinalTotal(w);
         const notaLimpia = w.reason ? w.reason.replace(/,/g, ' ') : ''; 
@@ -240,7 +259,7 @@ export default function ListaScreen() {
       }).join("\n");
 
       const contenidoCSV = "\uFEFF" + encabezados.join(",") + filas;
-      const nombreArchivo = `Raya_${activeProject?.name?.replace(/\s+/g, '_') || 'Obra'}.csv`;
+      const nombreArchivo = `Raya_${activeCategory}_${activeProject?.name?.replace(/\s+/g, '_') || 'Obra'}.csv`;
       
       const fsModulo = FileSystem as any;
       const fileUri = `${fsModulo.documentDirectory}${nombreArchivo}`;
@@ -259,7 +278,7 @@ export default function ListaScreen() {
           <TouchableOpacity onPress={() => router.back()}>
             <Feather name="chevron-left" size={28} color="#FFF" />
           </TouchableOpacity>
-          <Text style={styles.headerSubtitle}>GESTIÓN DE PERSONAL</Text>
+          <Text style={styles.headerSubtitle}>ASISTENCIA Y NÓMINA</Text>
           <TouchableOpacity onPress={fetchWorkers}>
             <Feather name="refresh-cw" size={20} color="#FFF" />
           </TouchableOpacity>
@@ -267,13 +286,33 @@ export default function ListaScreen() {
         <Text style={styles.headerTitle}>{activeProject?.name || "Obra"}</Text>
       </View>
 
+      <View style={styles.tabContainer}>
+        <TouchableOpacity style={[styles.tabBtn, activeCategory === 'obrero' && styles.tabBtnActive]} onPress={() => setActiveCategory('obrero')}>
+          <Text style={[styles.tabText, activeCategory === 'obrero' && styles.tabTextActive]}>Mano de Obra</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tabBtn, activeCategory === 'tecnico' && styles.tabBtnActive]} onPress={() => setActiveCategory('tecnico')}>
+          <Text style={[styles.tabText, activeCategory === 'tecnico' && styles.tabTextActive]}>Personal Técnico</Text>
+        </TouchableOpacity>
+      </View>
+
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{flex: 1}}>
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           
+          <View style={{ marginBottom: 10 }}>
+            <SummaryCard 
+              labelLeft="Nómina Base" 
+              valueLeft={nominaBase} 
+              labelRight="Proyección Final" 
+              valueRight={proyeccionFinal} 
+              colorRight="#10B981" 
+            />
+          </View>
+
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Pase de Lista</Text>
+            <Text style={styles.sectionTitle}>
+              Lista de {activeCategory === 'obrero' ? 'Obreros' : 'Técnicos'}
+            </Text>
             
-            {/* 🔒 Los botones de exportar y cerrar nómina solo los ve Admin u Oficina */}
             {isFinancialRole && (
               <View style={styles.exportButtonsContainer}>
                 <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#DC2626'}]} onPress={handleGeneratePDF}>
@@ -290,20 +329,22 @@ export default function ListaScreen() {
 
           {loading ? (
             <ActivityIndicator size="large" color="#2563EB" style={{marginTop: 50}} />
+          ) : displayedWorkers.length === 0 ? (
+            <Text style={{textAlign: 'center', color: '#64748B', marginTop: 40}}>
+              No hay {activeCategory === 'obrero' ? 'obreros' : 'técnicos'} registrados.
+            </Text>
           ) : (
-            workers.map((worker) => (
+            displayedWorkers.map((worker) => (
               <View key={worker.id} style={styles.workerCard}>
                 <View style={styles.cardHeader}>
                   <View style={{flex: 1}}>
                     <Text style={styles.workerName}>{worker.name}</Text>
                     <Text style={styles.workerRole}>
                       {worker.role} 
-                      {/* 🔒 Solo muestra el sueldo diario a roles financieros */}
                       {isFinancialRole && <Text style={{color: '#64748B', fontWeight: 'normal'}}> • S. Día: ${(worker.weekly_salary / 6).toFixed(0)}</Text>}
                     </Text>
                   </View>
                   
-                  {/* 🔒 Oculta el sueldo base al Residente */}
                   {isFinancialRole && (
                     <View style={{alignItems: 'flex-end'}}>
                       <Text style={styles.salaryLabel}>Base Semanal</Text>
@@ -312,7 +353,6 @@ export default function ListaScreen() {
                   )}
                 </View>
 
-                {/* Asistencia Horizontal (Visible para todos) */}
                 <View style={styles.attendanceRow}>
                   {DAYS.map((day, idx) => (
                     <TouchableOpacity 
@@ -331,7 +371,6 @@ export default function ListaScreen() {
                 </View>
 
                 <View style={styles.actionsContainerRow}>
-                  {/* Botón 1: Horas Extra (Visible para Residente para que reporte tiempo extra) */}
                   <TouchableOpacity style={styles.actionCardBtn} onPress={() => openExtrasModal(worker)}>
                     <View style={styles.actionBtnIconBox}>
                       <Feather name="clock" size={16} color="#2563EB" />
@@ -342,7 +381,6 @@ export default function ListaScreen() {
                     </View>
                   </TouchableOpacity>
 
-                  {/* 🔒 Botón 2: Descuento / Nota (Solo visible para Admin/Oficina por manejar dinero) */}
                   {isFinancialRole ? (
                     <TouchableOpacity style={[styles.actionCardBtn, {marginLeft: 10}]} onPress={() => openDiscountModal(worker)}>
                       <View style={[styles.actionBtnIconBox, {backgroundColor: '#FEF2F2'}]}>
@@ -356,12 +394,10 @@ export default function ListaScreen() {
                       </View>
                     </TouchableOpacity>
                   ) : (
-                    /* Si es Residente, mostramos un espacio vacío o un aviso visual que su tarea está completada */
                     <View style={[styles.actionCardBtn, {marginLeft: 10, borderColor: 'transparent', backgroundColor: 'transparent'}]} />
                   )}
                 </View>
 
-                {/* 🔒 Fila de Sumatoria Total de la Tarjeta (Oculta al Residente) */}
                 {isFinancialRole && (
                   <View style={styles.totalRow}>
                     <Text style={styles.totalLabel}>A PAGAR:</Text>
@@ -371,10 +407,28 @@ export default function ListaScreen() {
               </View>
             ))
           )}
+
+          {/* ☁️ BOTÓN EXPLÍCITO PARA SUBIR A LA NUBE */}
+          {!loading && displayedWorkers.length > 0 && (
+            <TouchableOpacity 
+              style={styles.syncBtn} 
+              onPress={() => handleSavePayroll(false)}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <>
+                  <Feather name="upload-cloud" size={20} color="#FFF" />
+                  <Text style={styles.syncBtnText}>Guardar y Enviar a Oficina</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* 🔒 El botón para agregar trabajadores (con sueldo base) solo lo ve Admin / Oficina */}
       {isFinancialRole && (
         <View style={styles.fabContainer}>
           <TouchableOpacity style={styles.fabPrimary} onPress={() => setIsModalVisible(true)}>
@@ -383,21 +437,14 @@ export default function ListaScreen() {
         </View>
       )}
 
-      {/* 🕒 SUB-MODAL 1: COBRAR HORAS EXTRA */}
+      {/* MODALES SECUNDARIOS... */}
       <Modal visible={isExtrasModalOpen} transparent={true} animationType="fade" onRequestClose={() => setIsExtrasModalOpen(false)}>
         <View style={styles.modalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsExtrasModalOpen(false)} />
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>🕒 Asignar Horas Extra</Text>
             <Text style={styles.subModalLabel}>Ingresa la cantidad total de horas acumuladas en la semana:</Text>
-            <TextInput 
-              style={styles.modalInput} 
-              keyboardType="numeric" 
-              value={tempExtras} 
-              onChangeText={(v) => setTempExtras(v.replace(/[^0-9.]/g, ''))}
-              placeholder="Ej. 4"
-              autoFocus
-            />
+            <TextInput style={styles.modalInput} keyboardType="numeric" value={tempExtras} onChangeText={(v) => setTempExtras(v.replace(/[^0-9.]/g, ''))} placeholder="Ej. 4" autoFocus />
             <TouchableOpacity style={styles.saveBtn} onPress={saveExtrasChanges}>
               <Text style={styles.saveBtnText}>Aplicar Horas</Text>
             </TouchableOpacity>
@@ -405,32 +452,16 @@ export default function ListaScreen() {
         </View>
       </Modal>
 
-      {/* 💸 SUB-MODAL 2: DESCUENTO + MOTIVO EN CONJUNTO */}
       {isFinancialRole && (
         <Modal visible={isDiscountModalOpen} transparent={true} animationType="fade" onRequestClose={() => setIsDiscountModalOpen(false)}>
           <View style={styles.modalOverlay}>
             <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsDiscountModalOpen(false)} />
             <View style={styles.modalContent}>
               <Text style={[styles.modalTitle, {color: '#EF4444'}]}>💸 Deducción y Observación</Text>
-              
               <Text style={styles.subModalLabel}>Monto del Descuento ($):</Text>
-              <TextInput 
-                style={styles.modalInput} 
-                keyboardType="numeric" 
-                value={tempDiscount} 
-                onChangeText={(v) => setTempDiscount(v.replace(/[^0-9.]/g, ''))} 
-                placeholder="Ej. 150"
-              />
-
+              <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" keyboardType="numeric" value={tempDiscount} onChangeText={(v) => setTempDiscount(v.replace(/[^0-9.]/g, ''))} placeholder="Ej. 150" />
               <Text style={styles.subModalLabel}>Motivo o Nota justificante:</Text>
-              <TextInput 
-                style={[styles.modalInput, {height: 50, textAlignVertical: 'top'}]} 
-                value={tempReason} 
-                onChangeText={setTempReason} 
-                placeholder="Ej. Retardo el día miércoles / Faltante de equipo"
-                multiline
-              />
-
+              <TextInput style={[styles.modalInput, {height: 50, textAlignVertical: 'top'}]} value={tempReason} onChangeText={setTempReason} placeholder="Ej. Retardo / Faltante de equipo" multiline />
               <TouchableOpacity style={[styles.saveBtn, {backgroundColor: '#EF4444'}]} onPress={saveDiscountChanges}>
                 <Text style={styles.saveBtnText}>Aplicar Descuento y Nota</Text>
               </TouchableOpacity>
@@ -439,15 +470,14 @@ export default function ListaScreen() {
         </Modal>
       )}
 
-      {/* MODAL: TRABAJADOR NUEVO */}
       <Modal visible={isModalVisible} animationType="slide" transparent={true} onRequestClose={() => setIsModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsModalVisible(false)} />
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Nuevo Trabajador</Text>
-            <TextInput style={styles.modalInput} placeholder="Nombre completo" value={newName} onChangeText={setNewName} />
-            <TextInput style={styles.modalInput} placeholder="Puesto (Maestro, Ayudante...)" value={newRole} onChangeText={setNewRole} />
-            <TextInput style={styles.modalInput} placeholder="Sueldo Semanal $" keyboardType="numeric" value={newSalary} onChangeText={setNewSalary} />
+            <Text style={styles.modalTitle}>Nuevo {activeCategory === 'obrero' ? 'Trabajador' : 'Técnico'}</Text>
+            <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="Nombre completo" value={newName} onChangeText={setNewName} />
+            <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="Puesto (Maestro, Ayudante, Topógrafo...)" value={newRole} onChangeText={setNewRole} />
+            <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="Sueldo Semanal $" keyboardType="numeric" value={newSalary} onChangeText={setNewSalary} />
             <TouchableOpacity style={styles.saveBtn} onPress={handleAddWorker} disabled={isSaving}>
               {isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>Registrar en Obra</Text>}
             </TouchableOpacity>
@@ -464,6 +494,13 @@ const styles = StyleSheet.create({
   headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerSubtitle: { color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: 'bold', letterSpacing: 1 },
   headerTitle: { color: '#FFF', fontSize: 22, fontWeight: 'bold', marginTop: 8 },
+  
+  tabContainer: { flexDirection: 'row', backgroundColor: '#E2E8F0', borderRadius: 12, padding: 4, marginTop: 15, marginHorizontal: 15 },
+  tabBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+  tabBtnActive: { backgroundColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
+  tabText: { fontSize: 13, fontWeight: 'bold', color: '#64748B' },
+  tabTextActive: { color: '#2563EB' },
+
   body: { padding: 15, paddingBottom: 150 },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#334155' },
@@ -488,11 +525,13 @@ const styles = StyleSheet.create({
   actionBtnLabel: { fontSize: 10, fontWeight: 'bold', color: '#475569' },
   actionBtnValue: { fontSize: 12, fontWeight: 'bold', color: '#0F172A', marginTop: 1 },
 
-  subModalLabel: { fontSize: 12, fontWeight: '700', color: '#475569', marginTop: 10, marginBottom: 5 },
-
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, alignItems: 'center', paddingTop: 10, borderTopWidth: 1, borderTopColor: '#F1F5F9' },
   totalLabel: { fontSize: 12, fontWeight: 'bold', color: '#64748B' },
   totalValue: { fontSize: 20, fontWeight: 'bold', color: '#059669' },
+
+  // ☁️ Estilos del nuevo botón de sincronización manual
+  syncBtn: { backgroundColor: '#1E293B', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 16, borderRadius: 16, marginTop: 10, marginBottom: 40, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  syncBtnText: { color: '#FFF', fontSize: 15, fontWeight: 'bold', marginLeft: 10 },
 
   fabContainer: { position: 'absolute', bottom: 30, right: 25 },
   fabPrimary: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', elevation: 5 },
@@ -500,7 +539,8 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 20 },
   modalContent: { backgroundColor: '#FFF', borderRadius: 24, padding: 22 },
   modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#1E293B', marginBottom: 15 },
-  modalInput: { backgroundColor: '#F1F5F9', borderRadius: 10, padding: 12, fontSize: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0', color: '#0F172A' },
+  modalInput: { backgroundColor: '#F1F5F9', borderRadius: 10, padding: 12, fontSize: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0', color: '#1E293B' },
   saveBtn: { backgroundColor: '#2563EB', padding: 14, borderRadius: 10, alignItems: 'center', marginTop: 10 },
-  saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 }
+  saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
+  subModalLabel: { fontSize: 12, fontWeight: '700', color: '#475569', marginTop: 10, marginBottom: 5 },
 });

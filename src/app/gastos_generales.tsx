@@ -4,12 +4,14 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
+import SummaryCard from '../components/SummaryCard'; // 🧠 Agregamos el Card Resumen
 import { useProject } from '../context/ProjectContext';
-import { useUser } from '../context/UserContext'; // 🧠 Importamos el motor de roles
+import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
+import { generarPlantillaGastos } from './utils/pdfGastosGen';
 
 interface GastoEstructural {
   id: string;
@@ -19,13 +21,14 @@ interface GastoEstructural {
   cantidad?: number | null;
   unidad?: string | null;
   proveedor?: string | null;
+  estado_pago: 'pagado' | 'credito'; // 🆕 Nuevo campo
   fecha: string;
 }
 
 export default function GastosGeneralesScreen() {
   const router = useRouter();
   const { activeProject, isOffline } = useProject();
-  const { profile } = useUser(); // 🧠 Extraemos el rol
+  const { profile } = useUser(); 
   
   const [gastos, setGastos] = useState<GastoEstructural[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,11 +36,19 @@ export default function GastosGeneralesScreen() {
   // 🔒 Validadores de Permisos
   const isAdmin = profile?.role === 'admin';
 
+  // Filtros
+  const [filtroCategoria, setFiltroCategoria] = useState<'todos' | 'material' | 'administrativo' | 'burocrata' | 'asesoria'>('todos');
+
+  // Modal Detalles y Edición
+  const [gastoSeleccionado, setGastoSeleccionado] = useState<GastoEstructural | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+
   // Estados del Formulario Dinámico
-  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [isFormModalVisible, setIsFormModalVisible] = useState(false);
   const [concepto, setConcepto] = useState('');
   const [monto, setMonto] = useState('');
   const [categoriaForm, setCategoriaForm] = useState<'material' | 'administrativo' | 'burocrata' | 'asesoria'>('material');
+  const [estadoPagoForm, setEstadoPagoForm] = useState<'pagado' | 'credito'>('pagado'); // 🆕 Estado de Pago
   
   const [cantidad, setCantidad] = useState('');
   const [unidad, setUnidad] = useState('');
@@ -91,6 +102,20 @@ export default function GastosGeneralesScreen() {
     }
   };
 
+  const iniciarEdicion = (gasto: GastoEstructural) => {
+    setGastoSeleccionado(null);
+    setConcepto(gasto.concepto);
+    setMonto(gasto.monto.toString());
+    setCategoriaForm(gasto.categoria);
+    setEstadoPagoForm(gasto.estado_pago || 'pagado');
+    setCantidad(gasto.cantidad?.toString() || '');
+    setUnidad(gasto.unidad || '');
+    setProveedor(gasto.proveedor || '');
+    
+    setIsEditing(true);
+    setIsFormModalVisible(true);
+  };
+
   const handleGuardarGasto = async () => {
     if (!concepto.trim() || !monto.trim()) {
       Alert.alert("Campos incompletos", "Por favor ingresa la descripción y el monto del gasto.");
@@ -100,33 +125,39 @@ export default function GastosGeneralesScreen() {
     const pid = activeProject?.id;
     if (!pid) return;
 
+    if (isOffline) {
+      Alert.alert("Modo Offline", "Conéctate a internet para registrar o editar conceptos.");
+      return;
+    }
+
     setIsSaving(true);
     
-    const nuevoGasto = {
+    const datosGasto = {
       project_id: pid,
       concepto: concepto.trim(),
       monto: Number(monto),
       categoria: categoriaForm,
+      estado_pago: estadoPagoForm,
       cantidad: categoriaForm === 'material' && cantidad ? Number(cantidad) : null,
       unidad: categoriaForm === 'material' && unidad.trim() ? unidad.trim() : null,
       proveedor: proveedor.trim() ? proveedor.trim() : null,
       is_active: true,
-      fecha: new Date().toISOString()
+      fecha: isEditing && gastoSeleccionado ? gastoSeleccionado.fecha : new Date().toISOString()
     };
 
     try {
-      if (isOffline) {
-        Alert.alert("Modo Offline", "Conéctate a internet para registrar nuevos conceptos estructurales.");
-        setIsSaving(false);
-        return;
+      if (isEditing && gastoSeleccionado) {
+        const { error } = await supabase.from('gastos_generales').update(datosGasto).eq('id', gastoSeleccionado.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('gastos_generales').insert([datosGasto]);
+        if (error) throw error;
       }
 
-      const { error } = await supabase.from('gastos_generales').insert([nuevoGasto]);
-      if (error) throw error;
-
-      setIsModalVisible(false);
+      setIsFormModalVisible(false);
       limpiarFormulario();
       fetchGastos();
+      Alert.alert("¡Éxito!", isEditing ? "Gasto actualizado correctamente." : "Gasto registrado correctamente.");
     } catch (error: any) {
       Alert.alert("Error", error.message);
     } finally {
@@ -140,6 +171,9 @@ export default function GastosGeneralesScreen() {
     setCantidad('');
     setUnidad('');
     setProveedor('');
+    setEstadoPagoForm('pagado');
+    setIsEditing(false);
+    setGastoSeleccionado(null);
   };
 
   const handleEliminarGasto = async (id: string, nombre: string) => {
@@ -148,7 +182,7 @@ export default function GastosGeneralesScreen() {
       return;
     }
 
-    Alert.alert("Eliminar gasto", `¿Quitar "${nombre}" de la lista?`, [
+    Alert.alert("Eliminar gasto", `¿Quitar "${nombre}" de la lista permanentemente?`, [
       { text: "Cancelar", style: "cancel" },
       {
         text: "Eliminar",
@@ -158,6 +192,7 @@ export default function GastosGeneralesScreen() {
             const { error } = await supabase.from('gastos_generales').update({ is_active: false }).eq('id', id);
             if (error) throw error;
             setGastos(prev => prev.filter(g => g.id !== id));
+            setGastoSeleccionado(null);
           } catch (e: any) {
             Alert.alert("Error", e.message);
           }
@@ -167,18 +202,20 @@ export default function GastosGeneralesScreen() {
   };
 
   const handleExportarExcel = async () => {
-    if (gastos.length === 0) { Alert.alert("Sin datos", "No hay registros."); return; }
+    const listadoExportar = filtroCategoria === 'todos' ? gastos : gastosFiltrados;
+    if (listadoExportar.length === 0) { Alert.alert("Sin datos", "No hay registros en esta categoría."); return; }
     try {
-      const encabezados = ["Fecha", "Categoria", "Concepto", "Cantidad", "Unidad", "Proveedor/Origen", "Monto ($)\n"];
-      const filas = gastos.map(g => {
+      const encabezados = ["Fecha", "Categoria", "Concepto", "Cantidad", "Unidad", "Proveedor/Origen", "Estado de Pago", "Monto ($)\n"];
+      const filas = listadoExportar.map(g => {
         const fecha = new Date(g.fecha).toLocaleDateString('es-MX');
         const conceptoLimpio = g.concepto.replace(/,/g, ' ');
         const provLimpio = g.proveedor ? g.proveedor.replace(/,/g, ' ') : '';
-        return `${fecha},"${g.categoria.toUpperCase()}","${conceptoLimpio}",${g.cantidad || ''},"${g.unidad || ''}","${provLimpio}",${g.monto}`;
+        const estado = g.estado_pago === 'credito' ? 'DEUDA / CRÉDITO' : 'PAGADO';
+        return `${fecha},"${g.categoria.toUpperCase()}","${conceptoLimpio}",${g.cantidad || ''},"${g.unidad || ''}","${provLimpio}","${estado}",${g.monto}`;
       }).join("\n");
 
       const contenidoCSV = "\uFEFF" + encabezados.join(",") + filas;
-      const nombreArchivo = `Bitacora_Gastos_${activeProject?.name?.replace(/\s+/g, '_') || 'Obra'}.csv`;
+      const nombreArchivo = `Gastos_${filtroCategoria}_${activeProject?.name?.replace(/\s+/g, '_') || 'Obra'}.csv`;
 
       const fsModulo = FileSystem as any;
       const fileUri = `${fsModulo.documentDirectory}${nombreArchivo}`;
@@ -188,57 +225,26 @@ export default function GastosGeneralesScreen() {
   };
 
   const handleExportarPDF = async () => {
-    if (gastos.length === 0) { Alert.alert("Sin datos", "No hay registros."); return; }
+    const listadoExportar = filtroCategoria === 'todos' ? gastos : gastosFiltrados;
+    if (listadoExportar.length === 0) { Alert.alert("Sin datos", "No hay registros."); return; }
+    
     setIsExportingPDF(true);
     try {
-      const total = gastos.reduce((sum, g) => sum + g.monto, 0);
-      const htmlContent = `
-        <html>
-          <head>
-            <style>
-              body { font-family: 'Helvetica', sans-serif; padding: 25px; color: #1E293B; }
-              h1 { color: #2563EB; font-size: 22px; margin-bottom: 5px; }
-              p { margin: 0 0 20px 0; color: #64748B; font-size: 13px; }
-              table { width: 100%; border-collapse: collapse; }
-              th, td { border: 1px solid #E2E8F0; padding: 10px; text-align: left; font-size: 12px; }
-              th { background-color: #F8FAFC; color: #334155; text-transform: uppercase; font-size: 10px; }
-              .monto { text-align: right; font-weight: bold; }
-              .total-row { background-color: #EFF6FF; font-weight: bold; color: #1D4ED8; }
-            </style>
-          </head>
-          <body>
-            <h1>Bitácora de Gastos Directos</h1>
-            <p>Obra: ${activeProject?.name || 'Obra Sin Nombre'} | Fecha: ${new Date().toLocaleDateString('es-MX')}</p>
-            <table>
-              <tr>
-                <th>Fecha</th>
-                <th>Rubro</th>
-                <th>Concepto</th>
-                <th>Detalle Cant.</th>
-                <th>Proveedor / Tercero</th>
-                <th style="text-align: right;">Monto</th>
-              </tr>
-              ${gastos.map(g => `
-                <tr>
-                  <td>${new Date(g.fecha).toLocaleDateString('es-MX')}</td>
-                  <td>${g.categoria.toUpperCase()}</td>
-                  <td>${g.concepto}</td>
-                  <td>${g.cantidad ? `${g.cantidad} ${g.unidad}` : 'N/A'}</td>
-                  <td>${g.proveedor || 'No indicado'}</td>
-                  <td class="monto">$${g.monto.toFixed(2)}</td>
-                </tr>
-              `).join('')}
-              <tr class="total-row">
-                <td colspan="5" style="text-align: right; padding: 12px;">TOTAL ACUMULADO</td>
-                <td style="text-align: right; padding: 12px;">$${total.toFixed(2)}</td>
-              </tr>
-            </table>
-          </body>
-        </html>
-      `;
+      const htmlContent = generarPlantillaGastos(
+        activeProject?.name || 'Obra Sin Nombre',
+        totalGastado,
+        totalDeuda,
+        filtroCategoria,
+        listadoExportar
+      );
+      
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      await Sharing.shareAsync(uri, { mimeType: 'application/pdf' });
-    } catch (error: any) { Alert.alert("Error PDF", error.message); } finally { setIsExportingPDF(false); }
+      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Compartir Reporte de Gastos' });
+    } catch (error: any) { 
+      Alert.alert("Error PDF", error.message); 
+    } finally { 
+      setIsExportingPDF(false); 
+    }
   };
 
   const renderBadge = (cat: string) => {
@@ -258,9 +264,18 @@ export default function GastosGeneralesScreen() {
     return 'Proveedor de Materiales';
   };
 
+  // 🧠 CÁLCULOS PARA EL SUMMARY CARD Y FILTRADO
+  const gastosFiltrados = useMemo(() => {
+    if (filtroCategoria === 'todos') return gastos;
+    return gastos.filter(g => g.categoria === filtroCategoria);
+  }, [gastos, filtroCategoria]);
+
+  const totalGastado = gastosFiltrados.reduce((sum, g) => sum + g.monto, 0);
+  const totalDeuda = gastosFiltrados.filter(g => g.estado_pago === 'credito').reduce((sum, g) => sum + g.monto, 0);
+
   return (
     <View style={styles.container}>
-      {/* 🔵 HEADER AZUL ESTILO REFORZADO */}
+      {/* 🔵 HEADER */}
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -278,46 +293,81 @@ export default function GastosGeneralesScreen() {
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         
-        {/* BOTONES GRANDES DE EXPORTACIÓN */}
-        <View style={styles.exportContainer}>
-          <TouchableOpacity style={[styles.bigExportBtn, { backgroundColor: '#DC2626' }]} onPress={handleExportarPDF} disabled={isExportingPDF}>
-            {isExportingPDF ? <ActivityIndicator color="#FFF" /> : (
-              <>
-                <Feather name="file-text" size={20} color="#FFF" />
-                <Text style={styles.bigExportText}>Generar PDF</Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.bigExportBtn, { backgroundColor: '#10B981' }]} onPress={handleExportarExcel}>
-            <Feather name="grid" size={20} color="#FFF" />
-            <Text style={styles.bigExportText}>Generar Excel</Text>
-          </TouchableOpacity>
+        {/* 🧠 SUMMARY CARD CON TOTALES Y DEUDAS */}
+        <View style={{ marginBottom: 15 }}>
+          <SummaryCard 
+            labelLeft={`Total ${filtroCategoria === 'todos' ? 'Gastado' : filtroCategoria}`} 
+            valueLeft={totalGastado} 
+            labelRight="Por Pagar (Crédito)" 
+            valueRight={totalDeuda} 
+            colorRight="#DC2626" 
+          />
         </View>
+
+        {/* BOTONES GRANDES DE EXPORTACIÓN */}
+        {isAdmin && (
+          <View style={styles.exportContainer}>
+            <TouchableOpacity style={[styles.bigExportBtn, { backgroundColor: '#DC2626' }]} onPress={handleExportarPDF} disabled={isExportingPDF}>
+              {isExportingPDF ? <ActivityIndicator color="#FFF" /> : (
+                <>
+                  <Feather name="file-text" size={20} color="#FFF" />
+                  <Text style={styles.bigExportText}>Generar PDF</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.bigExportBtn, { backgroundColor: '#10B981' }]} onPress={handleExportarExcel}>
+              <Feather name="grid" size={20} color="#FFF" />
+              <Text style={styles.bigExportText}>Generar Excel</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Historial de Movimientos</Text>
             <View style={styles.countBadge}>
-                <Text style={styles.countText}>{gastos.length} registros</Text>
+                <Text style={styles.countText}>{gastosFiltrados.length} registros</Text>
             </View>
         </View>
 
+        {/* 📑 SUBMENÚ DE PÍLDORAS PARA FILTRAR */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterContainer}>
+          {['todos', 'material', 'administrativo', 'burocrata', 'asesoria'].map((cat) => (
+            <TouchableOpacity 
+              key={cat}
+              style={[styles.filterPill, filtroCategoria === cat && styles.filterPillActive]}
+              onPress={() => setFiltroCategoria(cat as any)}
+            >
+              <Text style={[styles.filterText, filtroCategoria === cat && styles.filterTextActive]}>
+                {cat.toUpperCase()}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
         {loading ? (
           <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 50 }} />
-        ) : gastos.length === 0 ? (
-          <Text style={styles.emptyText}>No hay gastos registrados todavía.</Text>
+        ) : gastosFiltrados.length === 0 ? (
+          <Text style={styles.emptyText}>No hay gastos registrados en esta categoría.</Text>
         ) : (
-          gastos.map((g) => (
-            <View key={g.id} style={styles.gastoCard}>
+          gastosFiltrados.map((g) => (
+            <TouchableOpacity 
+              key={g.id} 
+              style={[styles.gastoCard, g.estado_pago === 'credito' && { borderLeftWidth: 4, borderLeftColor: '#EF4444' }]}
+              activeOpacity={0.7}
+              onPress={() => setGastoSeleccionado(g)}
+            >
               <View style={{ flex: 1, paddingRight: 10 }}>
-                <Text style={styles.gastoConcepto}>{g.concepto}</Text>
+                <Text style={styles.gastoConcepto} numberOfLines={2}>{g.concepto}</Text>
                 
-                <View style={{marginTop: 4}}>
-                  {g.categoria === 'material' && g.cantidad ? (
-                    <Text style={styles.gastoDetalleTexto}>🛠️ Cantidad: {g.cantidad} {g.unidad}</Text>
-                  ) : null}
+                <View style={{marginTop: 4, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6}}>
+                  {g.estado_pago === 'credito' && (
+                    <View style={{backgroundColor: '#FEE2E2', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4}}>
+                      <Text style={{color: '#DC2626', fontSize: 9, fontWeight: 'bold'}}>POR PAGAR</Text>
+                    </View>
+                  )}
                   {g.proveedor ? (
-                    <Text style={styles.gastoDetalleTexto}>🏢 {g.categoria === 'burocrata' ? 'Dep' : g.categoria === 'asesoria' ? 'Consultor' : 'Prov'}: {g.proveedor}</Text>
+                    <Text style={styles.gastoDetalleTexto}>🏢 {g.proveedor}</Text>
                   ) : null}
                 </View>
 
@@ -330,31 +380,104 @@ export default function GastosGeneralesScreen() {
               </View>
               
               <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
-                <Text style={styles.gastoMonto}>${g.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Text>
-                
-                {/* 🔒 El botón de borrar solo lo ve el Administrador */}
-                {isAdmin && (
-                  <TouchableOpacity style={styles.deleteBtn} onPress={() => handleEliminarGasto(g.id, g.concepto)}>
-                    <Feather name="trash-2" size={16} color="#FCA5A5" />
-                  </TouchableOpacity>
-                )}
+                <Text style={[styles.gastoMonto, g.estado_pago === 'credito' && {color: '#DC2626'}]}>
+                  ${g.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                </Text>
               </View>
-            </View>
+            </TouchableOpacity>
           ))
         )}
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} onPress={() => setIsModalVisible(true)}>
+      <TouchableOpacity style={styles.fab} onPress={() => setIsFormModalVisible(true)}>
         <Feather name="plus" size={30} color="#FFF" />
       </TouchableOpacity>
 
-      {/* FORMULARIO DINÁMICO */}
-      <Modal visible={isModalVisible} animationType="slide" transparent={true} onRequestClose={() => { setIsModalVisible(false); limpiarFormulario(); }}>
+      {/* 🔍 MODAL DE DETALLES DEL GASTO */}
+      <Modal visible={!!gastoSeleccionado} animationType="fade" transparent={true} onRequestClose={() => setGastoSeleccionado(null)}>
+        <View style={styles.modalOverlayDetail}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setGastoSeleccionado(null)} />
+          <View style={styles.detailModalContent}>
+            {gastoSeleccionado && (
+              <>
+                <View style={styles.detailHeader}>
+                  <View style={styles.detailTitleBox}>
+                    <Text style={styles.detailTitleCat}>{gastoSeleccionado.categoria.toUpperCase()}</Text>
+                    <Text style={styles.detailTitleMain} numberOfLines={2}>{gastoSeleccionado.concepto}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setGastoSeleccionado(null)} style={styles.detailCloseBtn}>
+                    <Feather name="x" size={24} color="#64748B" />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <Text style={[styles.detailAmount, gastoSeleccionado.estado_pago === 'credito' && {color: '#DC2626'}]}>
+                    ${gastoSeleccionado.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </Text>
+                  
+                  <View style={styles.detailDataBox}>
+                    <View style={styles.detailRowGrid}>
+                      <View style={{flex: 1}}>
+                        <Text style={styles.detailLabel}>Estado de Pago</Text>
+                        <Text style={[styles.detailValue, {color: gastoSeleccionado.estado_pago === 'credito' ? '#DC2626' : '#10B981'}]}>
+                          {gastoSeleccionado.estado_pago === 'credito' ? 'DEUDA / CRÉDITO' : 'LIQUIDADO'}
+                        </Text>
+                      </View>
+                      <View style={{flex: 1}}>
+                        <Text style={styles.detailLabel}>Fecha de Registro</Text>
+                        <Text style={styles.detailValue}>{new Date(gastoSeleccionado.fecha).toLocaleDateString('es-MX')}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Proveedor / Emisor</Text>
+                      <Text style={styles.detailValue}>{gastoSeleccionado.proveedor || 'No especificado'}</Text>
+                    </View>
+
+                    {gastoSeleccionado.categoria === 'material' && gastoSeleccionado.cantidad && (
+                      <View style={styles.detailRowGrid}>
+                        <View style={{flex: 1}}>
+                          <Text style={styles.detailLabel}>Cantidad Comprada</Text>
+                          <Text style={styles.detailValue}>{gastoSeleccionado.cantidad} {gastoSeleccionado.unidad}</Text>
+                        </View>
+                        <View style={{flex: 1}}>
+                          <Text style={styles.detailLabel}>Precio Aprox. Unitario</Text>
+                          <Text style={styles.detailValue}>${(gastoSeleccionado.monto / gastoSeleccionado.cantidad).toFixed(2)}</Text>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+
+                  {isAdmin && (
+                    <View style={styles.detailActionsRow}>
+                      <TouchableOpacity style={styles.editActionBtn} onPress={() => iniciarEdicion(gastoSeleccionado)}>
+                        <Feather name="edit-2" size={16} color="#FFF" />
+                        <Text style={styles.editActionBtnText}>Editar Registro</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.deleteActionBtn} onPress={() => handleEliminarGasto(gastoSeleccionado.id, gastoSeleccionado.concepto)}>
+                        <Feather name="trash-2" size={16} color="#EF4444" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </ScrollView>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ✏️ FORMULARIO DINÁMICO (ALTA / EDICIÓN) */}
+      <Modal visible={isFormModalVisible} animationType="slide" transparent={true} onRequestClose={() => { setIsFormModalVisible(false); limpiarFormulario(); }}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
           <ScrollView contentContainerStyle={styles.modalScroll} keyboardShouldPersistTaps="handled">
-            <Pressable style={{ flex: 1 }} onPress={() => { setIsModalVisible(false); limpiarFormulario(); }} />
+            <Pressable style={{ flex: 1 }} onPress={() => { setIsFormModalVisible(false); limpiarFormulario(); }} />
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Registrar Gasto Directo</Text>
+              <View style={styles.modalHeaderTitleRow}>
+                <Text style={styles.modalTitle}>{isEditing ? 'Editar Gasto Registrado' : 'Registrar Gasto Directo'}</Text>
+                <TouchableOpacity onPress={() => { setIsFormModalVisible(false); limpiarFormulario(); }}>
+                  <Feather name="x" size={24} color="#64748B" />
+                </TouchableOpacity>
+              </View>
 
               <Text style={styles.modalLabel}>Clasificación del Rubro</Text>
               <View style={styles.categorySelectorContainer}>
@@ -372,11 +495,30 @@ export default function GastosGeneralesScreen() {
                 </TouchableOpacity>
               </View>
 
+              {/* 🆕 CONTROL DE ESTADO DE PAGO */}
+              <View style={styles.rowInputs}>
+                <View style={{ flex: 1, marginRight: 10 }}>
+                  <Text style={styles.modalLabel}>Estado de Pago</Text>
+                  <View style={{flexDirection: 'row', backgroundColor: '#F1F5F9', borderRadius: 10, padding: 4}}>
+                    <TouchableOpacity style={[styles.pagoBtn, estadoPagoForm === 'pagado' && {backgroundColor: '#10B981'}]} onPress={() => setEstadoPagoForm('pagado')}>
+                      <Text style={[styles.pagoBtnText, estadoPagoForm === 'pagado' && {color: '#FFF'}]}>Liquidado</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.pagoBtn, estadoPagoForm === 'credito' && {backgroundColor: '#EF4444'}]} onPress={() => setEstadoPagoForm('credito')}>
+                      <Text style={[styles.pagoBtnText, estadoPagoForm === 'credito' && {color: '#FFF'}]}>A Crédito</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalLabel}>Monto Total ($)</Text>
+                  <TextInput style={[styles.modalInput, {fontSize: 18, fontWeight: 'bold'}]} placeholder="0.00" keyboardType="numeric" value={monto} onChangeText={(v) => setMonto(v.replace(/[^0-9.]/g, ''))} />
+                </View>
+              </View>
+
               <Text style={styles.modalLabel}>Concepto o Descripción</Text>
               <TextInput style={styles.modalInput} placeholder="Ej. Varilla de 3/8 o Licencia de construcción" placeholderTextColor="#94A3B8" value={concepto} onChangeText={setConcepto} />
 
               {categoriaForm === 'material' && (
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 5 }}>
+                <View style={styles.rowInputs}>
                   <View style={{ flex: 1, marginRight: 10 }}>
                     <Text style={styles.modalLabel}>Cantidad</Text>
                     <TextInput style={styles.modalInput} placeholder="Ej. 50" keyboardType="numeric" value={cantidad} onChangeText={(v) => setCantidad(v.replace(/[^0-9.]/g, ''))} />
@@ -391,15 +533,8 @@ export default function GastosGeneralesScreen() {
               <Text style={styles.modalLabel}>{getProveedorLabel()}</Text>
               <TextInput style={styles.modalInput} placeholder="Nombre o Razón social..." placeholderTextColor="#94A3B8" value={proveedor} onChangeText={setProveedor} />
 
-              <Text style={styles.modalLabel}>Monto total del Gasto ($)</Text>
-              <TextInput style={styles.modalInput} placeholder="0.00" keyboardType="numeric" value={monto} onChangeText={(v) => setMonto(v.replace(/[^0-9.]/g, ''))} />
-
               <TouchableOpacity style={styles.saveBtn} onPress={handleGuardarGasto} disabled={isSaving}>
-                {isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>Guardar en Bitácora</Text>}
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => { setIsModalVisible(false); limpiarFormulario(); }}>
-                <Text style={styles.cancelBtnText}>Cancelar</Text>
+                {isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>{isEditing ? 'Guardar Cambios' : 'Registrar en Bitácora'}</Text>}
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -411,7 +546,7 @@ export default function GastosGeneralesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F1F5F9' },
-  header: { backgroundColor: '#2563EB', paddingTop: 60, paddingBottom: 30, paddingHorizontal: 25, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, elevation: 5, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10 },
+  header: { backgroundColor: '#2563EB', paddingTop: 60, paddingBottom: 25, paddingHorizontal: 25, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, elevation: 5, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10 },
   headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backButton: { padding: 5, marginLeft: -10 },
   headerSubtitle: { color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: 'bold', letterSpacing: 1.5 },
@@ -420,38 +555,47 @@ const styles = StyleSheet.create({
   projectName: { color: '#FFF', fontSize: 12, fontWeight: '600', marginLeft: 5 },
   
   body: { padding: 20, paddingBottom: 120 },
-  exportContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25, gap: 12 },
-  bigExportBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 14, elevation: 2, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4 },
-  bigExportText: { color: '#FFF', fontSize: 14, fontWeight: 'bold', marginLeft: 8 },
+  exportContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20, gap: 12 },
+  bigExportBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4 },
+  bigExportText: { color: '#FFF', fontSize: 13, fontWeight: 'bold', marginLeft: 8 },
 
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   sectionTitle: { fontSize: 15, fontWeight: 'bold', color: '#334155', textTransform: 'uppercase' },
   countBadge: { backgroundColor: '#E2E8F0', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
   countText: { fontSize: 11, color: '#64748B', fontWeight: 'bold' },
   
+  // 📑 Filtros Deslizables
+  filterContainer: { flexDirection: 'row', marginBottom: 15, paddingBottom: 5 },
+  filterPill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#CBD5E1', marginRight: 8 },
+  filterPillActive: { backgroundColor: '#1E293B', borderColor: '#1E293B' },
+  filterText: { fontSize: 11, fontWeight: 'bold', color: '#64748B' },
+  filterTextActive: { color: '#FFF' },
+
   emptyText: { textAlign: 'center', color: '#94A3B8', marginTop: 60, fontStyle: 'italic' },
   
-  gastoCard: { backgroundColor: '#FFF', padding: 18, borderRadius: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, elevation: 3, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8 },
+  gastoCard: { backgroundColor: '#FFF', padding: 16, borderRadius: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6 },
   gastoConcepto: { fontSize: 15, fontWeight: 'bold', color: '#1E293B' },
-  gastoDetalleTexto: { fontSize: 12, color: '#475569', marginTop: 2, fontWeight: '500' },
+  gastoDetalleTexto: { fontSize: 11, color: '#475569', fontWeight: '600' },
   metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  badge: { fontSize: 10, fontWeight: 'bold', paddingVertical: 3, paddingHorizontal: 8, borderRadius: 8, overflow: 'hidden' },
-  gastoFecha: { fontSize: 12, color: '#94A3B8', marginLeft: 8 },
+  badge: { fontSize: 9, fontWeight: 'bold', paddingVertical: 3, paddingHorizontal: 6, borderRadius: 6, overflow: 'hidden' },
+  gastoFecha: { fontSize: 11, color: '#94A3B8', marginLeft: 8 },
   gastoMonto: { fontSize: 18, fontWeight: 'bold', color: '#0F172A' },
-  deleteBtn: { marginTop: 10, padding: 6, backgroundColor: '#FEF2F2', borderRadius: 8 },
 
   fab: { position: 'absolute', bottom: 35, right: 25, width: 65, height: 65, borderRadius: 32.5, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', elevation: 8, shadowColor: '#2563EB', shadowOpacity: 0.4, shadowRadius: 10 },
   
+  // Modales
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalScroll: { flexGrow: 1, justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25, paddingBottom: 45 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#0F172A', marginBottom: 20 },
-  modalLabel: { fontSize: 13, fontWeight: '700', color: '#475569', marginTop: 15, marginBottom: 8 },
-  modalInput: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 14, fontSize: 15, color: '#0F172A' },
+  modalHeaderTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#0F172A' },
+  modalLabel: { fontSize: 12, fontWeight: '700', color: '#475569', marginTop: 15, marginBottom: 6 },
+  modalInput: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 12, fontSize: 14, color: '#0F172A' },
+  rowInputs: { flexDirection: 'row', justifyContent: 'space-between' },
   
-  categorySelectorContainer: { flexDirection: 'row', flexWrap: 'wrap', backgroundColor: '#F1F5F9', borderRadius: 15, padding: 6, marginTop: 5, gap: 6, marginBottom: 10 },
-  catBtn: { flex: 1, minWidth: '45%', paddingVertical: 12, alignItems: 'center', borderRadius: 12 },
-  catText: { fontSize: 13, fontWeight: '700', color: '#475569' },
+  categorySelectorContainer: { flexDirection: 'row', flexWrap: 'wrap', backgroundColor: '#F1F5F9', borderRadius: 15, padding: 6, gap: 6 },
+  catBtn: { flex: 1, minWidth: '45%', paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
+  catText: { fontSize: 12, fontWeight: '700', color: '#475569' },
   catTextActive: { color: '#FFF' },
   
   catActiveMaterial: { backgroundColor: '#D97706' },
@@ -459,8 +603,29 @@ const styles = StyleSheet.create({
   catActiveBuro: { backgroundColor: '#DC2626' },
   catActiveAsesoria: { backgroundColor: '#7C3AED' },
   
+  pagoBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 8 },
+  pagoBtnText: { fontSize: 12, fontWeight: 'bold', color: '#64748B' },
+
   saveBtn: { backgroundColor: '#1E293B', padding: 16, borderRadius: 15, alignItems: 'center', marginTop: 30 },
   saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
-  cancelBtn: { padding: 15, alignItems: 'center', marginTop: 10 },
-  cancelBtnText: { color: '#94A3B8', fontSize: 14, fontWeight: '600' }
+  
+  // 🔍 Estilos Modal Detalles
+  modalOverlayDetail: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.7)', justifyContent: 'center', padding: 20 },
+  detailModalContent: { backgroundColor: '#FFF', borderRadius: 24, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 10 },
+  detailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 15 },
+  detailTitleBox: { flex: 1, paddingRight: 15 },
+  detailTitleCat: { fontSize: 11, fontWeight: 'bold', color: '#2563EB', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
+  detailTitleMain: { fontSize: 18, fontWeight: 'bold', color: '#1E293B' },
+  detailCloseBtn: { padding: 6, backgroundColor: '#F1F5F9', borderRadius: 10 },
+  detailAmount: { fontSize: 32, fontWeight: '900', color: '#0F172A', marginBottom: 20 },
+  detailDataBox: { backgroundColor: '#F8FAFC', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#E2E8F0', gap: 16 },
+  detailRow: { flexDirection: 'column' },
+  detailRowGrid: { flexDirection: 'row', gap: 16 },
+  detailLabel: { fontSize: 10, fontWeight: 'bold', color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4 },
+  detailValue: { fontSize: 14, fontWeight: '600', color: '#1E293B' },
+  
+  detailActionsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 25, gap: 10 },
+  editActionBtn: { flex: 1, backgroundColor: '#1E293B', padding: 14, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+  editActionBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13, marginLeft: 8 },
+  deleteActionBtn: { backgroundColor: '#FEF2F2', padding: 14, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#FECACA' }
 });

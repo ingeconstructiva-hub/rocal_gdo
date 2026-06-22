@@ -8,13 +8,13 @@ import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Linking, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useProject } from '../../context/ProjectContext';
-import { useUser } from '../../context/UserContext'; // 🧠 Importamos el motor de roles
+import { useUser } from '../../context/UserContext';
 import { supabase } from '../../lib/supabase';
 
 export default function DocumentosScreen() {
   const router = useRouter();
   const { activeProject, isOffline, lastSync } = useProject();
-  const { profile } = useUser(); // 🧠 Extraemos el perfil activo
+  const { profile } = useUser();
   
   const [scannedImages, setScannedImages] = useState<string[]>([]);
   const [docTitle, setDocTitle] = useState('');
@@ -23,9 +23,13 @@ export default function DocumentosScreen() {
   const [documentosList, setDocumentosList] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  const categories = ['Plano', 'Permiso', 'Factura', 'Contrato', 'Otro'];
+  // 🟢 NUEVO ESTADO PARA EL FILTRO ACTIVO
+  const [activeFilter, setActiveFilter] = useState('Todos');
 
-  // 🔒 Validador de permisos: Solo el admin puede borrar documentos
+  const categories = ['Plano', 'Permiso', 'Factura', 'Contrato', 'Otro'];
+  // 🟢 AGREGAMOS 'Todos' A LA LISTA DE FILTROS PARA EL MENÚ SUPERIOR
+  const filterCategories = ['Todos', ...categories];
+
   const isAdmin = profile?.role === 'admin';
 
   useFocusEffect(
@@ -280,6 +284,11 @@ export default function DocumentosScreen() {
     }
   };
 
+  // 🟢 LÓGICA DE FILTRADO PARA LA LISTA
+  const documentosFiltrados = activeFilter === 'Todos' 
+    ? documentosList 
+    : documentosList.filter(doc => (doc.category || 'Plano') === activeFilter);
+
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -371,17 +380,32 @@ export default function DocumentosScreen() {
 
         <View style={styles.listContainer}>
           <Text style={styles.sectionTitle}>Archivos del Proyecto</Text>
+
+          {/* 🟢 MENÚ DE PÍLDORAS DESLIZABLES PARA FILTRAR */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterPillsContainer}>
+            {filterCategories.map(cat => (
+              <TouchableOpacity 
+                key={cat}
+                style={[styles.filterPill, activeFilter === cat && styles.filterPillActive]}
+                onPress={() => setActiveFilter(cat)}
+              >
+                <Text style={[styles.filterPillText, activeFilter === cat && styles.filterPillTextActive]}>{cat}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
           
-          {documentosList.length === 0 ? (
+          {documentosFiltrados.length === 0 ? (
             <View style={styles.emptyState}>
               <Feather name="folder" size={40} color="#CBD5E1" />
-              <Text style={styles.emptyStateText}>Aún no hay documentos guardados</Text>
+              <Text style={styles.emptyStateText}>
+                {activeFilter === 'Todos' ? 'Aún no hay documentos guardados' : `No hay archivos tipo ${activeFilter}`}
+              </Text>
             </View>
           ) : (
-            documentosList.map((doc, index) => (
+            documentosFiltrados.map((doc, index) => (
               <View key={index} style={styles.planoCard}>
                 <View style={styles.planoIconContainer}>
-                  <Feather name={getCategoryIcon(doc.category) as any} size={24} color="#2563EB" />
+                  <Feather name={getCategoryIcon(doc.category || 'Plano') as any} size={24} color="#2563EB" />
                 </View>
                 <View style={styles.planoInfo}>
                   <Text style={styles.planoTitle}>{doc.title}</Text>
@@ -426,7 +450,7 @@ const styles = StyleSheet.create({
   scanButtonTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
   scanButtonSub: { color: '#D1FAE5', fontSize: 13, marginTop: 4 },
   previewContainer: { backgroundColor: '#FFF', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 30 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 15 },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 10 },
   thumbnailContainer: { marginRight: 15, position: 'relative', alignItems: 'center' },
   thumbnailImage: { width: 100, height: 140, borderRadius: 10, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },
   removeBtn: { position: 'absolute', top: -8, right: -8, backgroundColor: '#DC2626', borderRadius: 12, padding: 4 },
@@ -446,13 +470,21 @@ const styles = StyleSheet.create({
   cancelButton: { padding: 15, alignItems: 'center' },
   cancelButtonText: { color: '#DC2626', fontWeight: 'bold', fontSize: 15 },
   listContainer: { flex: 1, marginTop: 10 },
-  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 40, backgroundColor: '#FFF', borderRadius: 16, borderStyle: 'dashed', borderWidth: 2, borderColor: '#E5E7EB' },
+  
+  // 🟢 ESTILOS PARA LOS FILTROS HORIZONTALES
+  filterPillsContainer: { flexDirection: 'row', marginBottom: 15 },
+  filterPill: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E5E7EB', marginRight: 8, height: 36, justifyContent: 'center' },
+  filterPillActive: { backgroundColor: '#1F2937', borderColor: '#1F2937' },
+  filterPillText: { color: '#4B5563', fontSize: 13, fontWeight: '600' },
+  filterPillTextActive: { color: '#FFF' },
+
+  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 40, backgroundColor: '#FFF', borderRadius: 16, borderStyle: 'dashed', borderWidth: 2, borderColor: '#E5E7EB', marginTop: 10 },
   emptyStateText: { marginTop: 10, color: '#9CA3AF', fontSize: 14 },
   planoCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 15, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: '#F3F4F6' },
   planoIconContainer: { backgroundColor: '#EFF6FF', padding: 12, borderRadius: 12, marginRight: 15 },
   planoInfo: { flex: 1 },
   planoTitle: { fontSize: 16, fontWeight: 'bold', color: '#1F2937', marginBottom: 4 },
-  planoSub: { fontSize: 13, color: '#6B7280' },
+  planoSub: { fontSize: 13, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 },
   actionButtonsContainer: { flexDirection: 'row', alignItems: 'center' },
   iconButton: { padding: 8, backgroundColor: '#F3F4F6', borderRadius: 8 }
 });

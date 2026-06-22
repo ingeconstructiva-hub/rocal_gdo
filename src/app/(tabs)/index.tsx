@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { NotificationItem } from '../../components/NotificationItem';
 import { Colors } from '../../constants/theme';
@@ -13,7 +13,7 @@ import { supabase } from '../../lib/supabase';
 export default function DashboardScreen() {
   const router = useRouter();
   const { activeProject, isOffline } = useProject(); 
-  const { profile } = useUser(); // 🧠 Importamos el Rol Global
+  const { profile } = useUser();
 
   const [hasPendingItems, setHasPendingItems] = useState(false);
   const [project, setProject] = useState<any>(null);
@@ -22,7 +22,9 @@ export default function DashboardScreen() {
   const [isInviteModalVisible, setIsInviteModalVisible] = useState(false);
   const [isGeneratingCode, setIsGeneratingCode] = useState(false);
 
-  // 1. REVISIÓN DE BANDEJA DE SALIDA (OFFLINE)
+  // 🟢 ESTADO PARA EL MODAL DEL PERFIL
+  const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
+
   useFocusEffect(
     useCallback(() => {
       const checkOutbox = async () => {
@@ -34,31 +36,18 @@ export default function DashboardScreen() {
     }, [])
   );
 
-  // 2. MATRIZ DE PERMISOS PARA LOS BOTONES DEL MENÚ
   const getAccessibleModules = () => {
     const allModules = [
-      // Operación en Campo
       { name: "Asistencia", icon: "users", route: "/lista", roles: ['admin', 'residente'] },
       { name: "Bitácora", icon: "book-open", route: "/bitacora", roles: ['admin', 'residente'] },
-      { name: "Planos", icon: "layers", route: "/planos", roles: ['admin', 'residente', 'oficina'] },
-      
-      // Finanzas y Control
-      { name: "Caja Chica", icon: "wallet", route: "/gastos", roles: ['admin', 'residente', 'oficina'] },
-      { name: "Maquinaria", icon: "truck", route: "/gastos_maquinaria", roles: ['admin', 'residente', 'oficina'] },
-      { name: "G. Generales", icon: "file-text", route: "/gastos_generales", roles: ['admin', 'oficina'] },
-      { name: "Ingresos", icon: "trending-up", route: "/ingresos", roles: ['admin', 'oficina'] },
-      
-      // Alta Gerencia
-      { name: "Estado de Obra", icon: "pie-chart", route: "/resumen_diario", roles: ['admin', 'oficina'] },
+      { name: "Documentos", icon: "layers", route: "/planos", roles: ['admin', 'residente', 'oficina'] },
+      { name: "Gastos", icon: "dollar-sign", route: "/gastos", roles: ['admin', 'residente', 'oficina'] }
     ];
-    
-    // Filtramos los botones según el rol actual
     return allModules.filter(m => m.roles.includes(profile?.role || 'residente'));
   };
 
   const modules = getAccessibleModules();
   
-  // 3. CARGA DE DATOS DEL PROYECTO Y NOTIFICACIONES
   useFocusEffect(
     useCallback(() => {
       async function loadData() {
@@ -117,7 +106,6 @@ export default function DashboardScreen() {
     }, [activeProject, isOffline]) 
   );
 
-  // 4. FUNCIONES DE INVITACIÓN
   const handleOpenInviteModal = async () => {
     if (isOffline) { Alert.alert("Modo Offline", "Necesitas internet para generar invitaciones."); return; }
     if (profile?.role !== 'admin' && profile?.role !== 'residente') {
@@ -158,16 +146,40 @@ export default function DashboardScreen() {
 
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
             <TouchableOpacity onPress={() => router.replace('/proyectos')} style={{ marginRight: 15 }}>
               <Feather name="arrow-left" size={28} color="#FFF" />
             </TouchableOpacity>
             <Text style={styles.date}>{today.charAt(0).toUpperCase() + today.slice(1)}</Text>
           </View>
           
-          <Text style={styles.userName}>{profile?.name || "Cargando..."}</Text>
-          <Text style={styles.role}>{profile?.displayRole || "Cargando permisos..."}</Text>
+          {/* 🟢 NUEVA SECCIÓN DE PERFIL EN EL HEADER */}
+          <TouchableOpacity 
+            style={styles.profileRow} 
+            activeOpacity={0.8}
+            onPress={() => setIsProfileModalVisible(true)}
+          >
+            <View style={styles.avatarContainer}>
+              {profile?.foto_ine_url ? (
+                <Image source={{ uri: profile.foto_ine_url }} style={styles.avatar} />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Feather name="user" size={24} color="#FFF" />
+                </View>
+              )}
+            </View>
+            <View style={{ flex: 1, marginLeft: 15 }}>
+              <Text style={styles.userName} numberOfLines={1}>
+                {profile?.full_name || profile?.name || "Cargando..."}
+              </Text>
+              <Text style={styles.role}>
+                {profile?.role?.toUpperCase() || profile?.displayRole || "Cargando permisos..."}
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={20} color="rgba(255,255,255,0.7)" />
+          </TouchableOpacity>
           
+          {/* TARJETA DEL PROYECTO */}
           <View style={styles.projectCard}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <View style={{ flex: 1, paddingRight: 10 }}>
@@ -236,6 +248,46 @@ export default function DashboardScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* 🟢 MODAL DE PERFIL DIGITAL */}
+      <Modal visible={isProfileModalVisible} animationType="slide" transparent={true}>
+        <View style={styles.profileModalOverlay}>
+          <View style={styles.profileModalContent}>
+            <View style={styles.profileModalHeader}>
+              <Text style={styles.profileModalTitle}>Mi Perfil Digital</Text>
+              <TouchableOpacity onPress={() => setIsProfileModalVisible(false)} style={{ padding: 5 }}>
+                <Feather name="x" size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Especialidad / Cargo</Text>
+                <Text style={styles.detailValue}>{profile?.carrera_especialidad || 'No definida'}</Text>
+              </View>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Teléfono</Text>
+                <Text style={styles.detailValue}>{profile?.telefono || 'No registrado'}</Text>
+              </View>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Dirección</Text>
+                <Text style={styles.detailValue}>{profile?.direccion || 'No registrada'}</Text>
+              </View>
+              
+              <Text style={[styles.detailLabel, { marginTop: 20 }]}>Identificación Oficial</Text>
+              {profile?.foto_ine_url ? (
+                <Image source={{ uri: profile.foto_ine_url }} style={styles.ineImage} />
+              ) : (
+                <View style={styles.noIneBox}>
+                  <Feather name="image" size={24} color="#94A3B8" />
+                  <Text style={{ color: '#94A3B8', marginTop: 10, fontWeight: '600' }}>INE no disponible para visualización</Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -244,8 +296,20 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
   header: { backgroundColor: Colors.primary, padding: 24, paddingTop: 60, borderBottomLeftRadius: 30, borderBottomRightRadius: 30 },
   date: { color: 'rgba(255,255,255,0.7)', fontSize: 12 },
-  userName: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
-  role: { color: 'rgba(255,255,255,0.9)', fontSize: 14, marginBottom: 20 },
+  
+  // 🟢 ESTILOS DE LA NUEVA FILA DE PERFIL EN EL HEADER
+  profileRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 25 },
+  avatarContainer: {
+    width: 56, height: 56, borderRadius: 28, 
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center', alignItems: 'center', 
+    borderWidth: 2, borderColor: '#FFF', overflow: 'hidden'
+  },
+  avatar: { width: '100%', height: '100%' },
+  avatarPlaceholder: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
+  userName: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
+  role: { color: 'rgba(255,255,255,0.8)', fontSize: 13, marginTop: 2, fontWeight: '500' },
+  
   projectCard: { backgroundColor: '#FFF', padding: 20, borderRadius: 20, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1 },
   projectTitle: { fontSize: 16, fontWeight: 'bold', color: Colors.text, marginBottom: 4 },
   projectSub: { fontSize: 12, color: Colors.textSub, marginTop: 2 },
@@ -271,5 +335,16 @@ const styles = StyleSheet.create({
   shareButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2563EB', paddingVertical: 14, paddingHorizontal: 25, borderRadius: 14, marginTop: 25, width: '100%', justifyContent: 'center' },
   shareButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 15, marginLeft: 10 },
   syncBanner: { position: 'absolute', bottom: 20, left: 20, right: 20, backgroundColor: '#059669', padding: 12, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', elevation: 5, zIndex: 100 },
-  syncText: { color: '#FFF', fontWeight: 'bold', marginLeft: 8 }
+  syncText: { color: '#FFF', fontWeight: 'bold', marginLeft: 8 },
+
+  // 🟢 ESTILOS DEL MODAL DE PERFIL
+  profileModalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.7)', justifyContent: 'flex-end' },
+  profileModalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 25, borderTopRightRadius: 25, height: '85%' },
+  profileModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  profileModalTitle: { fontSize: 18, fontWeight: 'bold', color: '#0F172A' },
+  detailItem: { marginBottom: 15, borderBottomWidth: 1, borderBottomColor: '#F8FAFC', paddingBottom: 10 },
+  detailLabel: { fontSize: 11, fontWeight: 'bold', color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4 },
+  detailValue: { fontSize: 15, color: '#1E293B', fontWeight: '600' },
+  ineImage: { width: '100%', height: 220, borderRadius: 12, marginTop: 10, resizeMode: 'cover', backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
+  noIneBox: { height: 120, backgroundColor: '#F8FAFC', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10, borderWidth: 1, borderColor: '#E2E8F0', borderStyle: 'dashed' },
 });

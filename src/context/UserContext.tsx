@@ -1,12 +1,19 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
-type UserProfile = {
+export interface UserProfile {
   id: string;
-  name: string;
-  role: 'admin' | 'residente' | 'oficina';
-  displayRole: string;
-};
+  name?: string; 
+  full_name?: string;
+  role?: string;
+  displayRole?: string;
+ 
+  carrera_especialidad?: string | null;
+  edad?: number | null;
+  direccion?: string | null;
+  telefono?: string | null;
+  foto_ine_url?: string | null;
+}
 
 type UserContextType = {
   profile: UserProfile | null;
@@ -31,7 +38,6 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
 
     loadSession();
 
-    // Escucha si el usuario inicia o cierra sesión en tiempo real
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         await fetchProfile(session.user.id);
@@ -55,7 +61,6 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
       if (error) throw error;
 
       if (data) {
-        // Adaptabilidad: Busca la columna correcta sin importar cómo se llame en Supabase
         const dbRole = data.rol || data.role || 'residente';
         const dbName = data.nombre || data.full_name || 'Usuario';
         

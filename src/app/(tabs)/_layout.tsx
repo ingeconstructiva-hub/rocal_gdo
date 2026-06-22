@@ -1,12 +1,11 @@
 import { Feather } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { Colors } from '../../constants/theme';
-import { useUser } from '../../context/UserContext'; // 🧠 Importamos el motor de roles
+import { useUser } from '../../context/UserContext';
 
 export default function TabLayout() {
-  const { profile } = useUser(); // 🧠 Obtenemos el perfil activo
+  const { profile } = useUser();
 
-  // 🔒 Validadores de Permisos para la Barra Inferior
   const showBitacora = profile?.role === 'admin' || profile?.role === 'residente';
   const showLista = profile?.role === 'admin' || profile?.role === 'residente';
 
@@ -23,8 +22,7 @@ export default function TabLayout() {
         },
         headerShown: false,
       }}>
-      
-      {/* 1. INICIO (Dashboard) - Visible para todos */}
+      {/* 1. INICIO */}
       <Tabs.Screen 
         name="index" 
         options={{ 
@@ -32,28 +30,25 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <Feather name="home" size={24} color={color} />
         }} 
       />
-      
-      {/* 2. BITÁCORA - 🔒 Oculto para Personal de Oficina */}
+      {/* 2. BITÁCORA */}
       <Tabs.Screen 
         name="bitacora" 
         options={{ 
           title: 'Bitácora',
-          href: showBitacora ? '/bitacora' : null, // Magia: Si es false, la pestaña desaparece
+          href: showBitacora ? '/bitacora' : null,
           tabBarIcon: ({ color }) => <Feather name="book-open" size={24} color={color} />
         }} 
       />
-
-      {/* 3. LISTA (Asistencia) - 🔒 Oculto para Personal de Oficina */}
+      {/* 3. LISTA */}
       <Tabs.Screen 
         name="lista" 
         options={{ 
           title: 'Asistencia',
-          href: showLista ? '/lista' : null, // Magia: Si es false, la pestaña desaparece
+          href: showLista ? '/lista' : null,
           tabBarIcon: ({ color }) => <Feather name="users" size={24} color={color} />
         }} 
       />
-
-      {/* 4. PLANOS (Documentos) - Visible para todos */}
+      {/* 4. PLANOS */}
       <Tabs.Screen 
         name="planos" 
         options={{ 
@@ -61,8 +56,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <Feather name="map" size={24} color={color} />
         }} 
       />
-
-      {/* 5. GASTOS (Menú Central Financiero) - Visible para todos (Se filtra por dentro) */}
+      {/* 5. GASTOS */}
       <Tabs.Screen 
         name="gastos" 
         options={{ 

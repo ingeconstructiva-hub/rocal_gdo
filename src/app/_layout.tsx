@@ -1,6 +1,6 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ProjectProvider } from '../context/ProjectContext';
+import { ProjectProvider } from '../context/ProjectContext'; // <-- Ajusta la ruta si tus context están en /src/context
 import { UserProvider } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
 
@@ -36,16 +36,15 @@ export default function RootLayout() {
     }
   }, [session, isInitialized]);
 
-  // No renderizamos nada hasta que sepamos si hay sesión
   if (!isInitialized) return null;
 
   return (
-    <UserProvider> {/* 👈 El Contexto de Usuario envuelve todo */}
-      <ProjectProvider> 
+    <UserProvider>
+      <ProjectProvider>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="login" />
           <Stack.Screen name="proyectos" />
-          <Stack.Screen name="(tabs)" /> 
+          <Stack.Screen name="(tabs)" />
         </Stack>
       </ProjectProvider>
     </UserProvider>
