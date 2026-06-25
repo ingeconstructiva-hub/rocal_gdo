@@ -1,19 +1,21 @@
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Modal, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { NotificationItem } from '../../components/NotificationItem';
 import { Colors } from '../../constants/theme';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
 import { supabase } from '../../lib/supabase';
-
+  
 export default function DashboardScreen() {
   const router = useRouter();
   const { activeProject, isOffline } = useProject(); 
-  const { profile } = useUser();
+  // 🧠 Asegúrate de extraer refreshProfile de tu contexto
+  const { profile, refreshProfile } = useUser();
 
   const [hasPendingItems, setHasPendingItems] = useState(false);
   const [project, setProject] = useState<any>(null);
@@ -22,8 +24,60 @@ export default function DashboardScreen() {
   const [isInviteModalVisible, setIsInviteModalVisible] = useState(false);
   const [isGeneratingCode, setIsGeneratingCode] = useState(false);
 
-  // 🟢 ESTADO PARA EL MODAL DEL PERFIL
+  // 🟢 ESTADOS PARA EL MODAL DEL PERFIL Y EDICIÓN
   const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  
+  const [editEspecialidad, setEditEspecialidad] = useState('');
+  const [editTelefono, setEditTelefono] = useState('');
+  const [editDireccion, setEditDireccion] = useState('');
+
+  // Estados para las nuevas fotos seleccionadas localmente
+  const [newFotoPerfil, setNewFotoPerfil] = useState<string | null>(null);
+  const [newFotoIne, setNewFotoIne] = useState<string | null>(null);
+
+  // Al cerrar el modo edición, limpiamos las fotos locales
+  useEffect(() => {
+    if (profile && isProfileModalVisible) {
+      setEditEspecialidad(profile.carrera_especialidad || '');
+      setEditTelefono(profile.telefono || '');
+      setEditDireccion(profile.direccion || '');
+      setNewFotoPerfil(null); // Limpiar
+      setNewFotoIne(null);    // Limpiar
+      setIsEditingProfile(false); 
+    }
+  }, [profile, isProfileModalVisible]);
+
+  // Función para abrir la galería y seleccionar foto
+  const pickImage = async (type: 'perfil' | 'ine') => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert("Permiso Denegado", "Necesitamos acceso a tu galería para elegir la foto.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.5,
+    });
+
+    if (!result.canceled) {
+      if (type === 'perfil') setNewFotoPerfil(result.assets[0].uri);
+      if (type === 'ine') setNewFotoIne(result.assets[0].uri);
+    }
+  };
+
+  // Sincronizar los datos del perfil cuando se abre el modal
+  useEffect(() => {
+    if (profile && isProfileModalVisible) {
+      setEditEspecialidad(profile.carrera_especialidad || '');
+      setEditTelefono(profile.telefono || '');
+      setEditDireccion(profile.direccion || '');
+      setIsEditingProfile(false); // Siempre abrir en modo lectura
+    }
+  }, [profile, isProfileModalVisible]);
 
   useFocusEffect(
     useCallback(() => {
@@ -133,6 +187,61 @@ export default function DashboardScreen() {
     } catch (error: any) {}
   };
 
+  // 🟢 FUNCIÓN PARA GUARDAR EL PERFIL
+ const handleSaveProfile = async () => {
+    if (!profile?.id) return;
+    setIsSavingProfile(true);
+    try {
+      let fotoPerfilUrl = profile.foto_perfil_url;
+      let fotoIneUrl = profile.foto_ine_url;
+
+      // 1. Subir nueva foto de perfil si se seleccionó una
+      if (newFotoPerfil) {
+        const filename = `perfil_${profile.id}_${Date.now()}.jpg`;
+        const formData = new FormData();
+        formData.append('file', { uri: newFotoPerfil, name: filename, type: 'image/jpeg' } as any);
+        const { error: uploadErr } = await supabase.storage.from('identificaciones').upload(`perfiles/${filename}`, formData as any);
+        if (!uploadErr) fotoPerfilUrl = supabase.storage.from('identificaciones').getPublicUrl(`perfiles/${filename}`).data.publicUrl;
+      }
+
+      // 2. Subir nuevo INE si se seleccionó uno
+      if (newFotoIne) {
+        const filename = `ine_${profile.id}_${Date.now()}.jpg`;
+        const formData = new FormData();
+        formData.append('file', { uri: newFotoIne, name: filename, type: 'image/jpeg' } as any);
+        const { error: uploadErr } = await supabase.storage.from('identificaciones').upload(`ines/${filename}`, formData as any);
+        if (!uploadErr) fotoIneUrl = supabase.storage.from('identificaciones').getPublicUrl(`ines/${filename}`).data.publicUrl;
+      }
+
+      // 3. Actualizar la base de datos con los textos y las (nuevas) URLs
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          carrera_especialidad: editEspecialidad.trim(),
+          telefono: editTelefono.trim(),
+          direccion: editDireccion.trim(),
+          foto_perfil_url: fotoPerfilUrl,
+          foto_ine_url: fotoIneUrl
+        })
+        .eq('id', profile.id);
+
+      if (error) throw error;
+      
+      Alert.alert("¡Éxito!", "Tu perfil ha sido actualizado correctamente.");
+      setIsEditingProfile(false);
+      setNewFotoPerfil(null);
+      setNewFotoIne(null);
+      
+      if (refreshProfile) {
+        await refreshProfile();
+      }
+    } catch (error: any) {
+      Alert.alert("Error", error.message);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   const today = new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   return (
@@ -153,14 +262,16 @@ export default function DashboardScreen() {
             <Text style={styles.date}>{today.charAt(0).toUpperCase() + today.slice(1)}</Text>
           </View>
           
-          {/* 🟢 NUEVA SECCIÓN DE PERFIL EN EL HEADER */}
+          {/* HEADER DEL PERFIL */}
           <TouchableOpacity 
             style={styles.profileRow} 
             activeOpacity={0.8}
             onPress={() => setIsProfileModalVisible(true)}
           >
             <View style={styles.avatarContainer}>
-              {profile?.foto_ine_url ? (
+              {profile?.foto_perfil_url ? (
+                <Image source={{ uri: profile.foto_perfil_url }} style={styles.avatar} />
+              ) : profile?.foto_ine_url ? (
                 <Image source={{ uri: profile.foto_ine_url }} style={styles.avatar} />
               ) : (
                 <View style={styles.avatarPlaceholder}>
@@ -249,43 +360,116 @@ export default function DashboardScreen() {
         </View>
       </Modal>
 
-      {/* 🟢 MODAL DE PERFIL DIGITAL */}
+      {/* 🟢 MODAL DE PERFIL DIGITAL (CON MODO EDICIÓN) */}
       <Modal visible={isProfileModalVisible} animationType="slide" transparent={true}>
-        <View style={styles.profileModalOverlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.profileModalOverlay}>
           <View style={styles.profileModalContent}>
+            
             <View style={styles.profileModalHeader}>
-              <Text style={styles.profileModalTitle}>Mi Perfil Digital</Text>
-              <TouchableOpacity onPress={() => setIsProfileModalVisible(false)} style={{ padding: 5 }}>
-                <Feather name="x" size={24} color="#64748B" />
-              </TouchableOpacity>
+              <Text style={styles.profileModalTitle}>{isEditingProfile ? 'Editar Perfil' : 'Mi Perfil Digital'}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
+                {/* Botón para alternar modo edición */}
+                <TouchableOpacity onPress={() => setIsEditingProfile(!isEditingProfile)} style={styles.editBtn}>
+                  <Feather name={isEditingProfile ? "x-circle" : "edit-2"} size={20} color={isEditingProfile ? "#EF4444" : "#2563EB"} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setIsProfileModalVisible(false)}>
+                  <Feather name="x" size={24} color="#64748B" />
+                </TouchableOpacity>
+              </View>
             </View>
 
-            <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Especialidad / Cargo</Text>
-                <Text style={styles.detailValue}>{profile?.carrera_especialidad || 'No definida'}</Text>
-              </View>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Teléfono</Text>
-                <Text style={styles.detailValue}>{profile?.telefono || 'No registrado'}</Text>
-              </View>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Dirección</Text>
-                <Text style={styles.detailValue}>{profile?.direccion || 'No registrada'}</Text>
-              </View>
+            <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               
-              <Text style={[styles.detailLabel, { marginTop: 20 }]}>Identificación Oficial</Text>
-              {profile?.foto_ine_url ? (
-                <Image source={{ uri: profile.foto_ine_url }} style={styles.ineImage} />
-              ) : (
-                <View style={styles.noIneBox}>
-                  <Feather name="image" size={24} color="#94A3B8" />
-                  <Text style={{ color: '#94A3B8', marginTop: 10, fontWeight: '600' }}>INE no disponible para visualización</Text>
-                </View>
+              {isEditingProfile ? (
+  // 🟢 MODO EDICIÓN
+  <View style={{ paddingBottom: 40 }}>
+    
+    {/* 📸 CAMBIAR FOTO DE PERFIL */}
+    <View style={{ alignItems: 'center', marginBottom: 20 }}>
+      <TouchableOpacity 
+        onPress={() => pickImage('perfil')}
+        style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', borderWidth: 2, borderColor: '#2563EB' }}
+      >
+        {newFotoPerfil || profile?.foto_perfil_url ? (
+          <Image source={{ uri: newFotoPerfil || profile?.foto_perfil_url || '' }} style={{ width: '100%', height: '100%' }} />
+        ) : (
+          <Feather name="camera" size={32} color="#94A3B8" />
+        )}
+        <View style={{ position: 'absolute', bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', width: '100%', paddingVertical: 4, alignItems: 'center' }}>
+          <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>EDITAR</Text>
+        </View>
+      </TouchableOpacity>
+    </View>
+
+    <Text style={styles.editLabel}>Especialidad / Cargo</Text>
+    <TextInput style={styles.editInput} value={editEspecialidad} onChangeText={setEditEspecialidad} placeholder="Ej. Ing. Civil" />
+
+    <Text style={styles.editLabel}>Teléfono</Text>
+    <TextInput style={styles.editInput} value={editTelefono} onChangeText={setEditTelefono} placeholder="Tu número de teléfono" keyboardType="phone-pad" />
+
+    <Text style={styles.editLabel}>Dirección</Text>
+    <TextInput style={styles.editInput} value={editDireccion} onChangeText={setEditDireccion} placeholder="Tu dirección" />
+
+    {/* 📄 CAMBIAR FOTO DE INE */}
+    <Text style={styles.editLabel}>Identificación Oficial (INE)</Text>
+    <TouchableOpacity 
+      onPress={() => pickImage('ine')}
+      style={{ height: 160, backgroundColor: '#F8FAFC', borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#2563EB', borderStyle: 'dashed', overflow: 'hidden', marginBottom: 10 }}
+    >
+      {newFotoIne || profile?.foto_ine_url ? (
+        <>
+          <Image source={{ uri: newFotoIne || profile?.foto_ine_url || '' }} style={{ width: '100%', height: '100%', resizeMode: 'cover', opacity: 0.8 }} />
+          <View style={{ position: 'absolute', backgroundColor: 'rgba(37, 99, 235, 0.9)', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20 }}>
+            <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12 }}><Feather name="refresh-cw" /> Cambiar INE</Text>
+          </View>
+        </>
+      ) : (
+        <>
+          <Feather name="upload-cloud" size={32} color="#2563EB" />
+          <Text style={{ color: '#2563EB', marginTop: 10, fontWeight: 'bold' }}>Subir foto de INE</Text>
+        </>
+      )}
+    </TouchableOpacity>
+
+    <TouchableOpacity style={styles.saveBtn} onPress={handleSaveProfile} disabled={isSavingProfile}>
+      {isSavingProfile ? (
+        <ActivityIndicator color="#FFF" />
+      ) : (
+        <Text style={styles.saveBtnText}>Guardar Cambios</Text>
+      )}
+    </TouchableOpacity>
+  </View>
+) : (
+  // ... Código original del modo LECTURA
+                // 🟢 MODO LECTURA
+                <>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Especialidad / Cargo</Text>
+                    <Text style={styles.detailValue}>{profile?.carrera_especialidad || 'No definida'}</Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Teléfono</Text>
+                    <Text style={styles.detailValue}>{profile?.telefono || 'No registrado'}</Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Dirección</Text>
+                    <Text style={styles.detailValue}>{profile?.direccion || 'No registrada'}</Text>
+                  </View>
+                  
+                  <Text style={[styles.detailLabel, { marginTop: 20 }]}>Identificación Oficial</Text>
+                  {profile?.foto_ine_url ? (
+                    <Image source={{ uri: profile.foto_ine_url }} style={styles.ineImage} />
+                  ) : (
+                    <View style={styles.noIneBox}>
+                      <Feather name="image" size={24} color="#94A3B8" />
+                      <Text style={{ color: '#94A3B8', marginTop: 10, fontWeight: '600' }}>INE no disponible para visualización</Text>
+                    </View>
+                  )}
+                </>
               )}
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
     </View>
@@ -297,7 +481,6 @@ const styles = StyleSheet.create({
   header: { backgroundColor: Colors.primary, padding: 24, paddingTop: 60, borderBottomLeftRadius: 30, borderBottomRightRadius: 30 },
   date: { color: 'rgba(255,255,255,0.7)', fontSize: 12 },
   
-  // 🟢 ESTILOS DE LA NUEVA FILA DE PERFIL EN EL HEADER
   profileRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 25 },
   avatarContainer: {
     width: 56, height: 56, borderRadius: 28, 
@@ -305,7 +488,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center', 
     borderWidth: 2, borderColor: '#FFF', overflow: 'hidden'
   },
-  avatar: { width: '100%', height: '100%' },
+  avatar: { width: '100%', height: '100%', resizeMode: 'cover' },
   avatarPlaceholder: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
   userName: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
   role: { color: 'rgba(255,255,255,0.8)', fontSize: 13, marginTop: 2, fontWeight: '500' },
@@ -342,6 +525,13 @@ const styles = StyleSheet.create({
   profileModalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 25, borderTopRightRadius: 25, height: '85%' },
   profileModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   profileModalTitle: { fontSize: 18, fontWeight: 'bold', color: '#0F172A' },
+  
+  editBtn: { padding: 6, backgroundColor: '#EFF6FF', borderRadius: 8 },
+  editLabel: { fontSize: 12, fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase', marginTop: 15, marginBottom: 5 },
+  editInput: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', padding: 12, borderRadius: 10, fontSize: 15, color: '#1E293B' },
+  saveBtn: { backgroundColor: '#2563EB', padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 30 },
+  saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
+
   detailItem: { marginBottom: 15, borderBottomWidth: 1, borderBottomColor: '#F8FAFC', paddingBottom: 10 },
   detailLabel: { fontSize: 11, fontWeight: 'bold', color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4 },
   detailValue: { fontSize: 15, color: '#1E293B', fontWeight: '600' },

@@ -6,7 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Print from 'expo-print';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Linking, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
 import { supabase } from '../../lib/supabase';
@@ -18,17 +18,21 @@ export default function DocumentosScreen() {
   
   const [scannedImages, setScannedImages] = useState<string[]>([]);
   const [docTitle, setDocTitle] = useState('');
+  
+  // 🟢 ESTADOS PARA CATEGORÍAS
   const [docCategory, setDocCategory] = useState('Plano'); 
+  const [customCategory, setCustomCategory] = useState('');
+
   const [isUploading, setIsUploading] = useState(false);
   const [documentosList, setDocumentosList] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  // 🟢 NUEVO ESTADO PARA EL FILTRO ACTIVO
   const [activeFilter, setActiveFilter] = useState('Todos');
+  const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
 
-  const categories = ['Plano', 'Permiso', 'Factura', 'Contrato', 'Otro'];
-  // 🟢 AGREGAMOS 'Todos' A LA LISTA DE FILTROS PARA EL MENÚ SUPERIOR
-  const filterCategories = ['Todos', ...categories];
+  // 🟢 LISTA FIJA DE CATEGORÍAS (Sin categorías dinámicas que rompan el diseño)
+  const defaultCategories = ['Plano', 'Permiso', 'Factura', 'Contratos', 'Seguros', 'Otro'];
+  const filterCategories = ['Todos', ...defaultCategories];
 
   const isAdmin = profile?.role === 'admin';
 
@@ -118,7 +122,7 @@ export default function DocumentosScreen() {
       }
 
       let result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true, 
+        allowsEditing: false, // 🟢 Toma la foto completa sin recortar
         quality: 0.8,
       });
 
@@ -140,6 +144,10 @@ export default function DocumentosScreen() {
       Alert.alert("Falta título", "Por favor ingresa un nombre para identificar este documento.");
       return;
     }
+    
+    // Si eligió 'Otro', usa lo que escribió. Si está vacío, le pone 'General'
+    const finalCategory = docCategory === 'Otro' ? (customCategory.trim() || 'General') : docCategory;
+
     const projectId = activeProject?.id;
     if (!projectId) return;
 
@@ -175,7 +183,7 @@ export default function DocumentosScreen() {
 
         const localDocData = {
           title: docTitle.trim(),
-          category: docCategory,
+          category: finalCategory,
           version: 'v1.0',
           local_file_uri: permanentPdfUri,
           project_id: projectId
@@ -190,6 +198,7 @@ export default function DocumentosScreen() {
         setScannedImages([]);
         setDocTitle('');
         setDocCategory('Plano');
+        setCustomCategory('');
         await loadDocumentos();
         setIsUploading(false);
         return;
@@ -208,7 +217,7 @@ export default function DocumentosScreen() {
       const { data: publicUrlData } = supabase.storage.from('planos_obras').getPublicUrl(fileName);
       
       const { error: dbError } = await supabase.from('planos').insert([
-        { title: docTitle.trim(), category: docCategory, version: 'v1.0', file_url: publicUrlData.publicUrl, project_id: projectId }
+        { title: docTitle.trim(), category: finalCategory, version: 'v1.0', file_url: publicUrlData.publicUrl, project_id: projectId }
       ]);
 
       if (dbError) throw dbError;
@@ -217,6 +226,7 @@ export default function DocumentosScreen() {
       setScannedImages([]);
       setDocTitle('');
       setDocCategory('Plano'); 
+      setCustomCategory('');
       loadDocumentos(); 
 
     } catch (error: any) {
@@ -275,22 +285,35 @@ export default function DocumentosScreen() {
   };
 
   const getCategoryIcon = (category: string) => {
+    const defaultCats = ['Plano', 'Permiso', 'Factura', 'Contratos', 'Seguros'];
+    // Si no está en las por defecto, es un "Otro" y le ponemos icono genérico
+    if (!defaultCats.includes(category)) return 'file'; 
+    
     switch (category) {
       case 'Plano': return 'map';
       case 'Permiso': return 'shield';
       case 'Factura': return 'dollar-sign';
-      case 'Contrato': return 'edit-3';
+      case 'Contratos': return 'edit-3';
+      case 'Seguros': return 'umbrella';
       default: return 'file-text';
     }
   };
 
-  // 🟢 LÓGICA DE FILTRADO PARA LA LISTA
+  // 🟢 LÓGICA DE FILTRADO (Asigna todo lo "raro" a la pestaña 'Otro')
   const documentosFiltrados = activeFilter === 'Todos' 
     ? documentosList 
-    : documentosList.filter(doc => (doc.category || 'Plano') === activeFilter);
+    : activeFilter === 'Otro'
+      ? documentosList.filter(doc => {
+          const cat = doc.category || 'Plano';
+          return cat === 'Otro' || !['Plano', 'Permiso', 'Factura', 'Contratos', 'Seguros'].includes(cat);
+        })
+      : documentosList.filter(doc => (doc.category || 'Plano') === activeFilter);
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView 
+      style={styles.container} 
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <Stack.Screen options={{ headerShown: false }} />
       
       <View style={styles.header}>
@@ -356,12 +379,22 @@ export default function DocumentosScreen() {
 
             <Text style={styles.label}>Categoría</Text>
             <View style={styles.categoryContainer}>
-              {categories.map((cat) => (
+              {defaultCategories.map((cat) => (
                 <TouchableOpacity key={cat} style={[styles.categoryBadge, docCategory === cat && styles.categoryBadgeActive]} onPress={() => setDocCategory(cat)}>
                   <Text style={[styles.categoryText, docCategory === cat && styles.categoryTextActive]}>{cat}</Text>
                 </TouchableOpacity>
               ))}
             </View>
+
+            {docCategory === 'Otro' && (
+              <TextInput 
+                style={[styles.input, { marginTop: -10, marginBottom: 20 }]} 
+                placeholder="Escribe tu propia categoría..." 
+                value={customCategory} 
+                onChangeText={setCustomCategory} 
+                placeholderTextColor="#9CA3AF" 
+              />
+            )}
 
             <TouchableOpacity style={styles.saveButton} onPress={handleSaveToDatabase} disabled={isUploading}>
               {isUploading ? <ActivityIndicator color="#FFF" /> : (
@@ -379,20 +412,44 @@ export default function DocumentosScreen() {
         )}
 
         <View style={styles.listContainer}>
-          <Text style={styles.sectionTitle}>Archivos del Proyecto</Text>
-
-          {/* 🟢 MENÚ DE PÍLDORAS DESLIZABLES PARA FILTRAR */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterPillsContainer}>
-            {filterCategories.map(cat => (
+          
+          <View style={styles.listHeaderRow}>
+            <Text style={styles.sectionTitle}>Archivos del Proyecto</Text>
+            
+            <View style={{ zIndex: 10 }}>
               <TouchableOpacity 
-                key={cat}
-                style={[styles.filterPill, activeFilter === cat && styles.filterPillActive]}
-                onPress={() => setActiveFilter(cat)}
+                style={styles.filterDropdownBtn} 
+                onPress={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
               >
-                <Text style={[styles.filterPillText, activeFilter === cat && styles.filterPillTextActive]}>{cat}</Text>
+                <Feather name="filter" size={14} color="#4B5563" />
+                <Text style={styles.filterDropdownText}>{activeFilter}</Text>
+                <Feather name={isFilterDropdownOpen ? "chevron-up" : "chevron-down"} size={16} color="#6B7280" />
               </TouchableOpacity>
-            ))}
-          </ScrollView>
+
+              {/* 🟢 MENÚ CON SCROLL PARA QUE NO SE DESBORDE */}
+              {isFilterDropdownOpen && (
+                <View style={styles.filterDropdownMenu}>
+                  <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator={false}>
+                    {filterCategories.map(cat => (
+                      <TouchableOpacity 
+                        key={`filter-${cat}`}
+                        style={[styles.filterDropdownItem, activeFilter === cat && styles.filterDropdownItemActive]}
+                        onPress={() => {
+                          setActiveFilter(cat);
+                          setIsFilterDropdownOpen(false);
+                        }}
+                      >
+                        <Text style={[styles.filterDropdownItemText, activeFilter === cat && styles.filterDropdownItemTextActive]} numberOfLines={1}>
+                          {cat}
+                        </Text>
+                        {activeFilter === cat && <Feather name="check" size={14} color="#2563EB" />}
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
+          </View>
           
           {documentosFiltrados.length === 0 ? (
             <View style={styles.emptyState}>
@@ -419,7 +476,6 @@ export default function DocumentosScreen() {
                     <Feather name="file-text" size={20} color="#2563EB" />
                   </TouchableOpacity>
 
-                  {/* 🔒 El botón de borrar solo es visible si es Administrador */}
                   {isAdmin && (
                     <TouchableOpacity style={[styles.iconButton, { marginLeft: 10 }]} onPress={() => handleDeleteDocument(doc.id, doc.file_url)}>
                       <Feather name="trash-2" size={20} color="#DC2626" />
@@ -431,7 +487,7 @@ export default function DocumentosScreen() {
           )}
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -469,18 +525,22 @@ const styles = StyleSheet.create({
   saveButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 16, marginLeft: 10 },
   cancelButton: { padding: 15, alignItems: 'center' },
   cancelButtonText: { color: '#DC2626', fontWeight: 'bold', fontSize: 15 },
-  listContainer: { flex: 1, marginTop: 10 },
   
-  // 🟢 ESTILOS PARA LOS FILTROS HORIZONTALES
-  filterPillsContainer: { flexDirection: 'row', marginBottom: 15 },
-  filterPill: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E5E7EB', marginRight: 8, height: 36, justifyContent: 'center' },
-  filterPillActive: { backgroundColor: '#1F2937', borderColor: '#1F2937' },
-  filterPillText: { color: '#4B5563', fontSize: 13, fontWeight: '600' },
-  filterPillTextActive: { color: '#FFF' },
+  listContainer: { flex: 1, marginTop: 10, zIndex: 1 },
+  
+  listHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, zIndex: 10 },
+  filterDropdownBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderWidth: 1, borderColor: '#D1D5DB', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, gap: 6, maxWidth: 160 },
+  filterDropdownText: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  // 🟢 AÑADIDO: overflow hidden y eliminamos el maxHeight de aquí para pasarlo al ScrollView
+  filterDropdownMenu: { position: 'absolute', top: '100%', right: 0, marginTop: 4, backgroundColor: '#FFF', borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB', width: 150, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 5, overflow: 'hidden' },
+  filterDropdownItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 15, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  filterDropdownItemActive: { backgroundColor: '#EFF6FF' },
+  filterDropdownItemText: { fontSize: 14, color: '#4B5563', flex: 1, marginRight: 5 },
+  filterDropdownItemTextActive: { color: '#2563EB', fontWeight: 'bold' },
 
   emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 40, backgroundColor: '#FFF', borderRadius: 16, borderStyle: 'dashed', borderWidth: 2, borderColor: '#E5E7EB', marginTop: 10 },
   emptyStateText: { marginTop: 10, color: '#9CA3AF', fontSize: 14 },
-  planoCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 15, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: '#F3F4F6' },
+  planoCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 15, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: '#F3F4F6', zIndex: 0 },
   planoIconContainer: { backgroundColor: '#EFF6FF', padding: 12, borderRadius: 12, marginRight: 15 },
   planoInfo: { flex: 1 },
   planoTitle: { fontSize: 16, fontWeight: 'bold', color: '#1F2937', marginBottom: 4 },

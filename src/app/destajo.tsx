@@ -6,9 +6,9 @@ import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useProject } from '../context/ProjectContext';
-import { useUser } from '../context/UserContext'; // 🧠 Importamos el motor de roles
+import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
 import { generarPlantillaInventario } from './utils/pdfInventario';
 
@@ -32,9 +32,8 @@ export default function InventarioScreen() {
   const router = useRouter();
   
   const { activeProject, isOffline, lastSync } = useProject();
-  const { profile } = useUser(); // 🧠 Extraemos el perfil
+  const { profile } = useUser(); 
 
-  // 🔒 Validador de permisos
   const isFinancialRole = profile?.role === 'admin' || profile?.role === 'oficina';
 
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -43,7 +42,9 @@ export default function InventarioScreen() {
 
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Estados del Modal
+  // 🟢 ESTADO: Controla qué semanas están expandidas (Acordeón)
+  const [expandedWeeks, setExpandedWeeks] = useState<Record<string, boolean>>({});
+
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -150,12 +151,21 @@ export default function InventarioScreen() {
   };
 
   const filteredItems = items.filter(item => {
-    const term = searchQuery.toLowerCase();
+    const normalizeText = (text: string) => 
+      text?.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "") || "";
+
+    const term = normalizeText(searchQuery);
+    
+    const nameStr = normalizeText(item.name);
+    const week = normalizeText(item.week_label || "");
+    const inChargeStr = normalizeText(item.in_charge || "");
+    const requestedByStr = normalizeText(item.requested_by || "");
+
     return (
-      item.name.toLowerCase().includes(term) ||
-      (item.week_label && item.week_label.toLowerCase().includes(term)) ||
-      (item.in_charge && item.in_charge.toLowerCase().includes(term)) ||
-      (item.requested_by && item.requested_by.toLowerCase().includes(term))
+      nameStr.includes(term) ||
+      week.includes(term) ||
+      inChargeStr.includes(term) ||
+      requestedByStr.includes(term)
     );
   });
 
@@ -173,6 +183,13 @@ export default function InventarioScreen() {
       t.name.toLowerCase().trim() === item.name.toLowerCase().trim()
     ))
   );
+
+  const toggleWeek = (week: string) => {
+    setExpandedWeeks(prev => ({
+      ...prev,
+      [week]: !prev[week]
+    }));
+  };
 
   const openAddModal = () => {
     setEditingId(null);
@@ -373,19 +390,20 @@ export default function InventarioScreen() {
           <View style={{ width: 28 }} />
         </View>
         <View style={styles.headerBottomRow}>
-          <Text style={styles.headerTitle}>Gastos y Materiales</Text>
+          <Text style={styles.headerTitle}>Control de Destajos</Text>
         </View>
       </View>
 
       <View style={styles.body}>
         
-        {isOffline && (
+        {isOffline ? (
           <View style={{ backgroundColor: '#FEF3C7', padding: 10, borderRadius: 8, marginBottom: 15, flexDirection: 'row', alignItems: 'center' }}>
             <Feather name="wifi-off" size={16} color="#D97706" style={{ marginRight: 8 }} />
             <Text style={{ color: '#D97706', fontSize: 12, flex: 1 }}>Modo Lectura. Puedes agregar gastos nuevos, pero no editar ni eliminar los antiguos.</Text>
           </View>
-        )}
+        ) : null}
 
+        {/* 🟢 TARJETA DE RESUMEN GLOBAL */}
         <View style={styles.summaryCard}>
           <View style={styles.summaryBox}>
             <Text style={styles.summaryLabel}>Total Registros</Text>
@@ -410,35 +428,33 @@ export default function InventarioScreen() {
             onChangeText={setSearchQuery}
             returnKeyType="search"
           />
-          {searchQuery.length > 0 && (
+          {searchQuery.length > 0 ? (
             <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchBtn}>
               <Feather name="x-circle" size={16} color="#9CA3AF" />
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
 
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle} adjustsFontSizeToFit numberOfLines={1}>
-            {searchQuery ? 'Resultados de Búsqueda' : 'Reporte Histórico'}
+            {searchQuery ? 'Resultados de Búsqueda' : 'Resumen por Semanas'}
           </Text>
           <View style={styles.actionsRow}>
-            {/* 🟢 Agregar Concepto: Visible para Todos */}
-            <TouchableOpacity style={[styles.addButton, isOffline && {backgroundColor: '#D97706'}]} onPress={openAddModal}>
+            <TouchableOpacity style={[styles.addButton, isOffline ? {backgroundColor: '#D97706'} : null]} onPress={openAddModal}>
               <Feather name="plus" size={14} color="#FFF" />
               <Text style={styles.addButtonText} adjustsFontSizeToFit numberOfLines={1}>Concepto</Text>
             </TouchableOpacity>
             
-            {/* 🔒 Exportar PDF y Excel: Solo visibles para roles financieros */}
-            {isFinancialRole && (
-              <>
+            {isFinancialRole ? (
+              <View style={{flexDirection: 'row', gap: 8}}>
                 <TouchableOpacity style={[styles.addButton, styles.pdfButton]} onPress={handleExportPDF} disabled={isExporting}>
                   {isExporting ? (
                     <ActivityIndicator size="small" color="#FFF" />
                   ) : (
-                    <>
+                    <View style={{flexDirection: 'row', alignItems: 'center'}}>
                       <Feather name="file-text" size={14} color="#FFF" />
                       <Text style={styles.addButtonText} adjustsFontSizeToFit numberOfLines={1}>PDF</Text>
-                    </>
+                    </View>
                   )}
                 </TouchableOpacity>
 
@@ -446,8 +462,8 @@ export default function InventarioScreen() {
                   <Feather name="grid" size={14} color="#FFF" />
                   <Text style={styles.addButtonText} adjustsFontSizeToFit numberOfLines={1}>Excel</Text>
                 </TouchableOpacity>
-              </>
-            )}
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -465,74 +481,87 @@ export default function InventarioScreen() {
           ) : (
             Object.entries(groupedItems).map(([week, weekItems]) => {
               const weekSubtotal = weekItems.reduce((sum, i) => sum + (i.quantity * i.unit_price), 0);
+              const isExpanded = expandedWeeks[week] || false;
               
               return (
                 <View key={week} style={styles.weekBlock}>
-                  <View style={styles.weekHeader}>
-                    <Text style={styles.weekTitle}>{week}</Text>
-                    <Text style={styles.weekSubtotal}>Subtotal: ${weekSubtotal.toFixed(2)}</Text>
-                  </View>
+                  <TouchableOpacity 
+                    style={[styles.weekHeader, isExpanded ? styles.weekHeaderExpanded : null]} 
+                    onPress={() => toggleWeek(week)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                      <Feather name={isExpanded ? "chevron-down" : "chevron-right"} size={20} color="#1E3A8A" style={{ marginRight: 8 }} />
+                      <Text style={styles.weekTitle} numberOfLines={1}>{week}</Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={styles.weekSubtotal}>${weekSubtotal.toFixed(2)}</Text>
+                      <Text style={styles.weekItemCount}>{weekItems.length} registros</Text>
+                    </View>
+                  </TouchableOpacity>
 
-                  <View style={styles.tableHeader}>
-                    <Text style={[styles.thText, { flex: 2.5 }]}>Concepto / Asignación</Text>
-                    <Text style={[styles.thText, { flex: 1.5, textAlign: 'center' }]}>Cant/U.</Text>
-                    <Text style={[styles.thText, { flex: 1.5, textAlign: 'center' }]}>P.U./ M.O</Text>
-                    <Text style={[styles.thText, { flex: 2, textAlign: 'right' }]}>Importe</Text>
-                  </View>
+                  {isExpanded ? (
+                    <View style={styles.tableContainer}>
+                      <View style={styles.tableHeader}>
+                        <Text style={[styles.thText, { flex: 2.5 }]}>Concepto / Asignación</Text>
+                        <Text style={[styles.thText, { flex: 1.5, textAlign: 'center' }]}>Cant/U.</Text>
+                        <Text style={[styles.thText, { flex: 1.5, textAlign: 'center' }]}>P.U./ M.O</Text>
+                        <Text style={[styles.thText, { flex: 2, textAlign: 'right' }]}>Importe</Text>
+                      </View>
 
-                  {weekItems.map((item) => (
-                    <View key={item.id} style={styles.tableRowContainer}>
-                      <View style={styles.tableRow}>
-                        
-                        <View style={{ flex: 2.5, justifyContent: 'center', paddingRight: 5 }}>
-                          <Text style={styles.tdName} numberOfLines={2}>{item.name}</Text>
-                          
-                          {item.in_charge ? (
-                            <View style={styles.badgeRow}>
-                              <Feather name="user-check" size={10} color="#2563EB" />
-                              <Text style={[styles.tdRole, { color: '#2563EB' }]} numberOfLines={1}> {item.in_charge}</Text>
-                            </View>
-                          ) : null}
-                          
-                          {item.requested_by ? (
-                            <View style={styles.badgeRow}>
-                              <Feather name="message-square" size={10} color="#D97706" />
-                              <Text style={[styles.tdRole, { color: '#D97706' }]} numberOfLines={1}> Solicita: {item.requested_by}</Text>
-                            </View>
-                          ) : null}
-
-                          <View style={styles.actionButtons}>
-                            {/* 🟢 Botón Editar: Visible para Todos */}
-                            <TouchableOpacity onPress={() => openEditModal(item)} style={[styles.editIcon, isOffline && {opacity: 0.5}]}>
-                              <Feather name="edit-2" size={10} color="#2563EB" />
-                            </TouchableOpacity>
+                      {weekItems.map((item) => (
+                        <View key={item.id} style={styles.tableRowContainer}>
+                          <View style={styles.tableRow}>
                             
-                            {/* 🔒 Botón Eliminar: Solo para Roles Financieros */}
-                            {isFinancialRole && (
-                              <TouchableOpacity onPress={() => confirmDelete(item.id, item.name)} style={[styles.deleteIcon, isOffline && {opacity: 0.5}]}>
-                                <Feather name="trash-2" size={10} color="#DC2626" />
-                              </TouchableOpacity>
-                            )}
+                            <View style={{ flex: 2.5, justifyContent: 'center', paddingRight: 5 }}>
+                              <Text style={styles.tdName} numberOfLines={2}>{item.name}</Text>
+                              
+                              {item.in_charge ? (
+                                <View style={styles.badgeRow}>
+                                  <Feather name="user-check" size={10} color="#2563EB" />
+                                  <Text style={[styles.tdRole, { color: '#2563EB' }]} numberOfLines={1}> {item.in_charge}</Text>
+                                </View>
+                              ) : null}
+                              
+                              {item.requested_by ? (
+                                <View style={styles.badgeRow}>
+                                  <Feather name="message-square" size={10} color="#D97706" />
+                                  <Text style={[styles.tdRole, { color: '#D97706' }]} numberOfLines={1}> Solicita: {item.requested_by}</Text>
+                                </View>
+                              ) : null}
+
+                              <View style={styles.actionButtons}>
+                                <TouchableOpacity onPress={() => openEditModal(item)} style={[styles.editIcon, isOffline ? {opacity: 0.5} : null]}>
+                                  <Feather name="edit-2" size={10} color="#2563EB" />
+                                </TouchableOpacity>
+                                
+                                {isFinancialRole ? (
+                                  <TouchableOpacity onPress={() => confirmDelete(item.id, item.name)} style={[styles.deleteIcon, isOffline ? {opacity: 0.5} : null]}>
+                                    <Feather name="trash-2" size={10} color="#DC2626" />
+                                  </TouchableOpacity>
+                                ) : null}
+                              </View>
+                            </View>
+
+                            <View style={{ flex: 1.5, alignItems: 'center', justifyContent: 'center' }}>
+                              <Text style={styles.tdValue}>{item.quantity}</Text>
+                              <Text style={styles.tdUnit}>{item.unit}</Text>
+                            </View>
+
+                            <View style={{ flex: 1.5, alignItems: 'center', justifyContent: 'center' }}>
+                              <Text style={styles.tdValue} adjustsFontSizeToFit numberOfLines={1}>${item.unit_price}</Text>
+                            </View>
+
+                            <View style={{ flex: 2, alignItems: 'flex-end', justifyContent: 'center' }}>
+                              <Text style={styles.tdTotal} adjustsFontSizeToFit numberOfLines={1}>
+                                ${(item.quantity * item.unit_price).toFixed(2)}
+                              </Text>
+                            </View>
                           </View>
                         </View>
-
-                        <View style={{ flex: 1.5, alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={styles.tdValue}>{item.quantity}</Text>
-                          <Text style={styles.tdUnit}>{item.unit}</Text>
-                        </View>
-
-                        <View style={{ flex: 1.5, alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={styles.tdValue} adjustsFontSizeToFit numberOfLines={1}>${item.unit_price}</Text>
-                        </View>
-
-                        <View style={{ flex: 2, alignItems: 'flex-end', justifyContent: 'center' }}>
-                          <Text style={styles.tdTotal} adjustsFontSizeToFit numberOfLines={1}>
-                            ${(item.quantity * item.unit_price).toFixed(2)}
-                          </Text>
-                        </View>
-                      </View>
+                      ))}
                     </View>
-                  ))}
+                  ) : null}
                 </View>
               );
             })
@@ -540,22 +569,37 @@ export default function InventarioScreen() {
         </ScrollView>
       </View>
 
-      <Modal visible={isModalVisible} animationType="slide" transparent={true}>
+      {/* ✏️ FORMULARIO TIPO BOTTOM SHEET */}
+      <Modal visible={isModalVisible} animationType="slide" transparent={true} onRequestClose={() => setIsModalVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{editingId ? 'Editar Registro' : 'Nuevo Registro'}</Text>
-                <TouchableOpacity onPress={() => setIsModalVisible(false)}>
-                  <Feather name="x" size={24} color="#6B7280" />
-                </TouchableOpacity>
-              </View>
+          
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsModalVisible(false)} />
+          
+          <View style={[styles.modalContent, { maxHeight: '90%', paddingBottom: Platform.OS === 'ios' ? 40 : 25 }]}>
+            
+            <View style={{ alignItems: 'center', marginBottom: 10 }}>
+              <View style={{ width: 45, height: 6, backgroundColor: '#E2E8F0', borderRadius: 10 }} />
+            </View>
 
-              {isOffline && (
+            <View style={[styles.modalHeader, { borderBottomWidth: 0, paddingBottom: 10 }]}>
+              <Text style={styles.modalTitle}>{editingId ? 'Editar Registro' : 'Nuevo Registro'}</Text>
+              <TouchableOpacity onPress={() => setIsModalVisible(false)}>
+                <Feather name="x" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView 
+              showsVerticalScrollIndicator={false} 
+              keyboardShouldPersistTaps="handled"
+              onScrollEndDrag={(e) => {
+                if (e.nativeEvent.contentOffset.y < -50) setIsModalVisible(false);
+              }}
+            >
+              {isOffline ? (
                 <Text style={{color: '#D97706', fontSize: 12, marginBottom: 10, fontStyle: 'italic'}}>
                   * Guardando en modo local
                 </Text>
-              )}
+              ) : null}
 
               <Text style={styles.modalLabel}>Semana de Registro</Text>
               <TextInput 
@@ -567,7 +611,7 @@ export default function InventarioScreen() {
               <Text style={styles.modalLabel}>Concepto / Actividad</Text>
               <View style={{ zIndex: 1 }}>
                 <TextInput 
-                  style={[styles.modalInput, showSuggestions && name.length > 0 && styles.modalInputActive]} 
+                  style={[styles.modalInput, showSuggestions && name.length > 0 ? styles.modalInputActive : null]} 
                   placeholder="Ej. Cemento Cruz Azul 50kg" 
                   placeholderTextColor="#9CA3AF"
                   value={name} 
@@ -577,7 +621,7 @@ export default function InventarioScreen() {
                   }} 
                 />
                 
-                {showSuggestions && name.length > 1 && (
+                {showSuggestions && name.length > 1 ? (
                   <View style={styles.suggestionsContainer}>
                     {uniqueMaterials
                       .filter(m => m.name.toLowerCase().includes(name.toLowerCase()))
@@ -600,7 +644,7 @@ export default function InventarioScreen() {
                         </TouchableOpacity>
                       ))}
                   </View>
-                )}
+                ) : null}
               </View>
 
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
@@ -649,10 +693,10 @@ export default function InventarioScreen() {
                 {workers.map(w => (
                   <TouchableOpacity 
                     key={`incharge-${w.id}`} 
-                    style={[styles.chip, inCharge === w.name && styles.chipSelected]}
+                    style={[styles.chip, inCharge === w.name ? styles.chipSelected : null]}
                     onPress={() => setInCharge(w.name)}
                   >
-                    <Text style={[styles.chipText, inCharge === w.name && styles.chipTextSelected]}>{w.name}</Text>
+                    <Text style={[styles.chipText, inCharge === w.name ? styles.chipTextSelected : null]}>{w.name}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -669,19 +713,20 @@ export default function InventarioScreen() {
                 {workers.map(w => (
                   <TouchableOpacity 
                     key={`req-${w.id}`} 
-                    style={[styles.chip, requestedBy === w.name && styles.chipSelected]}
+                    style={[styles.chip, requestedBy === w.name ? styles.chipSelected : null]}
                     onPress={() => setRequestedBy(w.name)}
                   >
-                    <Text style={[styles.chipText, requestedBy === w.name && styles.chipTextSelected]}>{w.name}</Text>
+                    <Text style={[styles.chipText, requestedBy === w.name ? styles.chipTextSelected : null]}>{w.name}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
 
-              <TouchableOpacity style={[styles.modalButton, isOffline && {backgroundColor: '#D97706'}]} onPress={handleSaveItem} disabled={isSaving}>
+              <TouchableOpacity style={[styles.modalButton, isOffline ? {backgroundColor: '#D97706'} : null]} onPress={handleSaveItem} disabled={isSaving}>
                 <Text style={styles.modalButtonText}>{isSaving ? 'Guardando...' : (isOffline ? 'Guardar Offline' : 'Guardar')}</Text>
               </TouchableOpacity>
-            </View>
-          </ScrollView>
+              <View style={{height: 40}}/>
+            </ScrollView>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
     </View>
@@ -719,10 +764,13 @@ const styles = StyleSheet.create({
   pdfButton: { backgroundColor: '#DC2626' },
   excelButton: { backgroundColor: '#10B981' },
 
-  weekBlock: { marginBottom: 25 },
-  weekHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#E0E7FF', padding: 10, borderTopLeftRadius: 10, borderTopRightRadius: 10, borderBottomWidth: 2, borderBottomColor: '#4F46E5' },
-  weekTitle: { fontSize: 12, fontWeight: 'bold', color: '#1E3A8A', textTransform: 'uppercase', flexShrink: 1 },
-  weekSubtotal: { fontSize: 13, fontWeight: 'bold', color: '#059669', marginLeft: 10 },
+  weekBlock: { marginBottom: 15 },
+  weekHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#E0E7FF', padding: 15, borderRadius: 12, borderWidth: 1, borderColor: '#C7D2FE' },
+  weekHeaderExpanded: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderBottomWidth: 0 },
+  weekTitle: { fontSize: 14, fontWeight: 'bold', color: '#1E3A8A', textTransform: 'uppercase', flexShrink: 1 },
+  weekSubtotal: { fontSize: 16, fontWeight: 'bold', color: '#059669', textAlign: 'right' },
+  weekItemCount: { fontSize: 11, color: '#6366F1', fontWeight: '600', textAlign: 'right', marginTop: 2 },
+  tableContainer: { borderWidth: 1, borderColor: '#C7D2FE', borderTopWidth: 0, borderBottomLeftRadius: 12, borderBottomRightRadius: 12, overflow: 'hidden' },
 
   tableHeader: { flexDirection: 'row', backgroundColor: '#F3F4F6', paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 1, borderColor: '#D1D5DB' },
   thText: { fontSize: 10, fontWeight: 'bold', color: '#4B5563', textTransform: 'uppercase' },
@@ -744,8 +792,9 @@ const styles = StyleSheet.create({
 
   emptyText: { textAlign: 'center', color: '#6B7280', marginTop: 30, fontStyle: 'italic' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', padding: 20 },
-  modalContent: { backgroundColor: '#FFF', borderRadius: 16, padding: 20, marginVertical: 40 },
+  // BOTTOM SHEET MODAL STYLES
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
   modalLabel: { fontSize: 12, fontWeight: '600', color: '#4B5563', marginTop: 12, marginBottom: 6 },

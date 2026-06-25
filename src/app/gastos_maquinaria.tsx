@@ -630,26 +630,49 @@ export default function GastosMaquinariaScreen() {
       </Modal>
 
       {/* 1️⃣ MODAL: NUEVA / EDITAR MÁQUINA CONFIG */}
-      <Modal visible={modalNuevaMaquina} animationType="fade" transparent={true} onRequestClose={limpiarFormularioMaquina}>
+      <Modal visible={modalNuevaMaquina} animationType="slide" transparent={true} onRequestClose={limpiarFormularioMaquina}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-          <Pressable style={{ flex: 1 }} onPress={limpiarFormularioMaquina} />
-          <View style={styles.modalWrapper}>
-            <View style={styles.modalHeader}><Text style={styles.modalTitle}>{editingMachineConfigId ? 'Editar Equipo' : 'Alta de Nuevo Equipo'}</Text></View>
-            <ScrollView style={styles.modalScrollInside} keyboardShouldPersistTaps="handled">
+          
+          <Pressable style={StyleSheet.absoluteFill} onPress={limpiarFormularioMaquina} />
+          
+          <View style={[styles.modalWrapper, { maxHeight: '90%', paddingBottom: Platform.OS === 'ios' ? 40 : 25 }]}>
+            
+            <View style={{ alignItems: 'center', marginTop: 10, marginBottom: 5 }}>
+              <View style={{ width: 45, height: 6, backgroundColor: '#E2E8F0', borderRadius: 10 }} />
+            </View>
+
+            <View style={[styles.modalHeader, { borderBottomWidth: 0, paddingBottom: 10 }]}>
+              <Text style={styles.modalTitle}>{editingMachineConfigId ? 'Editar Equipo' : 'Alta de Nuevo Equipo'}</Text>
+            </View>
+            
+            <ScrollView 
+              style={styles.modalScrollInside} 
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              onScrollEndDrag={(e) => {
+                if (e.nativeEvent.contentOffset.y < -50) limpiarFormularioMaquina();
+              }}
+            >
               <Text style={styles.modalLabel}>Nombre del Equipo</Text>
               <TextInput style={styles.modalInput} placeholder="Ej. Retroexcavadora CAT 320" value={equipo} onChangeText={setEquipo} />
+              
               <Text style={styles.modalLabel}>Proveedor</Text>
               <TextInput style={styles.modalInput} placeholder="Ej. Arrendadora del Centro" value={proveedor} onChangeText={setProveedor} />
+              
               <Text style={styles.modalLabel}>Corte de Facturación / Modalidad</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillsContainer}>
-                <TouchableOpacity style={[styles.pillBtn, modalidad === 'dia' && styles.pillActiveAzul]} onPress={() => setModalidad('dia')}><Text style={[styles.pillText, modalidad === 'dia' && styles.pillTextActive]}>Por Día</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.pillBtn, modalidad === 'semana' && styles.pillActiveAzul]} onPress={() => setModalidad('semana')}><Text style={[styles.pillText, modalidad === 'semana' && styles.pillTextActive]}>Por Semana</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.pillBtn, modalidad === 'mes' && styles.pillActiveAzul]} onPress={() => setModalidad('mes')}><Text style={[styles.pillText, modalidad === 'mes' && styles.pillTextActive]}>Por Mes</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.pillBtn, modalidad === 'dia' ? styles.pillActiveAzul : null]} onPress={() => setModalidad('dia')}><Text style={[styles.pillText, modalidad === 'dia' ? styles.pillTextActive : null]}>Por Día</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.pillBtn, modalidad === 'semana' ? styles.pillActiveAzul : null]} onPress={() => setModalidad('semana')}><Text style={[styles.pillText, modalidad === 'semana' ? styles.pillTextActive : null]}>Por Semana</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.pillBtn, modalidad === 'mes' ? styles.pillActiveAzul : null]} onPress={() => setModalidad('mes')}><Text style={[styles.pillText, modalidad === 'mes' ? styles.pillTextActive : null]}>Por Mes</Text></TouchableOpacity>
               </ScrollView>
+              
               <Text style={styles.modalLabel}>Tarifa por HORA ($)</Text>
               <TextInput style={styles.modalInput} placeholder="Ej. 1200" keyboardType="numeric" value={tarifaHora} onChangeText={(v) => setTarifaHora(v.replace(/[^0-9.]/g, ''))} />
+              
+              <View style={{height: 20}} />
             </ScrollView>
-            <View style={styles.modalFooter}>
+            
+            <View style={[styles.modalFooter, { paddingBottom: 0 }]}>
               <TouchableOpacity style={styles.cancelBtn} onPress={limpiarFormularioMaquina}><Text style={styles.cancelBtnText}>Cancelar</Text></TouchableOpacity>
               <TouchableOpacity style={styles.saveBtn} onPress={handleGuardarConfig} disabled={isSaving}>
                 {isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>{editingMachineConfigId ? 'Guardar Cambios' : 'Guardar Equipo'}</Text>}
@@ -662,14 +685,27 @@ export default function GastosMaquinariaScreen() {
       {/* 2️⃣ MODAL: REPORTAR HORAS HOY / EDICIÓN */}
       <Modal visible={modalHoras} animationType="slide" transparent={true} onRequestClose={() => { setModalHoras(false); limpiarFormsSecundarios(); }}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-          <Pressable style={{ flex: 1 }} onPress={() => { setModalHoras(false); limpiarFormsSecundarios(); }} />
-          <View style={styles.modalWrapper}>
-            <View style={styles.modalHeader}>
+          
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => { setModalHoras(false); limpiarFormsSecundarios(); }} />
+          
+          <View style={[styles.modalWrapper, { maxHeight: '90%', paddingBottom: Platform.OS === 'ios' ? 40 : 25 }]}>
+            
+            <View style={{ alignItems: 'center', marginTop: 10, marginBottom: 5 }}>
+              <View style={{ width: 45, height: 6, backgroundColor: '#E2E8F0', borderRadius: 10 }} />
+            </View>
+
+            <View style={[styles.modalHeader, { borderBottomWidth: 0, paddingBottom: 10 }]}>
               <Text style={styles.modalTitle}>{editingRecordId ? 'Editar Horas' : 'Reportar Bitácora'}</Text>
             </View>
-            <ScrollView style={styles.modalScrollInside} keyboardShouldPersistTaps="handled">
-              
-              {/* 🟢 PREVISUALIZADOR DEL COSTO */}
+            
+            <ScrollView 
+              style={styles.modalScrollInside} 
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              onScrollEndDrag={(e) => {
+                if (e.nativeEvent.contentOffset.y < -50) { setModalHoras(false); limpiarFormsSecundarios(); }
+              }}
+            >
               <View style={styles.calcBox}>
                 <Text style={styles.calcLabel}>Tarifa Registrada: <Text style={{color: '#1E293B'}}>${selectedMaquina?.tarifaHora}/hora</Text></Text>
                 {horasOperacion ? (
@@ -701,13 +737,13 @@ export default function GastosMaquinariaScreen() {
                       <DateTimePicker value={timeEntradaDate} mode="time" display="default" style={{height: 30}} onChange={(e, d) => { if(d) handleEntradaChange(d); }} />
                     </View>
                   ) : (
-                    <>
+                    <View>
                       <TouchableOpacity style={styles.timeBtn} onPress={() => setShowPickerEntrada(true)}>
                         <Feather name="clock" size={14} color={horaEntrada ? '#2563EB' : '#94A3B8'} />
-                        <Text style={[styles.timeBtnText, horaEntrada && {color: '#0F172A'}]}>{horaEntrada || 'Inicio'}</Text>
+                        <Text style={[styles.timeBtnText, horaEntrada ? {color: '#0F172A'} : null]}>{horaEntrada || 'Inicio'}</Text>
                       </TouchableOpacity>
-                      {showPickerEntrada && <DateTimePicker value={timeEntradaDate} mode="time" display="default" onChange={(e, d) => { setShowPickerEntrada(false); if(d) handleEntradaChange(d); }} />}
-                    </>
+                      {showPickerEntrada ? <DateTimePicker value={timeEntradaDate} mode="time" display="default" onChange={(e, d) => { setShowPickerEntrada(false); if(d) handleEntradaChange(d); }} /> : null}
+                    </View>
                   )}
                 </View>
                 <View style={{ flex: 1 }}>
@@ -717,20 +753,23 @@ export default function GastosMaquinariaScreen() {
                       <DateTimePicker value={timeSalidaDate} mode="time" display="default" style={{height: 30}} onChange={(e, d) => { if(d) { setTimeSalidaDate(d); setHoraSalida(d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})); } }} />
                     </View>
                   ) : (
-                    <>
+                    <View>
                       <TouchableOpacity style={styles.timeBtn} onPress={() => setShowPickerSalida(true)}>
                         <Feather name="clock" size={14} color={horaSalida ? '#2563EB' : '#94A3B8'} />
-                        <Text style={[styles.timeBtnText, horaSalida && {color: '#0F172A'}]}>{horaSalida || 'Fin'}</Text>
+                        <Text style={[styles.timeBtnText, horaSalida ? {color: '#0F172A'} : null]}>{horaSalida || 'Fin'}</Text>
                       </TouchableOpacity>
-                      {showPickerSalida && <DateTimePicker value={timeSalidaDate} mode="time" display="default" onChange={(e, d) => { setShowPickerSalida(false); if(d) { setTimeSalidaDate(d); setHoraSalida(d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})); } }} />}
-                    </>
+                      {showPickerSalida ? <DateTimePicker value={timeSalidaDate} mode="time" display="default" onChange={(e, d) => { setShowPickerSalida(false); if(d) { setTimeSalidaDate(d); setHoraSalida(d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})); } }} /> : null}
+                    </View>
                   )}
                 </View>
               </View>
               <Text style={styles.modalLabel}>Nota / Reporte de Falla (Opcional)</Text>
               <TextInput style={[styles.modalInput, {height: 60, textAlignVertical: 'top'}]} placeholder="Ej. Lluvia por la tarde" multiline value={concepto} onChangeText={setConcepto} />
+              
+              <View style={{height: 20}} />
             </ScrollView>
-            <View style={styles.modalFooter}>
+            
+            <View style={[styles.modalFooter, { paddingBottom: 0 }]}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => { setModalHoras(false); limpiarFormsSecundarios(); }}><Text style={styles.cancelBtnText}>Cancelar</Text></TouchableOpacity>
               <TouchableOpacity style={styles.saveBtn} onPress={handleGuardarUso} disabled={isSaving}>
                 {isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>{editingRecordId ? 'Actualizar' : 'Guardar'}</Text>}
@@ -743,16 +782,36 @@ export default function GastosMaquinariaScreen() {
       {/* 3️⃣ MODAL: ABONAR ANTICIPO / EDICIÓN */}
       <Modal visible={modalAnticipo} animationType="slide" transparent={true} onRequestClose={() => { setModalAnticipo(false); limpiarFormsSecundarios(); }}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-          <Pressable style={{ flex: 1 }} onPress={() => { setModalAnticipo(false); limpiarFormsSecundarios(); }} />
-          <View style={styles.modalWrapper}>
-            <View style={styles.modalHeader}><Text style={[styles.modalTitle, {color: '#059669'}]}>{editingRecordId ? 'Editar Pago' : 'Pago a Proveedor'}</Text></View>
-            <ScrollView style={styles.modalScrollInside} keyboardShouldPersistTaps="handled">
+          
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => { setModalAnticipo(false); limpiarFormsSecundarios(); }} />
+          
+          <View style={[styles.modalWrapper, { maxHeight: '90%', paddingBottom: Platform.OS === 'ios' ? 40 : 25 }]}>
+            
+            <View style={{ alignItems: 'center', marginTop: 10, marginBottom: 5 }}>
+              <View style={{ width: 45, height: 6, backgroundColor: '#E2E8F0', borderRadius: 10 }} />
+            </View>
+
+            <View style={[styles.modalHeader, { borderBottomWidth: 0, paddingBottom: 10 }]}>
+              <Text style={[styles.modalTitle, {color: '#059669'}]}>{editingRecordId ? 'Editar Pago' : 'Pago a Proveedor'}</Text>
+            </View>
+            
+            <ScrollView 
+              style={styles.modalScrollInside} 
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              onScrollEndDrag={(e) => {
+                if (e.nativeEvent.contentOffset.y < -50) { setModalAnticipo(false); limpiarFormsSecundarios(); }
+              }}
+            >
               <Text style={styles.modalLabel}>Monto del Pago o Anticipo ($)</Text>
               <TextInput style={[styles.modalInput, {fontSize: 24, fontWeight: 'bold', color: '#10B981', textAlign: 'center'}]} placeholder="0.00" keyboardType="numeric" value={montoAnticipo} onChangeText={(v) => setMontoAnticipo(v.replace(/[^0-9.]/g, ''))} autoFocus />
               <Text style={styles.modalLabel}>Concepto (Opcional)</Text>
               <TextInput style={[styles.modalInput, {height: 60, textAlignVertical: 'top'}]} placeholder="Ej. Pago semana 3" multiline value={concepto} onChangeText={setConcepto} />
+              
+              <View style={{height: 20}} />
             </ScrollView>
-            <View style={styles.modalFooter}>
+            
+            <View style={[styles.modalFooter, { paddingBottom: 0 }]}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => { setModalAnticipo(false); limpiarFormsSecundarios(); }}><Text style={styles.cancelBtnText}>Cancelar</Text></TouchableOpacity>
               <TouchableOpacity style={[styles.saveBtn, {backgroundColor: '#10B981'}]} onPress={handleGuardarAnticipo} disabled={isSaving}>
                 {isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>{editingRecordId ? 'Actualizar Pago' : 'Registrar Pago'}</Text>}

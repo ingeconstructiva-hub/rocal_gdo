@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
-import * as Print from 'expo-print'; // 🟢 Importación correcta
+import * as Print from 'expo-print';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -12,7 +12,6 @@ import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
 import { generarPlantillaCajaChica } from './utils/pdfCajaChica';
 
-// 🟢 NUEVA INTERFAZ PARA LOS ARTÍCULOS
 interface ArticuloGasto {
   id: string;
   concepto: string;
@@ -34,7 +33,7 @@ interface MovimientoFinanciero {
   numero_nota?: string;
   foto_ticket: string | null;
   fecha: string;
-  detalles_json?: any; // 🆕 Agregamos el JSON de artículos
+  detalles_json?: any; 
 }
 
 export default function CajaChicaScreen() {
@@ -58,7 +57,6 @@ export default function CajaChicaScreen() {
   const [tipoMovimientoForm, setTipoMovimientoForm] = useState<'ingreso' | 'egreso'>('egreso');
   const [isSaving, setIsSaving] = useState(false);
 
-  // 🟢 ESTADO PARA LA LISTA DINÁMICA DE ARTÍCULOS
   const [articulos, setArticulos] = useState<ArticuloGasto[]>([
     { id: Date.now().toString(), concepto: '', cantidad: '1', unidad: '', precioUnitario: '' }
   ]);
@@ -67,16 +65,15 @@ export default function CajaChicaScreen() {
   const [encargado, setEncargado] = useState('');
   const [frenteUnidad, setFrenteUnidad] = useState('');
   const [tipoDeposito, setTipoDeposito] = useState<'efectivo' | 'transferencia'>('efectivo');
-  const [justificacionGeneral, setJustificacionGeneral] = useState(''); // Nota global
+  const [justificacionGeneral, setJustificacionGeneral] = useState(''); 
   const [fotoTicket, setFotoTicket] = useState<string | null>(null);
-  const [importeInvertido, setImporteInvertido] = useState(''); // Solo ingresos
+  const [importeInvertido, setImporteInvertido] = useState(''); 
   const [searchQuery, setSearchQuery] = useState('');
 
   const isAdminOrOficina = profile?.role === 'admin' || profile?.role === 'oficina';
 
   const [isExportingPDF, setIsExportingPDF] = useState(false);
 
-  // Cálculos de saldo base (necesarios para el PDF)
   const totalIngresos = movimientos.filter(m => m.tipo === 'ingreso').reduce((sum, m) => sum + m.monto, 0);
   const totalEgresos = movimientos.filter(m => m.tipo === 'egreso').reduce((sum, m) => sum + m.monto, 0);
   const saldoDisponible = totalIngresos - totalEgresos;
@@ -112,7 +109,6 @@ export default function CajaChicaScreen() {
         movimientosFiltrados
       );
       
-      // 🟢 CORRECCIÓN: Print (con mayúscula)
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
       await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Exportar Reporte' });
     } catch (error: any) {
@@ -409,14 +405,14 @@ export default function CajaChicaScreen() {
           <Text style={styles.totalAmount}>${saldoDisponible.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Text>
         </TouchableOpacity>
         <View style={styles.contrastContainer}>
-          <TouchableOpacity style={[styles.contrastBox, filtroActivo === 'ingreso' && styles.contrastBoxActive]} onPress={() => toggleFiltro('ingreso')}>
+          <TouchableOpacity style={[styles.contrastBox, filtroActivo === 'ingreso' ? styles.contrastBoxActive : null]} onPress={() => toggleFiltro('ingreso')}>
             <Text style={styles.contrastLabel}>📥 TOTAL INVERTIDO</Text>
-            <Text style={[styles.contrastValueIngreso, filtroActivo === 'ingreso' && { color: '#34D399' }]}>+${totalIngresos.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</Text>
+            <Text style={[styles.contrastValueIngreso, filtroActivo === 'ingreso' ? { color: '#34D399' } : null]}>+${totalIngresos.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</Text>
           </TouchableOpacity>
           <View style={styles.contrastDivider} />
-          <TouchableOpacity style={[styles.contrastBox, filtroActivo === 'egreso' && styles.contrastBoxActive]} onPress={() => toggleFiltro('egreso')}>
+          <TouchableOpacity style={[styles.contrastBox, filtroActivo === 'egreso' ? styles.contrastBoxActive : null]} onPress={() => toggleFiltro('egreso')}>
             <Text style={styles.contrastLabel}>📤 TOTAL GASTADO</Text>
-            <Text style={[styles.contrastValueEgreso, filtroActivo === 'egreso' && { color: '#F87171' }]}>-${totalEgresos.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</Text>
+            <Text style={[styles.contrastValueEgreso, filtroActivo === 'egreso' ? { color: '#F87171' } : null]}>-${totalEgresos.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -425,14 +421,14 @@ export default function CajaChicaScreen() {
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>{filtroActivo === 'todos' ? 'Historial de Movimientos' : filtroActivo === 'ingreso' ? 'Solo Inversiones' : 'Solo Gastos'}</Text>
           
-          {isAdminOrOficina && (
+          {isAdminOrOficina ? (
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <TouchableOpacity onPress={handleExportarPDF} disabled={isExportingPDF} style={[styles.excelBtnHeader, { backgroundColor: '#DC2626' }]}>
                 {isExportingPDF ? <ActivityIndicator size="small" color="#FFF" /> : (
-                  <>
+                  <View style={{flexDirection: 'row', alignItems: 'center'}}>
                     <Feather name="file-text" size={14} color="#FFF" />
                     <Text style={styles.excelBtnText}>PDF</Text>
-                  </>
+                  </View>
                 )}
               </TouchableOpacity>
               <TouchableOpacity onPress={handleExportarExcel} style={styles.excelBtnHeader}>
@@ -440,7 +436,7 @@ export default function CajaChicaScreen() {
                 <Text style={styles.excelBtnText}>Excel</Text>
               </TouchableOpacity>
             </View>
-          )}
+          ) : null}
         </View>
 
         {/* 🔍 BARRA DE BÚSQUEDA */}
@@ -454,11 +450,11 @@ export default function CajaChicaScreen() {
             onChangeText={setSearchQuery}
             returnKeyType="search"
           />
-          {searchQuery.length > 0 && (
+          {searchQuery.length > 0 ? (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
               <Feather name="x-circle" size={18} color="#94A3B8" />
             </TouchableOpacity>
-          )}
+          ) : null}
         </View> 
 
         {loading ? (
@@ -478,7 +474,7 @@ export default function CajaChicaScreen() {
                   <Text style={[styles.gastoMonto, { color: mov.tipo === 'ingreso' ? '#10B981' : '#DC2626' }]}>
                     {mov.tipo === 'ingreso' ? '+' : '-'}${mov.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                   </Text>
-                  {mov.foto_ticket && <Feather name="paperclip" size={14} color="#94A3B8" style={{ marginTop: 4 }} />}
+                  {mov.foto_ticket ? <Feather name="paperclip" size={14} color="#94A3B8" style={{ marginTop: 4 }} /> : null}
                 </View>
               </View>
             </TouchableOpacity>
@@ -486,23 +482,37 @@ export default function CajaChicaScreen() {
         )}
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} onPress={() => setIsFormModalVisible(true)}><Feather name="plus" size={28} color="#FFF" /></TouchableOpacity>
+      <TouchableOpacity style={styles.fab} onPress={() => setIsFormModalVisible(true)}>
+        <Feather name="plus" size={28} color="#FFF" />
+      </TouchableOpacity>
 
-      {/* 🔍 MODAL DETALLES */}
-      <Modal visible={!!movimientoSeleccionado} animationType="fade" transparent={true} onRequestClose={() => setMovimientoSeleccionado(null)}>
+      {/* 🔍 MODAL DETALLES TIPO BOTTOM SHEET */}
+      <Modal visible={!!movimientoSeleccionado} animationType="slide" transparent={true} onRequestClose={() => setMovimientoSeleccionado(null)}>
         <View style={styles.modalOverlayDetail}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setMovimientoSeleccionado(null)} />
           <View style={styles.detailModalContent}>
-            {movimientoSeleccionado && (
-              <>
+            
+            <View style={{ alignItems: 'center', marginBottom: 15 }}>
+              <View style={{ width: 45, height: 6, backgroundColor: '#E2E8F0', borderRadius: 10 }} />
+            </View>
+
+            {movimientoSeleccionado ? (
+              <View style={{ flex: 1 }}>
                 <View style={styles.detailHeader}>
                   <View style={[styles.detailIconBox, { backgroundColor: movimientoSeleccionado.tipo === 'ingreso' ? '#D1FAE5' : '#FEE2E2' }]}>
                     <Feather name={movimientoSeleccionado.tipo === 'ingreso' ? "arrow-down-left" : "arrow-up-right"} size={28} color={movimientoSeleccionado.tipo === 'ingreso' ? "#10B981" : "#EF4444"} />
                   </View>
-                  <TouchableOpacity onPress={() => setMovimientoSeleccionado(null)} style={styles.detailCloseBtn}><Feather name="x" size={24} color="#64748B" /></TouchableOpacity>
+                  <TouchableOpacity onPress={() => setMovimientoSeleccionado(null)} style={styles.detailCloseBtn}>
+                    <Feather name="x" size={24} color="#64748B" />
+                  </TouchableOpacity>
                 </View>
 
-                <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: '80%' }}>
+                <ScrollView 
+                  showsVerticalScrollIndicator={false}
+                  onScrollEndDrag={(e) => {
+                    if (e.nativeEvent.contentOffset.y < -50) setMovimientoSeleccionado(null);
+                  }}
+                >
                   <Text style={styles.detailTitle}>{movimientoSeleccionado.tipo === 'ingreso' ? 'Inversión' : 'Ticket / Gasto'}</Text>
                   <Text style={[styles.detailAmount, { color: movimientoSeleccionado.tipo === 'ingreso' ? '#10B981' : '#DC2626' }]}>
                     {movimientoSeleccionado.tipo === 'ingreso' ? '+' : '-'}${movimientoSeleccionado.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
@@ -514,11 +524,10 @@ export default function CajaChicaScreen() {
                       <View style={{flex: 1}}><Text style={styles.detailLabel}>Fecha</Text><Text style={styles.detailValue}>{new Date(movimientoSeleccionado.fecha).toLocaleDateString('es-MX')}</Text></View>
                     </View>
 
-                    {movimientoSeleccionado.tipo === 'egreso' && (
+                    {movimientoSeleccionado.tipo === 'egreso' ? (
                       <View style={{ marginTop: 15, borderTopWidth: 1, borderTopColor: '#E2E8F0', paddingTop: 15 }}>
                         <Text style={styles.detailLabel}>Detalle de Artículos</Text>
                         
-                        {/* 🟢 RENDEREADO DINÁMICO DE JSON DE ARTÍCULOS */}
                         {movimientoSeleccionado.detalles_json && Array.isArray(movimientoSeleccionado.detalles_json) ? (
                           movimientoSeleccionado.detalles_json.map((art: any, i: number) => (
                             <View key={i} style={{flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6}}>
@@ -533,19 +542,19 @@ export default function CajaChicaScreen() {
                           </View>
                         )}
                       </View>
-                    )}
+                    ) : null}
                   </View>
 
-                  {movimientoSeleccionado.foto_ticket && (
+                  {movimientoSeleccionado.foto_ticket ? (
                     <View style={{ marginTop: 20 }}>
                       <Text style={styles.detailLabel}>Evidencia Fotográfica</Text>
                       <TouchableOpacity onPress={() => Linking.openURL(movimientoSeleccionado.foto_ticket!)}>
                         <Image source={{ uri: movimientoSeleccionado.foto_ticket }} style={styles.detailTicketImage} resizeMode="cover" />
                       </TouchableOpacity>
                     </View>
-                  )}
+                  ) : null}
 
-                  {isAdminOrOficina && (
+                  {isAdminOrOficina ? (
                     <View style={styles.detailActionsRow}>
                       <TouchableOpacity style={styles.editActionBtn} onPress={() => iniciarEdicion(movimientoSeleccionado)}>
                         <Feather name="edit-2" size={16} color="#FFF" />
@@ -556,51 +565,78 @@ export default function CajaChicaScreen() {
                         <Text style={styles.deleteActionBtnText}>Borrar</Text>
                       </TouchableOpacity>
                     </View>
-                  )}
+                  ) : null}
+                  <View style={{height: 20}} />
                 </ScrollView>
-              </>
-            )}
+              </View>
+            ) : null}
           </View>
         </View>
       </Modal>
 
-      {/* ✏️ FORMULARIO DE ALTA Y EDICIÓN */}
+      {/* ✏️ FORMULARIO DE ALTA Y EDICIÓN TIPO BOTTOM SHEET */}
       <Modal visible={isFormModalVisible} animationType="slide" transparent={true} onRequestClose={cerrarModalYLimpiar}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-          <ScrollView contentContainerStyle={styles.modalScroll} keyboardShouldPersistTaps="handled">
-            <Pressable style={{ flex: 1 }} onPress={cerrarModalYLimpiar} />
-            <View style={styles.modalContent}>
-              
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{isEditing ? '✏️ Editar Registro' : '➕ Nuevo Movimiento'}</Text>
-                <TouchableOpacity onPress={cerrarModalYLimpiar}><Feather name="x" size={24} color="#6B7280" /></TouchableOpacity>
-              </View>
+          
+          <Pressable style={StyleSheet.absoluteFill} onPress={cerrarModalYLimpiar} />
+          
+          <View style={[styles.modalContent, { maxHeight: '90%', paddingBottom: Platform.OS === 'ios' ? 40 : 25 }]}>
+            
+            <View style={{ alignItems: 'center', marginBottom: 10 }}>
+              <View style={{ width: 45, height: 6, backgroundColor: '#E2E8F0', borderRadius: 10 }} />
+            </View>
 
+            <View style={[styles.modalHeader, { borderBottomWidth: 0, paddingBottom: 10 }]}>
+              <Text style={styles.modalTitle}>{isEditing ? '✏️ Editar Registro' : '➕ Nuevo Movimiento'}</Text>
+              <TouchableOpacity onPress={cerrarModalYLimpiar}><Feather name="x" size={24} color="#6B7280" /></TouchableOpacity>
+            </View>
+
+            <ScrollView 
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              onScrollEndDrag={(e) => {
+                if (e.nativeEvent.contentOffset.y < -50) cerrarModalYLimpiar();
+              }}
+            >
               {isAdminOrOficina && !isEditing ? (
                 <View style={styles.formToggleContainer}>
-                  <TouchableOpacity style={[styles.formToggleBtn, tipoMovimientoForm === 'ingreso' && styles.toggleActiveIngreso]} onPress={() => setTipoMovimientoForm('ingreso')}>
-                    <Text style={[styles.toggleText, tipoMovimientoForm === 'ingreso' && styles.toggleTextActive]}>📥 Registrar Inversión</Text>
+                  <TouchableOpacity style={[styles.formToggleBtn, tipoMovimientoForm === 'ingreso' ? styles.toggleActiveIngreso : null]} onPress={() => setTipoMovimientoForm('ingreso')}>
+                    <Text style={[styles.toggleText, tipoMovimientoForm === 'ingreso' ? styles.toggleTextActive : null]}>📥 Registrar Inversión</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.formToggleBtn, tipoMovimientoForm === 'egreso' && styles.toggleActiveEgreso]} onPress={() => setTipoMovimientoForm('egreso')}>
-                    <Text style={[styles.toggleText, tipoMovimientoForm === 'egreso' && styles.toggleTextActive]}>📤 Registrar Gasto</Text>
+                  <TouchableOpacity style={[styles.formToggleBtn, tipoMovimientoForm === 'egreso' ? styles.toggleActiveEgreso : null]} onPress={() => setTipoMovimientoForm('egreso')}>
+                    <Text style={[styles.toggleText, tipoMovimientoForm === 'egreso' ? styles.toggleTextActive : null]}>📤 Registrar Gasto</Text>
                   </TouchableOpacity>
                 </View>
               ) : isEditing ? (
-                <View style={styles.editingTypeIndicator}><Text style={[styles.editingTypeText, {color: tipoMovimientoForm === 'ingreso' ? '#10B981' : '#EF4444'}]}>Editando {tipoMovimientoForm === 'ingreso' ? 'Inversión' : 'Gasto'}</Text></View>
+                <View style={styles.editingTypeIndicator}>
+                  <Text style={[styles.editingTypeText, {color: tipoMovimientoForm === 'ingreso' ? '#10B981' : '#EF4444'}]}>
+                    Editando {tipoMovimientoForm === 'ingreso' ? 'Inversión' : 'Gasto'}
+                  </Text>
+                </View>
               ) : (
-                <View style={[styles.formToggleContainer, { backgroundColor: '#FEE2E2' }]}><View style={[styles.formToggleBtn, styles.toggleActiveEgreso]}><Text style={[styles.toggleText, styles.toggleTextActive]}>📤 Registrar Gasto</Text></View></View>
+                <View style={[styles.formToggleContainer, { backgroundColor: '#FEE2E2' }]}>
+                  <View style={[styles.formToggleBtn, styles.toggleActiveEgreso]}>
+                    <Text style={[styles.toggleText, styles.toggleTextActive]}>📤 Registrar Gasto</Text>
+                  </View>
+                </View>
               )}
 
               {tipoMovimientoForm === 'ingreso' ? (
                 <View>
                   <Text style={styles.modalLabel}>Importe Recibido ($)</Text>
                   <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="Ej. 5000" keyboardType="numeric" value={importeInvertido} onChangeText={setImporteInvertido} />
+                  
                   <Text style={styles.modalLabel}>Solicitante / Receptor</Text>
                   <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="Nombre..." value={encargado} onChangeText={setEncargado} />
+                  
                   <Text style={styles.modalLabel}>Método</Text>
                   <View style={styles.selectorContainer}>
-                    <TouchableOpacity style={[styles.selectorBtn, tipoDeposito === 'efectivo' && styles.selectorActive]} onPress={() => setTipoDeposito('efectivo')}><Text style={[styles.selectorText, tipoDeposito === 'efectivo' && styles.selectorTextActive]}>Efectivo</Text></TouchableOpacity>
-                    <TouchableOpacity style={[styles.selectorBtn, tipoDeposito === 'transferencia' && styles.selectorActive]} onPress={() => setTipoDeposito('transferencia')}><Text style={[styles.selectorText, tipoDeposito === 'transferencia' && styles.selectorTextActive]}>Transferencia</Text></TouchableOpacity>
+                    <TouchableOpacity style={[styles.selectorBtn, tipoDeposito === 'efectivo' ? styles.selectorActive : null]} onPress={() => setTipoDeposito('efectivo')}>
+                      <Text style={[styles.selectorText, tipoDeposito === 'efectivo' ? styles.selectorTextActive : null]}>Efectivo</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.selectorBtn, tipoDeposito === 'transferencia' ? styles.selectorActive : null]} onPress={() => setTipoDeposito('transferencia')}>
+                      <Text style={[styles.selectorText, tipoDeposito === 'transferencia' ? styles.selectorTextActive : null]}>Transferencia</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               ) : (
@@ -621,9 +657,9 @@ export default function CajaChicaScreen() {
                     <View key={art.id} style={styles.articuloBox}>
                       <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
                         <Text style={styles.articuloIndex}>Artículo {index + 1}</Text>
-                        {articulos.length > 1 && (
+                        {articulos.length > 1 ? (
                           <TouchableOpacity onPress={() => eliminarArticulo(art.id)}><Feather name="x-circle" size={16} color="#EF4444" /></TouchableOpacity>
-                        )}
+                        ) : null}
                       </View>
 
                       <TextInput style={[styles.modalInput, {marginTop: 5}]} placeholderTextColor="#94A3B8" placeholder="Concepto (Ej. Clavos 2 pulg)" value={art.concepto} onChangeText={(v) => actualizarArticulo(art.id, 'concepto', v)} />
@@ -657,7 +693,11 @@ export default function CajaChicaScreen() {
 
                   <Text style={styles.modalLabel}>Evidencia (Foto del Ticket)</Text>
                   <TouchableOpacity style={styles.cameraBtn} onPress={seleccionarFoto}>
-                    {fotoTicket ? <Image source={{ uri: fotoTicket }} style={styles.previewImage} /> : <Text style={styles.cameraBtnText}>Tomar foto</Text>}
+                    {fotoTicket ? (
+                      <Image source={{ uri: fotoTicket }} style={styles.previewImage} />
+                    ) : (
+                      <Text style={styles.cameraBtnText}>Tomar foto</Text>
+                    )}
                   </TouchableOpacity>
                 </View>
               )}
@@ -665,8 +705,9 @@ export default function CajaChicaScreen() {
               <TouchableOpacity style={styles.saveBtn} onPress={handleGuardarOLlamarActualizar} disabled={isSaving}>
                 {isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>{isEditing ? 'Actualizar Registro' : 'Guardar en Caja Chica'}</Text>}
               </TouchableOpacity>
-            </View>
-          </ScrollView>
+              <View style={{height: 40}} /> 
+            </ScrollView>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
     </View>
@@ -701,11 +742,15 @@ const styles = StyleSheet.create({
   gastoMeta: { fontSize: 11, color: '#64748B', marginTop: 4 },
   gastoMonto: { fontSize: 16, fontWeight: 'bold', marginLeft: 10 },
   fab: { position: 'absolute', bottom: 30, right: 25, width: 60, height: 60, borderRadius: 30, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', elevation: 5 },
+  
+  // MODAL BOTTOM SHEET GLOBALES
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalScroll: { flexGrow: 1, justifyContent: 'flex-end' },
+  modalOverlayDetail: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', padding: 0 }, 
+  modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
+  detailModalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: -5 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10, maxHeight: '90%' },
+  
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#0F172A' },
-  modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 40 },
   formToggleContainer: { flexDirection: 'row', backgroundColor: '#F1F5F9', borderRadius: 12, padding: 4, marginBottom: 15 },
   formToggleBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
   toggleActiveIngreso: { backgroundColor: '#10B981' },
@@ -736,8 +781,7 @@ const styles = StyleSheet.create({
   articuloIndex: { fontSize: 10, fontWeight: 'bold', color: '#94A3B8', textTransform: 'uppercase' },
   addArticuloBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 12, marginTop: 10, borderWidth: 1, borderColor: '#BFDBFE', borderStyle: 'dashed', borderRadius: 10, backgroundColor: '#EFF6FF' },
   addArticuloText: { color: '#2563EB', fontSize: 12, fontWeight: 'bold', marginLeft: 8 },
-  modalOverlayDetail: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.7)', justifyContent: 'center', padding: 20 },
-  detailModalContent: { backgroundColor: '#FFF', borderRadius: 24, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 10 },
+  
   detailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   detailIconBox: { width: 56, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
   detailCloseBtn: { padding: 8, backgroundColor: '#F1F5F9', borderRadius: 12 },
