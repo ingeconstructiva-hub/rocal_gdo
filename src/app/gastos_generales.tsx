@@ -43,6 +43,10 @@ export default function GastosGeneralesScreen() {
   const [filtroCategoria, setFiltroCategoria] = useState<'todos' | 'material' | 'administrativo' | 'burocrata' | 'asesoria'>('todos');
   const [filtroPago, setFiltroPago] = useState<'todos' | 'pagado' | 'credito' | 'abono_parcial'>('todos'); 
 
+  // 🟢 NUEVOS ESTADOS PARA LOS DROPDOWNS DE FILTRO
+  const [showCatDropdown, setShowCatDropdown] = useState(false);
+  const [showPagoDropdown, setShowPagoDropdown] = useState(false);
+
   const [gastoSeleccionado, setGastoSeleccionado] = useState<GastoEstructural | null>(null);
   const [isEditing, setIsEditing] = useState(false);
 
@@ -459,38 +463,87 @@ export default function GastosGeneralesScreen() {
             </View>
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterContainer}>
-          {['todos', 'material', 'administrativo', 'burocrata', 'asesoria'].map((cat) => (
+        {/* 🟢 NUEVOS FILTROS DESPLEGABLES */}
+        <View style={styles.webFiltersRow}>
+          
+          {/* DESPLEGABLE 1: CATEGORÍAS */}
+          <View style={{ flex: 1, position: 'relative' }}>
+            <Text style={styles.filterLabelMini}>Filtrar por Rubro</Text>
             <TouchableOpacity 
-              key={cat}
-              style={[styles.filterPill, filtroCategoria === cat ? styles.filterPillActive : null]}
-              onPress={() => setFiltroCategoria(cat as any)}
+              style={styles.filterDropdownTrigger}
+              onPress={() => {
+                setShowCatDropdown(!showCatDropdown);
+                setShowPagoDropdown(false);
+              }}
             >
-              <Text style={[styles.filterText, filtroCategoria === cat ? styles.filterTextActive : null]}>
-                {cat.toUpperCase()}
+              <Text style={styles.filterDropdownTriggerText} numberOfLines={1}>
+                {filtroCategoria === 'todos' ? '🎛️ TODOS LOS RUBROS' : `📦 ${filtroCategoria.toUpperCase()}`}
               </Text>
+              <Feather name={showCatDropdown ? "chevron-up" : "chevron-down"} size={16} color="#64748B" />
             </TouchableOpacity>
-          ))}
-        </ScrollView>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.filterContainer, { marginTop: -4, marginBottom: 20 }]}>
-          {[
-            { id: 'todos', name: '🎛️ Todos' },
-            { id: 'pagado', name: '🟢 Liquidados' },
-            { id: 'abono_parcial', name: '🟡 Abonos' }, 
-            { id: 'credito', name: '🔴 Por Pagar' }
-          ].map((item) => (
+            {showCatDropdown && (
+              <View style={styles.filterAbsoluteMenu}>
+                {['todos', 'material', 'administrativo', 'burocrata', 'asesoria'].map((cat) => (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[styles.filterMenuOption, filtroCategoria === cat && styles.filterMenuOptionSelected]}
+                    onPress={() => {
+                      setFiltroCategoria(cat as any);
+                      setShowCatDropdown(false);
+                    }}
+                  >
+                    <Text style={[styles.filterMenuOptionText, filtroCategoria === cat && styles.filterMenuOptionTextSelected]}>
+                      {cat.toUpperCase()}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* DESPLEGABLE 2: ESTADO DE PAGO */}
+          <View style={{ flex: 1, position: 'relative' }}>
+            <Text style={styles.filterLabelMini}>Filtrar por Estado</Text>
             <TouchableOpacity 
-              key={item.id}
-              style={[styles.filterPill, filtroPago === item.id ? styles.filterPillActive : null]}
-              onPress={() => setFiltroPago(item.id as any)}
+              style={styles.filterDropdownTrigger}
+              onPress={() => {
+                setShowPagoDropdown(!showPagoDropdown);
+                setShowCatDropdown(false);
+              }}
             >
-              <Text style={[styles.filterText, filtroPago === item.id ? styles.filterTextActive : null]}>
-                {item.name.toUpperCase()}
+              <Text style={styles.filterDropdownTriggerText} numberOfLines={1}>
+                {filtroPago === 'todos' ? '🎛️ TODOS LOS ESTADOS' : filtroPago === 'pagado' ? '🟢 LIQUIDADOS' : filtroPago === 'abono_parcial' ? '🟡 ABONOS' : '🔴 POR PAGAR'}
               </Text>
+              <Feather name={showPagoDropdown ? "chevron-up" : "chevron-down"} size={16} color="#64748B" />
             </TouchableOpacity>
-          ))}
-        </ScrollView>
+
+            {showPagoDropdown && (
+              <View style={styles.filterAbsoluteMenu}>
+                {[
+                  { id: 'todos', name: 'TODOS' },
+                  { id: 'pagado', name: '🟢 LIQUIDADOS' },
+                  { id: 'abono_parcial', name: '🟡 ABONOS' },
+                  { id: 'credito', name: '🔴 POR PAGAR' }
+                ].map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[styles.filterMenuOption, filtroPago === item.id && styles.filterMenuOptionSelected]}
+                    onPress={() => {
+                      setFiltroPago(item.id as any);
+                      setShowPagoDropdown(false);
+                    }}
+                  >
+                    <Text style={[styles.filterMenuOptionText, filtroPago === item.id && styles.filterMenuOptionTextSelected]}>
+                      {item.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+
+        </View>
 
         {loading ? (
           <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 50 }} />
@@ -863,11 +916,71 @@ const styles = StyleSheet.create({
   countBadge: { backgroundColor: '#E2E8F0', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
   countText: { fontSize: 11, color: '#64748B', fontWeight: 'bold' },
   
-  filterContainer: { flexDirection: 'row', marginBottom: 10, paddingBottom: 5 },
-  filterPill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#CBD5E1', marginRight: 8, height: 32, justifyContent: 'center' },
-  filterPillActive: { backgroundColor: '#1E293B', borderColor: '#1E293B' },
-  filterText: { fontSize: 11, fontWeight: 'bold', color: '#64748B' },
-  filterTextActive: { color: '#FFF' },
+  // 🟢 ESTILOS DE LOS NUEVOS FILTROS DESPLEGABLES
+  webFiltersRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 15,
+    zIndex: 50,
+  },
+  filterLabelMini: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#94A3B8',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+    marginLeft: 4,
+  },
+  filterDropdownTrigger: {
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 40,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  filterDropdownTriggerText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  filterAbsoluteMenu: {
+    position: 'absolute',
+    top: 62, 
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    overflow: 'hidden',
+    zIndex: 100,
+  },
+  filterMenuOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  filterMenuOptionSelected: {
+    backgroundColor: '#EFF6FF',
+  },
+  filterMenuOptionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  filterMenuOptionTextSelected: {
+    color: '#2563EB',
+    fontWeight: '700',
+  },
 
   emptyText: { textAlign: 'center', color: '#94A3B8', marginTop: 60, fontStyle: 'italic' },
   
@@ -884,7 +997,6 @@ const styles = StyleSheet.create({
   fab: { position: 'absolute', bottom: 35, right: 25, width: 65, height: 65, borderRadius: 32.5, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', elevation: 8, shadowColor: '#2563EB', shadowOpacity: 0.4, shadowRadius: 10 },
   
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalScroll: { flexGrow: 1, justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25, paddingBottom: 45 },
   modalHeaderTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#0F172A' },
@@ -926,12 +1038,10 @@ const styles = StyleSheet.create({
   detailFoto: { width: '100%', height: '100%' },
 
   detailDataBox: { backgroundColor: '#F8FAFC', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#E2E8F0', gap: 16 },
-  detailRow: { flexDirection: 'column' },
   detailRowGrid: { flexDirection: 'row', gap: 16 },
   detailLabel: { fontSize: 10, fontWeight: 'bold', color: '#94A3B8', textTransform: 'uppercase', marginBottom: 4 },
   detailValue: { fontSize: 14, fontWeight: '600', color: '#1E293B' },
   
-  detailActionsRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 25, gap: 10 },
   editActionBtn: { flex: 1, backgroundColor: '#1E293B', padding: 14, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   editActionBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13, marginLeft: 8 },
   deleteActionBtn: { backgroundColor: '#FEF2F2', padding: 14, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#FECACA' }

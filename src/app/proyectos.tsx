@@ -265,11 +265,11 @@ export default function ProyectosScreen() {
         const { data: newProject, error: projectError } = await supabase.from('projects').insert([projectData]).select().single();
         if (projectError) throw projectError;
 
-        const { error: assignmentError } = await supabase.from('project_members').insert([{ user_id: userId, project_id: newProject.id, role: 'Administrador' }]);
+        const { error: assignmentError } = await supabase.from('project_members').insert([{ user_id: userId, project_id: newProject.id, role: 'admin' }]);
         if (assignmentError) throw assignmentError;
 
         if (selectedResidentId) {
-          const { error: residentAssignError } = await supabase.from('project_members').insert([{ user_id: selectedResidentId, project_id: newProject.id, role: 'Residente de Obra' }]);
+          const { error: residentAssignError } = await supabase.from('project_members').insert([{ user_id: selectedResidentId, project_id: newProject.id, role: 'residente' }]);
           if (residentAssignError) console.log("Error asignando residente:", residentAssignError);
         }
 
@@ -400,9 +400,9 @@ export default function ProyectosScreen() {
         setIsJoining(false);
         return;
       }
-      let roleToAssign = 'Residente de Obra';
-      if (profile?.role === 'oficina') roleToAssign = 'Personal de Oficina';
-      else if (profile?.role === 'admin') roleToAssign = 'Administrador';
+      let roleToAssign = 'residente';
+      if (profile?.role === 'oficina') roleToAssign = 'oficina';
+      else if (profile?.role === 'admin') roleToAssign = 'admin';
       const { error: joinErr } = await supabase
         .from('project_members')
         .insert([{ user_id: userId, project_id: proj.id, role: roleToAssign }]);

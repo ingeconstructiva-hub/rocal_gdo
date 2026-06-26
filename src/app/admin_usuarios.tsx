@@ -153,9 +153,9 @@ export default function AdminUsuariosScreen() {
       let nombreObra = "";
 
       if (selectedProject && newUserId) {
-        let roleToAssign = 'Residente de Obra';
-        if (role === 'oficina') roleToAssign = 'Personal de Oficina';
-        else if (role === 'admin') roleToAssign = 'Administrador';
+        let roleToAssign = 'residente';
+        if (role === 'oficina') roleToAssign = 'oficina';
+        else if (role === 'admin') roleToAssign = 'admin';
 
         const { error: assignError } = await supabase.from('project_members').insert({
           user_id: newUserId,
