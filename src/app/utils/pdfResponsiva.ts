@@ -1,0 +1,77 @@
+export function generarPlantillaResponsiva(vale: any) {
+  return `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        body { font-family: 'Helvetica', 'Arial', sans-serif; color: #1e293b; padding: 30px; line-height: 1.6; }
+        .header { text-align: right; font-size: 12px; margin-bottom: 40px; font-weight: bold; }
+        .subject { font-size: 14px; font-weight: bold; margin-bottom: 5px; }
+        .present { font-size: 14px; font-weight: bold; margin-top: 20px; margin-bottom: 20px; }
+        .content { text-align: justify; font-size: 13px; margin-bottom: 20px; }
+        .equipos-box { background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; margin: 20px 0; font-family: monospace; white-space: pre-wrap; font-size: 13px; }
+        .footer-signatures { margin-top: 60px; display: flex; justify-content: space-between; }
+        .signature-col { width: 45%; text-align: center; font-size: 12px; }
+        .digital-seal { margin-top: 40px; padding: 10px; border: 1px dashed #cbd5e1; background-color: #f1f5f9; border-radius: 6px; font-size: 10px; color: #64748B; font-family: monospace; }
+        .verse { text-align: center; margin-top: 50px; font-size: 11px; font-style: italic; color: #64748b; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        ${vale.fecha_prestamo}<br>
+        San Pablo del Monte, Tlaxcala<br>
+        ASUNTO: RESPONSIVA DE EQUIPAMIENTO<br>
+        N. DE RESPONSIVA: ${vale.n_responsiva}
+      </div>
+
+      <div class="present">
+        A QUIEN CORRESPONDA<br>
+        PARA FINES ADMINISTRATIVOS Y LEGALES<br>
+        PRESENTE:
+      </div>
+
+      <div class="content">
+        En referencia al proyecto <strong>"${vale.obra_nombre}"</strong> en el que en lo sucesivo a través de la carta de acuerdos de trabajo <strong>${vale.n_convenio}</strong> se establece que el responsable de la ejecución de los trabajos será el <strong>${vale.nombre_recibe}</strong>, el cual en mutuo acuerdo con el representante de la empresa acuerdan entregar en <strong>ÓPTIMAS CONDICIONES LOS EQUIPOS</strong> para la realización de los trabajos que a continuación se describen:
+      </div>
+
+      <div class="equipos-box">${vale.equipos_detalle}</div>
+
+      <div class="content">
+        El receptor asume la <strong>RESPONSABILIDAD Y EL CUIDADO DE DICHO EQUIPO Y HERRAMIENTAS</strong> y se compromete a utilizarlo con un uso estrictamente laboral. Cualquier problema o fallo deberá ser informado de inmediato para su renovación o mantenimiento. En caso de que los equipos sean extraviados o dañados por el mal uso, estos tendrán que reponerse por el encargado, aceptando que se reciben listos para usarse y sin deterioros significativos.
+      </div>
+
+      <!-- 🟢 BLOQUE DE DOBLE FIRMA CORREGIDO CON LAS VARIABLES DEL OBJETO 'vale' -->
+      <div class="footer-signatures">
+        <!-- Columna Izquierda: Quien Entrega -->
+        <div class="signature-col">
+          <hr style="border: none; border-top: 1px solid #475569; margin-bottom: 8px;" />
+          <p style="font-size: 12px; font-weight: bold; margin: 0;">ENTREGA</p>
+          <p style="font-size: 11px; margin: 2px 0 0 0;">${vale.nombre_entrega}</p>
+          <p style="font-size: 9px; color: #16A34A; font-family: monospace; margin-top: 4px; font-weight: bold;">🔒 CO-FIRMADO DIGITALMENTE</p>
+        </div>
+
+        <!-- Columna Derecha: Quien Recibe -->
+        <div class="signature-col">
+          <hr style="border: none; border-top: 1px solid #475569; margin-bottom: 8px;" />
+          <p style="font-size: 12px; font-weight: bold; margin: 0;">RECIBE Y ACEPTA</p>
+          <p style="font-size: 11px; margin: 2px 0 0 0;">${vale.nombre_recibe}</p>
+          <p style="font-size: 9px; color: #16A34A; font-family: monospace; margin-top: 4px; font-weight: bold;">🔒 CO-FIRMADO DIGITALMENTE</p>
+        </div>
+      </div>
+
+      <div class="digital-seal">
+        <strong>🔒 SELLO DE CERTIFICACIÓN DIGITAL CRIPTOGRÁFICA MUTUA</strong><br>
+        HASH DE AUDITORÍA: ${vale.token_firma || 'PENDIENTE'}<br>
+        UUID DEL REGISTRO: ${vale.id}<br>
+        Estado de Validación: CERTIFICADO - CONFORMIDAD DECLARADA POR AMBAS PARTES<br>
+        Timestamp de Sello: ${vale.fecha_firma || 'N/A'}
+      </div>
+
+      <div class="verse">
+        "Porque toda casa tiene su constructor, pero el constructor de todo es Dios." - Hebreos 3:4
+      </div>
+    </body>
+    </html>
+  `;
+}

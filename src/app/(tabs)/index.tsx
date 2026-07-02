@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -90,15 +91,20 @@ export default function DashboardScreen() {
     }, [])
   );
 
-  const getAccessibleModules = () => {
-    const allModules = [
-      { name: "Asistencia", icon: "users", route: "/lista", roles: ['admin', 'residente'] },
-      { name: "Bitácora", icon: "book-open", route: "/bitacora", roles: ['admin', 'residente'] },
-      { name: "Documentos", icon: "layers", route: "/planos", roles: ['admin', 'residente', 'oficina'] },
-      { name: "Gastos", icon: "dollar-sign", route: "/gastos", roles: ['admin', 'residente', 'oficina'] }
-    ];
-    return allModules.filter(m => m.roles.includes(profile?.role || 'residente'));
-  };
+ const getAccessibleModules = () => {
+  return [
+    { name: "Asistencia", icon: "users", type: "feather", route: "/lista", roles: ['admin', 'residente'] },
+
+    { name: "Bitácora", icon: "book-open", type: "feather", route: "/bitacora", roles: ['admin', 'residente'] },
+
+    // Ahora queda en medio
+    { name: "Resguardos", icon: "warehouse", type: "fa5", route: "/resguardos", roles: ['admin', 'residente', 'oficina'] },
+
+    { name: "Documentos", icon: "layers", type: "feather", route: "/planos", roles: ['admin', 'residente', 'oficina'] },
+
+    { name: "Gastos", icon: "dollar-sign", type: "feather", route: "/gastos", roles: ['admin', 'residente', 'oficina'] },
+  ].filter(m => m.roles.includes(profile?.role || 'residente'));
+};
 
   const modules = getAccessibleModules();
   
@@ -326,12 +332,36 @@ export default function DashboardScreen() {
 
           <Text style={styles.sectionTitle}>Módulos Operativos</Text>
           <View style={styles.grid}>
-            {modules.map((m, i) => (
-              <TouchableOpacity key={i} style={styles.card} onPress={() => { if (m.route) router.push(m.route as any); }}>
-                <Feather name={m.icon as any} size={28} color={Colors.primary} />
-                <Text style={styles.cardText}>{m.name}</Text>
-              </TouchableOpacity>
-            ))}
+            {modules.map((m, i) => {
+  const ultimoImpar =
+    modules.length % 2 !== 0 && i === modules.length - 1;
+
+  return (
+    <TouchableOpacity
+      key={i}
+      style={[styles.card, ultimoImpar && styles.cardCenter]}
+      onPress={() => {
+        if (m.route) router.push(m.route as any);
+      }}
+    >
+      {m.name === "Resguardos" ? (
+        <FontAwesome5
+          name="warehouse"
+          size={24}
+          color={Colors.primary}
+        />
+      ) : (
+        <Feather
+          name={m.icon as any}
+          size={24}
+          color={Colors.primary}
+        />
+      )}
+
+      <Text style={styles.cardText}>{m.name}</Text>
+    </TouchableOpacity>
+  );
+})}
           </View>
         </View>
       </ScrollView>
@@ -537,4 +567,8 @@ const styles = StyleSheet.create({
   detailValue: { fontSize: 15, color: '#1E293B', fontWeight: '600' },
   ineImage: { width: '100%', height: 220, borderRadius: 12, marginTop: 10, resizeMode: 'cover', backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
   noIneBox: { height: 120, backgroundColor: '#F8FAFC', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10, borderWidth: 1, borderColor: '#E2E8F0', borderStyle: 'dashed' },
+  cardCenter: {
+  width: '100%',
+  alignItems: 'center',
+},
 });

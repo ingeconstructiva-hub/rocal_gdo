@@ -1,3 +1,5 @@
+'use client';
+
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -41,6 +43,9 @@ interface MaquinaAgrupada {
   fechaAlta: string; 
 }
 
+// 🟢 JORNADA ESTÁNDAR DE TRABAJO EN OBRA (8 HORAS)
+const JORNADA_HORAS = 8;
+
 export default function GastosMaquinariaScreen() {
   const router = useRouter();
   const { activeProject, isOffline } = useProject();
@@ -52,19 +57,16 @@ export default function GastosMaquinariaScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
 
-  // 🎛️ ESTADOS DEL MODAL DE DETALLE (HISTORIAL)
   const [modalDetalleMaquina, setModalDetalleMaquina] = useState(false);
   const [detalleTab, setDetalleTab] = useState<'uso' | 'anticipo'>('uso');
   const [selectedMaquina, setSelectedMaquina] = useState<MaquinaAgrupada | null>(null);
 
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
 
-  // 🎛️ ESTADOS PARA FORMULARIOS
   const [modalNuevaMaquina, setModalNuevaMaquina] = useState(false);
   const [modalHoras, setModalHoras] = useState(false);
   const [modalAnticipo, setModalAnticipo] = useState(false);
 
-  // 📝 VARIABLES DE FORMULARIO - MAQUINA (CONFIG)
   const [editingMachineConfigId, setEditingMachineConfigId] = useState<string | null>(null);
   const [originalMachineName, setOriginalMachineName] = useState('');
   const [equipo, setEquipo] = useState('');
@@ -72,7 +74,6 @@ export default function GastosMaquinariaScreen() {
   const [modalidad, setModalidad] = useState<'dia' | 'semana' | 'mes'>('semana');
   const [tarifaHora, setTarifaHora] = useState('');
   
-  // 📝 VARIABLES DE FORMULARIO - USO / PAGOS
   const [horasOperacion, setHorasOperacion] = useState('');
   const [montoAnticipo, setMontoAnticipo] = useState('');
   const [concepto, setConcepto] = useState('');
@@ -120,7 +121,7 @@ export default function GastosMaquinariaScreen() {
           equipo: g.equipo, 
           proveedor: g.proveedor || 'S/P', 
           modalidad: g.tipo_renta || 'semana', 
-          tarifaHora: Number(g.costo_tarifa) || 0, // 🟢 Forzado a Number
+          tarifaHora: Number(g.costo_tarifa) || 0, 
           totalHoras: 0, 
           costoGenerado: 0, 
           totalAnticipos: 0, 
@@ -136,15 +137,28 @@ export default function GastosMaquinariaScreen() {
       }
       else if (g.categoria === 'uso') {
         map[g.equipo].totalHoras += Number(g.asistencia_dias) || 0;
-        map[g.equipo].costoGenerado += Number(g.monto) || 0; // 🟢 Forzado a Number para sumar matemáticamente
+        map[g.equipo].costoGenerado += Number(g.monto) || 0; 
       }
       else if (g.categoria === 'anticipo') {
-        map[g.equipo].totalAnticipos += Number(g.monto) || 0; // 🟢 Forzado a Number
+        map[g.equipo].totalAnticipos += Number(g.monto) || 0; 
       }
       map[g.equipo].saldoPendiente = map[g.equipo].costoGenerado - map[g.equipo].totalAnticipos;
     });
     return Object.values(map);
   }, [gastos]);
+
+  // 🟢 CALCULO EN TIEMPO REAL PARA EL MODAL DE NUEVA MÁQUINA
+  const estimacionGastoPeriodo = useMemo(() => {
+    const tarifa = Number(tarifaHora) || 0;
+    if (tarifa <= 0) return 0;
+
+    const costoDia = tarifa * JORNADA_HORAS;
+
+    if (modalidad === 'dia') return costoDia;
+    if (modalidad === 'semana') return costoDia * 6; // Semana de 6 días laborables de obra
+    if (modalidad === 'mes') return costoDia * 30;   // Mes completo de 30 días
+    return 0;
+  }, [tarifaHora, modalidad]);
 
   const historialUsoActivo = useMemo(() => {
     if(!selectedMaquina) return [];
@@ -160,7 +174,6 @@ export default function GastosMaquinariaScreen() {
   const globalPagado = maquinasMap.reduce((sum, m) => sum + m.totalAnticipos, 0);
   const globalDeuda = globalGenerado - globalPagado;
 
-  // 1️⃣ ALTA Y EDICIÓN DE MÁQUINA (CONFIG)
   const iniciarEdicionMaquina = (maquina: MaquinaAgrupada) => {
     const configRecord = gastos.find(g => g.equipo === maquina.equipo && g.categoria === 'config');
     setEditingMachineConfigId(configRecord?.id || null);
@@ -180,7 +193,6 @@ export default function GastosMaquinariaScreen() {
     setEditingMachineConfigId(null); setOriginalMachineName('');
   };
 
-// 1️⃣ ALTA Y EDICIÓN DE MÁQUINA (CONFIG)
   const handleGuardarConfig = async () => {
     if (!equipo.trim() || !tarifaHora.trim()) { Alert.alert("Campos Vacíos", "El nombre y tarifa son obligatorios."); return; }
     if (isOffline) { Alert.alert("Modo Offline", "Conéctate a internet para editar la configuración de la máquina."); return; }
@@ -189,10 +201,8 @@ export default function GastosMaquinariaScreen() {
     
     try {
       if (originalMachineName) { 
-        // 🟢 EDITANDO MÁQUINA EXISTENTE
         const nuevoNombre = equipo.trim();
 
-        // Paso A: Si cambió el nombre, actualizamos TODO el historial de uso y pagos en cascada
         if (nuevoNombre !== originalMachineName) {
           const { error: errUpdateNombre } = await supabase.from('gastos_maquinaria')
             .update({ equipo: nuevoNombre })
@@ -202,7 +212,6 @@ export default function GastosMaquinariaScreen() {
           if (errUpdateNombre) throw errUpdateNombre;
         }
 
-        // Paso B: Intentamos actualizar los datos (Proveedor, Tarifa, Modalidad)
         const configRecord = gastos.find(g => g.equipo === originalMachineName && g.categoria === 'config');
 
         if (configRecord || editingMachineConfigId) {
@@ -217,11 +226,10 @@ export default function GastosMaquinariaScreen() {
             
           if (errUpdateConfig) throw errUpdateConfig;
         } else {
-          // Si era una máquina vieja que nunca tuvo un registro "config", se lo creamos
           const nuevoRegistro = {
             project_id: activeProject?.id,
             equipo: nuevoNombre,
-            concepto: 'Configuración Inicial', // 🟢 CORRECCIÓN: Agregado para cumplir la regla Not-Null
+            concepto: 'Configuración Inicial', 
             proveedor: proveedor.trim() || null,
             categoria: 'config',
             tipo_renta: modalidad,
@@ -236,11 +244,10 @@ export default function GastosMaquinariaScreen() {
 
         Alert.alert("¡Actualizado!", "Los datos del equipo han sido modificados.");
       } else {
-        // ➕ ALTA DE NUEVA MÁQUINA
         const nuevoRegistro = {
           project_id: activeProject?.id,
           equipo: equipo.trim(),
-          concepto: 'Alta de equipo', // 🟢 CORRECCIÓN: Agregado para cumplir la regla Not-Null
+          concepto: 'Alta de equipo', 
           proveedor: proveedor.trim() || null,
           categoria: 'config', 
           tipo_renta: modalidad,
@@ -254,7 +261,7 @@ export default function GastosMaquinariaScreen() {
       }
       
       limpiarFormularioMaquina(); 
-      fetchGastos(); // Recargamos para ver los cambios instantáneamente
+      fetchGastos(); 
     } catch (e: any) { 
       Alert.alert("Error", e.message); 
     } finally { 
@@ -262,7 +269,6 @@ export default function GastosMaquinariaScreen() {
     }
   };
 
-  // 🧮 CÁLCULO DE HORA DE SALIDA AUTOMÁTICO
   const recalcularHoraSalida = (horasStr: string, entradaDate: Date) => {
     setHorasOperacion(horasStr);
     const hrs = parseFloat(horasStr);
@@ -285,14 +291,13 @@ export default function GastosMaquinariaScreen() {
     if (horasOperacion) recalcularHoraSalida(horasOperacion, date);
   };
 
-  // 2️⃣ REGISTRAR / EDITAR HORAS
   const handleGuardarUso = async () => {
     if (!selectedMaquina || !horasOperacion.trim()) { Alert.alert("Faltan Horas", "Ingresa las horas de trabajo."); return; }
     setIsSaving(true);
     
     const horas = Number(horasOperacion);
     const tarifa = Number(selectedMaquina.tarifaHora) || 0;
-    const costoDia = horas * tarifa; // 🟢 Aseguramos que la matemática sea correcta
+    const costoDia = horas * tarifa; 
     const conceptoFinal = concepto.trim() || `Jornada del día (${horas} hrs)`;
 
     const datosPayload = {
@@ -306,7 +311,7 @@ export default function GastosMaquinariaScreen() {
       hora_entrada: horaEntrada || null,
       hora_salida: horaSalida || null,
       concepto: conceptoFinal,
-      monto: Number(costoDia), // 🟢 Guardamos como número puro
+      monto: Number(costoDia), 
       is_active: true,
       fecha: editingRecordId ? (gastos.find(g=>g.id===editingRecordId)?.fecha || new Date().toISOString()) : new Date().toISOString()
     };
@@ -322,7 +327,6 @@ export default function GastosMaquinariaScreen() {
     } catch (e: any) { Alert.alert("Error", e.message); } finally { setIsSaving(false); }
   };
 
-  // 3️⃣ REGISTRAR / EDITAR ANTICIPO
   const handleGuardarAnticipo = async () => {
     if (!selectedMaquina || !montoAnticipo.trim()) { Alert.alert("Campos Vacíos", "Ingresa el monto."); return; }
     setIsSaving(true);
@@ -527,12 +531,11 @@ export default function GastosMaquinariaScreen() {
         </TouchableOpacity>
       )}
 
-      {/* 🟢 MODAL: DETALLES DE LA MÁQUINA (HISTORIAL Y BOTONES DE ACCIÓN) */}
+      {/* MODAL: DETALLES DE LA MÁQUINA */}
       <Modal visible={modalDetalleMaquina} animationType="slide" transparent={true} onRequestClose={() => setModalDetalleMaquina(false)}>
         <View style={styles.modalOverlayFull}>
           <View style={styles.modalWrapperFull}>
             
-            {/* 🟢 HEADER DEL MODAL CON BOTÓN DE EDITAR */}
             <View style={styles.modalHeaderFull}>
               <View style={{flex:1, paddingRight: 10}}>
                 <Text style={styles.modalTitleFull} numberOfLines={1}>{selectedMaquina?.equipo}</Text>
@@ -668,6 +671,21 @@ export default function GastosMaquinariaScreen() {
               
               <Text style={styles.modalLabel}>Tarifa por HORA ($)</Text>
               <TextInput style={styles.modalInput} placeholder="Ej. 1200" keyboardType="numeric" value={tarifaHora} onChangeText={(v) => setTarifaHora(v.replace(/[^0-9.]/g, ''))} />
+              
+              {/* 🟢 SECCIÓN DE GASTO ESTIMADO DINÁMICO EN TIEMPO REAL */}
+              {Number(tarifaHora) > 0 && (
+                <View style={styles.calcBox}>
+                  <Text style={styles.calcLabel}>
+                    💰 Costo estimado por <Text style={{ color: '#2563EB', fontWeight: 'bold' }}>{modalidad === 'dia' ? 'Día (8 hrs)' : modalidad === 'semana' ? 'Semana (6 días)' : 'Mes (30 días)'}</Text>:
+                  </Text>
+                  <Text style={{ fontSize: 22, fontWeight: '900', color: '#10B981', marginTop: 4 }}>
+                    ${estimacionGastoPeriodo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </Text>
+                  <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 2, fontStyle: 'italic' }}>
+                    Calculado con base en una jornada fija de {JORNADA_HORAS} horas de operación diaria.
+                  </Text>
+                </View>
+              )}
               
               <View style={{height: 20}} />
             </ScrollView>
@@ -834,19 +852,13 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#FFF', fontSize: 28, fontWeight: 'bold', marginTop: 15 },
   projectBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, marginTop: 8 },
   projectName: { color: '#FFF', fontSize: 12, fontWeight: '600', marginLeft: 5 },
-  
   body: { padding: 20, paddingBottom: 120, width: '100%', maxWidth: 800, alignSelf: 'center' },
-  
   saldoPill: { marginTop: 3, marginHorizontal: 16, padding: 10, borderRadius: 12, borderWidth: 1, alignItems: 'center', width: 350, alignSelf: 'center' },
   saldoText: { fontWeight: '900', fontSize: 13, textAlign: 'center' },
-
   exportContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20, marginTop: 5 },
   bigExportBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 14, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
   bigExportText: { color: '#FFF', fontSize: 13, fontWeight: 'bold', marginLeft: 8 },
-
   emptyText: { textAlign: 'center', color: '#94A3B8', marginTop: 60, fontStyle: 'italic' },
-  
-  // 🚜 TARJETA MAESTRA
   machineCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 16, marginBottom: 15, borderWidth: 1, borderColor: '#E2E8F0', elevation: 3 },
   machineCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 15 },
   machineTitle: { fontSize: 17, fontWeight: '900', color: '#1E293B', marginBottom: 2 },
@@ -861,10 +873,7 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 14, fontWeight: '900', color: '#0F172A' },
   openDetailBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC', padding: 10, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0' },
   openDetailText: { fontSize: 12, fontWeight: 'bold', color: '#64748B', marginRight: 5 },
-
   fab: { position: 'absolute', bottom: 35, right: '50%', transform: [{translateX: 32.5}], width: 65, height: 65, borderRadius: 32.5, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', elevation: 8, shadowColor: '#2563EB', shadowOpacity: 0.4 },
-  
-  // 🟢 ESTILOS DEL MODAL FULL DE HISTORIAL
   modalOverlayFull: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalWrapperFull: { backgroundColor: '#F1F5F9', borderTopLeftRadius: 25, borderTopRightRadius: 25, width: '100%', height: '90%' },
   modalHeaderFull: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: '#FFF', borderTopLeftRadius: 25, borderTopRightRadius: 25 },
@@ -879,8 +888,6 @@ const styles = StyleSheet.create({
   footerActionsFull: { flexDirection: 'row', padding: 20, backgroundColor: '#FFF', borderTopWidth: 1, borderTopColor: '#E2E8F0', gap: 15, paddingBottom: Platform.OS === 'ios' ? 40 : 20 },
   footerBtnFull: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 14, borderRadius: 12 },
   footerBtnTextFull: { fontSize: 14, fontWeight: 'bold', marginLeft: 8 },
-
-  // 📝 TARJETAS DE HISTORIAL (HORAS / ABONOS)
   historyCard: { backgroundColor: '#FFF', padding: 16, borderRadius: 16, flexDirection: 'row', alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5, elevation: 1 },
   historyIconBox: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
   historyInfo: { flex: 1, paddingRight: 10 },
@@ -890,8 +897,6 @@ const styles = StyleSheet.create({
   historyHrs: { fontSize: 11, fontWeight: 'bold', color: '#2563EB', marginBottom: 2 },
   historyAmountCargo: { fontSize: 15, fontWeight: 'bold', color: '#DC2626' },
   historyAmountAbono: { fontSize: 15, fontWeight: 'bold', color: '#10B981' },
-  
-  // Modales Forms
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalWrapper: { backgroundColor: '#FFF', borderTopLeftRadius: 25, borderTopRightRadius: 25, width: '100%', maxWidth: 600, alignSelf: 'center', maxHeight: '85%' },
   modalHeader: { padding: 20, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', alignItems: 'center' },

@@ -1,17 +1,18 @@
+'use client';
+
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // <-- AGREGAMOS LA MEMORIA
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { decode } from 'base64-arraybuffer';
 import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Image, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useProject } from '../context/ProjectContext';
 import { supabase } from '../lib/supabase';
 
 export function LogForm() {
-  // AHORA SACAMOS TAMBIÉN "isOffline" DEL CEREBRO
   const { activeProject, isOffline } = useProject();
 
   const defaultCategories = ['Estructura', 'Concreto', 'Eléctrico', 'Seguridad', 'Acabados', 'General'];
@@ -22,26 +23,64 @@ export function LogForm() {
   const [isCustom, setIsCustom] = useState(false);
   const [customCategory, setCustomCategory] = useState('');
   const [categoriesList, setCategoriesList] = useState(defaultCategories);
+  const [isSavingInProgress, setIsSavingInProgress] = useState(false);
 
   const router = useRouter();
   const [imageUris, setImageUris] = useState<string[]>([]);
   const isFormValid = note.trim().length > 0;
 
-  const handlePickImage = async () => {
+  // 📸 FUNCIÓN PARA CAPTURAR NUEVA IMAGEN CON LA CÁMARA
+  const takePhotoWithCamera = async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        alert('Se requiere permiso para acceder a la cámara.');
+        Alert.alert('Permiso requerido', 'Se requiere permiso para acceder a la cámara.');
         return;
       }
 
-      const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 });
+      const result = await ImagePicker.launchCameraAsync({ quality: 0.6 });
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setImageUris(prev => [...prev, result.assets[0].uri]);
       }
     } catch (error) {
-      alert("No se pudo abrir la cámara.");
+      Alert.alert("Error", "No se pudo abrir la cámara.");
     }
+  };
+
+  // 🖼️ FUNCIÓN PARA SELECCIONAR IMAGEN EXISTENTE DESDE LA GALERÍA
+  const pickImageFromGallery = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso requerido', 'Se requiere permiso para acceder a la galería.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.6
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setImageUris(prev => [...prev, result.assets[0].uri]);
+      }
+    } catch (error) {
+      Alert.alert("Error", "No se pudo abrir la galería de imágenes.");
+    }
+  };
+
+  // 🟢 COMPORTAMIENTO MULTIMEDIA: SE DESPLIEGA MENÚ SELECCIONABLE HÍBRIDO
+  const handleMediaMenuTrigger = () => {
+    Alert.alert(
+      "Adjuntar Evidencia",
+      "Selecciona el origen de la fotografía para la bitácora:",
+      [
+        { text: "📸 Tomar Foto (Cámara)", onPress: takePhotoWithCamera },
+        { text: "🖼️ Elegir de la Galería", onPress: pickImageFromGallery },
+        { text: "Cancelar", style: "cancel" }
+      ]
+    );
   };
 
   const removeImage = (indexToRemove: number) => {
@@ -64,17 +103,18 @@ export function LogForm() {
   };
 
   const handleSave = async () => {
-    // 1. CREAMOS LA VARIABLE SEGURA PARA CALMAR A TYPESCRIPT
     const projectId = activeProject?.id;
 
     if (!isFormValid) return;
 
     if (!projectId) {
-      alert('No se detectó ninguna obra activa.');
+      Alert.alert('Error', 'No se detectó ninguna obra activa.');
       return;
     }
 
-    // 🔴 SI NO HAY INTERNET: MODO BANDEJA DE SALIDA
+    setIsSavingInProgress(true);
+
+    // 🔴 SI NO HAY INTERNET: MODO BANDEJA DE SALIDA (GUARDA LOCAL)
     if (isOffline) {
       try {
         let localBase64Photos: string[] = [];
@@ -84,7 +124,7 @@ export function LogForm() {
           localBase64Photos.push(`data:image/jpeg;base64,${base64}`);
         }
         
-        const photoPayload = localBase64Photos.length === 0 ? null : (localBase64Photos.length === 1 ? localBase64Photos[0] : JSON.stringify(localBase64Photos));
+        const photoPayload = localBase64Photos.length === 0 ? null : JSON.stringify(localBase64Photos);
 
         const offlineLog = {
           project_id: projectId,
@@ -93,7 +133,7 @@ export function LogForm() {
           sector,
           photo_url: photoPayload,
           created_at: new Date().toISOString(),
-          local_uuid: Crypto.randomUUID() // <-- agregar esto
+          local_uuid: Crypto.randomUUID()
         };
 
         const existing = await AsyncStorage.getItem('@bandeja_salida_logs');
@@ -104,12 +144,14 @@ export function LogForm() {
         Alert.alert("📴 Guardado Offline", "Tu reporte se guardó en el celular. Se subirá automáticamente cuando vuelva el internet.");
         router.replace('/(tabs)/bitacora');
       } catch (error) {
-        alert("Error guardando offline");
+        Alert.alert("Error", "Error guardando offline");
+      } finally {
+        setIsSavingInProgress(false);
       }
       return; 
     }
 
-    // 🟢 SI SÍ HAY INTERNET: MODO NORMAL
+    // 🟢 SI SÍ HAY INTERNET: MODO NORMAL EN LA NUBE
     let finalImageUrls: string[] = [];
     if (imageUris.length > 0) {
       try {
@@ -125,24 +167,30 @@ export function LogForm() {
           finalImageUrls.push(data.publicUrl);
         }
       } catch (error: any) {
-        return alert(`Error al subir imagen: ${error.message}`);
+        setIsSavingInProgress(false);
+        return Alert.alert('Error Storage', `Error al subir imagen: ${error.message}`);
       }
     }
 
-    const photoPayload = finalImageUrls.length === 0 ? null : finalImageUrls.length === 1 ? finalImageUrls[0] : JSON.stringify(finalImageUrls);
+    const photoPayload = finalImageUrls.length === 0 ? null : JSON.stringify(finalImageUrls);
 
-    const { error } = await supabase.from('logs').insert([{ 
-      project_id: projectId, // <-- USAMOS LA VARIABLE SEGURA
-      description: note, 
-      category, 
-      sector, 
-      photo_url: photoPayload 
-    }]);
-    
-    if (error) alert(`Error al guardar: ${error.message}`);
-    else { 
-      alert('Guardado con éxito en la nube'); 
+    try {
+      const { error } = await supabase.from('logs').insert([{ 
+        project_id: projectId, 
+        description: note, 
+        category, 
+        sector, 
+        photo_url: photoPayload 
+      }]);
+      
+      if (error) throw error;
+      
+      Alert.alert('¡Éxito!', 'Guardado con éxito en la nube'); 
       router.replace('/(tabs)/bitacora'); 
+    } catch (error: any) {
+      Alert.alert('Error Database', `Error al guardar: ${error.message}`);
+    } finally {
+      setIsSavingInProgress(false);
     }
   };
 
@@ -163,9 +211,8 @@ export function LogForm() {
 
         <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 150 }} keyboardShouldPersistTaps="handled">
           
-          {/* AVISO DE MODO OFFLINE */}
           {isOffline && (
-            <View style={{ backgroundColor: '#FEF3C7', padding: 12, borderRadius: 12, marginBottom: 20, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#F59E0B' }}>
+            <View style={styles.offlineBanner}>
               <Feather name="wifi-off" size={20} color="#D97706" style={{ marginRight: 10 }} />
               <Text style={{ color: '#D97706', fontSize: 13, flex: 1, fontWeight: '600' }}>
                 Estás trabajando sin conexión. Las fotos y notas se guardarán en tu celular por ahora.
@@ -174,17 +221,18 @@ export function LogForm() {
           )}
 
           <View style={styles.previewContainer}>
-            <TouchableOpacity style={[styles.scanButton, isOffline && { backgroundColor: '#D97706' }]} onPress={handlePickImage}>
-              <Feather name="camera" size={32} color="#FFF" />
+            {/* 🟢 LLAMADA AL MENÚ DE SELECCIÓN DE IMÁGENES */}
+            <TouchableOpacity style={[styles.scanButton, isOffline && { backgroundColor: '#D97706' }]} onPress={handleMediaMenuTrigger}>
+              <Feather name="plus-circle" size={32} color="#FFF" />
               <View style={styles.scanButtonTextContainer}>
-                <Text style={styles.scanButtonTitle}>Agregar fotos</Text>
-                <Text style={styles.scanButtonSub}>Toma varias imágenes para el registro</Text>
+                <Text style={styles.scanButtonTitle}>Agregar Evidencia</Text>
+                <Text style={styles.scanButtonSub}>Toma fotos de campo o carga desde la galería</Text>
               </View>
             </TouchableOpacity>
 
             {imageUris.length > 0 && (
               <>
-                <Text style={styles.sectionTitle}>Fotos ({imageUris.length})</Text>
+                <Text style={styles.sectionTitle}>Fotos adjuntadas ({imageUris.length})</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 15 }}>
                   {imageUris.map((uri, index) => (
                     <View key={`${uri}-${index}`} style={styles.thumbnailContainer}>
@@ -245,10 +293,14 @@ export function LogForm() {
             </View>
           </View>
 
-          <TouchableOpacity style={[styles.saveButton, !isFormValid && styles.saveButtonDisabled, isOffline && isFormValid && { backgroundColor: '#D97706' }]} onPress={handleSave} disabled={!isFormValid}>
-            <Text style={[styles.saveButtonText, !isFormValid && styles.saveButtonTextDisabled]}>
-              {isOffline ? 'Guardar Reporte Offline' : 'Guardar en bitácora'}
-            </Text>
+          <TouchableOpacity style={[styles.saveButton, (!isFormValid || isSavingInProgress) && styles.saveButtonDisabled, isOffline && isFormValid && { backgroundColor: '#D97706' }]} onPress={handleSave} disabled={!isFormValid || isSavingInProgress}>
+            {isSavingInProgress ? (
+              <ActivityIndicator color="#FFF" size="small" />
+            ) : (
+              <Text style={[styles.saveButtonText, !isFormValid && styles.saveButtonTextDisabled]}>
+                {isOffline ? 'Guardar Reporte Offline' : 'Guardar en bitácora'}
+              </Text>
+            )}
           </TouchableOpacity>
 
         </ScrollView>
@@ -290,5 +342,6 @@ const styles = StyleSheet.create({
   saveButton: { backgroundColor: '#2563EB', alignItems: 'center', padding: 16, borderRadius: 12, marginBottom: 20 },
   saveButtonDisabled: { backgroundColor: '#E5E7EB' },
   saveButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
-  saveButtonTextDisabled: { color: '#9CA3AF' }
+  saveButtonTextDisabled: { color: '#9CA3AF' },
+  offlineBanner: { backgroundColor: '#FEF3C7', padding: 12, borderRadius: 12, marginBottom: 20, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#F59E0B' }
 });

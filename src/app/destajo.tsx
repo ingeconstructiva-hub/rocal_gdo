@@ -1,3 +1,5 @@
+'use client';
+
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
@@ -37,12 +39,13 @@ export default function InventarioScreen() {
   const isFinancialRole = profile?.role === 'admin' || profile?.role === 'oficina';
 
   const [items, setItems] = useState<InventoryItem[]>([]);
+  
+  // Catálogo combinado unificado (Residentes + Trabajadores)
   const [workers, setWorkers] = useState<WorkerSimple[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [searchQuery, setSearchQuery] = useState('');
 
-  // 🟢 ESTADO: Controla qué semanas están expandidas (Acordeón)
   const [expandedWeeks, setExpandedWeeks] = useState<Record<string, boolean>>({});
 
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -115,6 +118,7 @@ export default function InventarioScreen() {
       }
     } else {
       try {
+        // 1. Cargar registros de destajos activos
         const { data: invData, error: invError } = await supabase
           .from('inventory')
           .select('*')
@@ -128,17 +132,44 @@ export default function InventarioScreen() {
           await AsyncStorage.setItem(storageKeyItems, JSON.stringify(invData));
         }
 
-        const { data: workData, error: workError } = await supabase
-          .from('workers')
-          .select('id, name')
-          .eq('is_active', true)
-          .eq('project_id', projectId);
+        // 🟢 CONSULTA MULTI-TABLA EN PARALELO (TRABAJADORES DE OBRA + RESIDENTES)
+        const [workersResponse, profilesResponse] = await Promise.all([
+          supabase.from('workers').select('id, name_worker').eq('is_active', true).eq('project_id', projectId),
+          supabase.from('profiles').select('id, full_name, role').or('role.eq.residente')
+        ]);
           
-        if (workError) throw workError;
-        if (workData) {
-          setWorkers(workData);
-          await AsyncStorage.setItem(storageKeyWorkers, JSON.stringify(workData));
+        if (workersResponse.error) throw workersResponse.error;
+        if (profilesResponse.error) throw profilesResponse.error;
+
+        const listaCombinada: WorkerSimple[] = [];
+
+        // Inyectar primero a los encargados/residentes de la tabla profiles
+        if (profilesResponse.data) {
+          profilesResponse.data.forEach(p => {
+            listaCombinada.push({
+              id: p.id,
+              name: p.full_name || 'Usuario sin nombre'
+            });
+          });
         }
+
+        // Inyectar a los obreros/técnicos de la tabla workers mapeando el campo real name_worker
+        if (workersResponse.data) {
+          workersResponse.data.forEach(w => {
+            listaCombinada.push({
+              id: w.id,
+              name: w.name_worker
+            });
+          });
+        }
+
+        // Eliminar duplicados de nombres por si acaso
+        const listaLimpia = listaCombinada.filter((item, index, self) =>
+          index === self.findIndex((t) => t.name.trim().toLowerCase() === item.name.trim().toLowerCase())
+        );
+
+        setWorkers(listaLimpia);
+        await AsyncStorage.setItem(storageKeyWorkers, JSON.stringify(listaLimpia));
 
       } catch (error: any) {
         if (error.message !== 'Network request failed' && error.message !== 'Failed to fetch') {
@@ -276,14 +307,14 @@ export default function InventarioScreen() {
     if (isOffline) {
       try {
         const offlineItem = {
-        ...itemData,
-        id: `temp_${Date.now()}`,
-        created_at: new Date().toISOString()
+          ...itemData,
+          id: `temp_${Date.now()}`,
+          created_at: new Date().toISOString()
         };
 
         const itemConUUID = {
-        ...itemData,
-        local_uuid: Crypto.randomUUID() 
+          ...itemData,
+          local_uuid: Crypto.randomUUID() 
         };
 
         const existing = await AsyncStorage.getItem('@bandeja_salida_inventario');
@@ -369,10 +400,9 @@ export default function InventarioScreen() {
       const contenidoCSV = "\uFEFF" + encabezados.join(",") + filas;
       const nombreArchivo = `Destajos_Inventario_${activeProject?.name?.replace(/\s+/g, '_') || 'Obra'}.csv`;
       
-      const fsModulo = FileSystem as any;
-      const fileUri = `${fsModulo.documentDirectory}${nombreArchivo}`;
+      const fileUri = `${FileSystem.documentDirectory}${nombreArchivo}`;
       
-      await fsModulo.writeAsStringAsync(fileUri, contenidoCSV, { encoding: 'utf8' });
+      await FileSystem.writeAsStringAsync(fileUri, contenidoCSV, { encoding: 'utf8' });
       await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Exportar a Excel' });
 
     } catch (error: any) {
@@ -403,7 +433,6 @@ export default function InventarioScreen() {
           </View>
         ) : null}
 
-        {/* 🟢 TARJETA DE RESUMEN GLOBAL */}
         <View style={styles.summaryCard}>
           <View style={styles.summaryBox}>
             <Text style={styles.summaryLabel}>Total Registros</Text>
@@ -588,13 +617,7 @@ export default function InventarioScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView 
-              showsVerticalScrollIndicator={false} 
-              keyboardShouldPersistTaps="handled"
-              onScrollEndDrag={(e) => {
-                if (e.nativeEvent.contentOffset.y < -50) setIsModalVisible(false);
-              }}
-            >
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               {isOffline ? (
                 <Text style={{color: '#D97706', fontSize: 12, marginBottom: 10, fontStyle: 'italic'}}>
                   * Guardando en modo local
@@ -612,7 +635,7 @@ export default function InventarioScreen() {
               <View style={{ zIndex: 1 }}>
                 <TextInput 
                   style={[styles.modalInput, showSuggestions && name.length > 0 ? styles.modalInputActive : null]} 
-                  placeholder="Ej. Cemento Cruz Azul 50kg" 
+                  placeholder="Concepto" 
                   placeholderTextColor="#9CA3AF"
                   value={name} 
                   onChangeText={(val) => {
@@ -652,7 +675,7 @@ export default function InventarioScreen() {
                   <Text style={styles.modalLabel}>Unidad</Text>
                   <TextInput 
                     style={styles.modalInput} 
-                    placeholder="Ej. Bulto" 
+                    placeholder="Unidad" 
                     placeholderTextColor="#9CA3AF"
                     value={unit} 
                     onChangeText={setUnit} 
@@ -662,7 +685,7 @@ export default function InventarioScreen() {
                   <Text style={styles.modalLabel}>P.U / Mano de Obra $</Text>
                   <TextInput 
                     style={styles.modalInput} 
-                    placeholder="Ej. 250" 
+                    placeholder="Precio" 
                     placeholderTextColor="#9CA3AF"
                     keyboardType="numeric" 
                     value={price} 
@@ -674,7 +697,7 @@ export default function InventarioScreen() {
               <Text style={styles.modalLabel}>Vol. / Cant. (Para esta semana)</Text>
               <TextInput 
                 style={styles.modalInput} 
-                placeholder="Ej. 10" 
+                placeholder="Cantidad" 
                 placeholderTextColor="#9CA3AF"
                 keyboardType="numeric" 
                 value={quantity} 
@@ -684,7 +707,7 @@ export default function InventarioScreen() {
               <Text style={styles.modalLabel}>Encargado / Recibe (Opcional)</Text>
               <TextInput 
                 style={styles.modalInput} 
-                placeholder="Nombre del responsable..." 
+                placeholder="Nombre" 
                 placeholderTextColor="#9CA3AF"
                 value={inCharge} 
                 onChangeText={setInCharge} 
@@ -704,7 +727,7 @@ export default function InventarioScreen() {
               <Text style={styles.modalLabel}>Solicitado por (Opcional)</Text>
               <TextInput 
                 style={styles.modalInput} 
-                placeholder="Quién pide el material..." 
+                placeholder="Nombre" 
                 placeholderTextColor="#9CA3AF"
                 value={requestedBy} 
                 onChangeText={setRequestedBy} 
@@ -742,20 +765,16 @@ const styles = StyleSheet.create({
   headerBottomRow: { flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between' },
   headerTitle: { color: '#FFF', fontSize: 26, fontWeight: 'bold', bottom: 30 },
   headerSmall: { color: 'rgba(255,255,255,0.9)', fontSize: 14, marginTop: 4 },
-  
   body: { padding: 15, flex: 1 },
-  
   summaryCard: { flexDirection: 'row', backgroundColor: '#1E293B', borderRadius: 16, padding: 15, marginBottom: 15, elevation: 3 },
   summaryBox: { flex: 1, alignItems: 'center' },
   summaryDivider: { width: 1, backgroundColor: '#475569', marginHorizontal: 10 },
   summaryLabel: { color: '#94A3B8', fontSize: 11, marginBottom: 5, textTransform: 'uppercase' },
   summaryValue: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
-
   searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 20 },
   searchIcon: { marginRight: 8 },
   searchInput: { flex: 1, fontSize: 13, color: '#111827' },
   clearSearchBtn: { padding: 4 },
-
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, flexWrap: 'wrap', gap: 8 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#374151', flexShrink: 1 },
   actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
@@ -763,7 +782,6 @@ const styles = StyleSheet.create({
   addButtonText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', marginLeft: 6 },
   pdfButton: { backgroundColor: '#DC2626' },
   excelButton: { backgroundColor: '#10B981' },
-
   weekBlock: { marginBottom: 15 },
   weekHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#E0E7FF', padding: 15, borderRadius: 12, borderWidth: 1, borderColor: '#C7D2FE' },
   weekHeaderExpanded: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderBottomWidth: 0 },
@@ -771,28 +789,20 @@ const styles = StyleSheet.create({
   weekSubtotal: { fontSize: 16, fontWeight: 'bold', color: '#059669', textAlign: 'right' },
   weekItemCount: { fontSize: 11, color: '#6366F1', fontWeight: '600', textAlign: 'right', marginTop: 2 },
   tableContainer: { borderWidth: 1, borderColor: '#C7D2FE', borderTopWidth: 0, borderBottomLeftRadius: 12, borderBottomRightRadius: 12, overflow: 'hidden' },
-
   tableHeader: { flexDirection: 'row', backgroundColor: '#F3F4F6', paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 1, borderColor: '#D1D5DB' },
   thText: { fontSize: 10, fontWeight: 'bold', color: '#4B5563', textTransform: 'uppercase' },
-  
   tableRowContainer: { backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#E5E7EB', borderLeftWidth: 1, borderRightWidth: 1, paddingHorizontal: 10, paddingVertical: 12 },
   tableRow: { flexDirection: 'row', alignItems: 'center' },
-  
   tdName: { fontSize: 12, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
   badgeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 3 },
   tdRole: { fontSize: 9, fontStyle: 'italic', fontWeight: '600' },
-  
   actionButtons: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   editIcon: { padding: 6, backgroundColor: '#EFF6FF', borderRadius: 6, marginRight: 8 },
   deleteIcon: { padding: 6, backgroundColor: '#FEE2E2', borderRadius: 6 },
-  
   tdValue: { fontSize: 12, color: '#374151', fontWeight: '600' },
   tdUnit: { fontSize: 9, color: '#6B7280', textTransform: 'uppercase', marginTop: 2 },
   tdTotal: { fontSize: 14, color: '#059669', fontWeight: 'bold' },
-
   emptyText: { textAlign: 'center', color: '#6B7280', marginTop: 30, fontStyle: 'italic' },
-
-  // BOTTOM SHEET MODAL STYLES
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
@@ -800,32 +810,15 @@ const styles = StyleSheet.create({
   modalLabel: { fontSize: 12, fontWeight: '600', color: '#4B5563', marginTop: 12, marginBottom: 6 },
   modalInput: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8, padding: 12, fontSize: 14, color: '#111827' },
   modalInputActive: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderColor: '#2563EB' },
-
-  suggestionsContainer: {
-    backgroundColor: '#FFF',
-    borderWidth: 1,
-    borderColor: '#2563EB',
-    borderTopWidth: 0,
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 8,
-    maxHeight: 150,
-  },
-  suggestionItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6'
-  },
+  suggestionsContainer: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#2563EB', borderTopWidth: 0, borderBottomLeftRadius: 8, borderBottomRightRadius: 8, maxHeight: 150 },
+  suggestionItem: { flexDirection: 'row', justifyContent: 'space-between', padding: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   suggestionText: { fontSize: 13, color: '#111827', fontWeight: '600' },
   suggestionPrice: { fontSize: 11, color: '#059669', fontWeight: 'bold' },
-  
   chipContainer: { flexDirection: 'row', marginTop: 8, marginBottom: 4 },
   chip: { backgroundColor: '#F3F4F6', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, marginRight: 8, borderWidth: 1, borderColor: '#E5E7EB' },
   chipSelected: { backgroundColor: '#2563EB', borderColor: '#1D4ED8' },
   chipText: { fontSize: 11, color: '#4B5563', fontWeight: '500' },
   chipTextSelected: { color: '#FFF', fontWeight: 'bold' },
-
   modalButton: { backgroundColor: '#2563EB', padding: 14, borderRadius: 8, alignItems: 'center', marginTop: 25 },
   modalButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 }
 });

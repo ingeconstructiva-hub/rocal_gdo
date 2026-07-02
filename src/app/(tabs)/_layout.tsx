@@ -1,4 +1,8 @@
+'use client';
+
 import { Feather } from '@expo/vector-icons';
+// 🟢 IMPORTAMOS FONTAWESOME5 PARA EL ICONO DE LA BODEGA
+import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import { Tabs } from 'expo-router';
 import { Colors } from '../../constants/theme';
 import { useUser } from '../../context/UserContext';
@@ -22,15 +26,25 @@ export default function TabLayout() {
         },
         headerShown: false,
       }}>
-      {/* 1. INICIO */}
+      
+      {/* 1. 🟢 OCULTAMOS EL INICIO DE LAS PESTAÑAS ABAJO */}
       <Tabs.Screen 
         name="index" 
         options={{ 
-          title: 'Inicio',
-          tabBarIcon: ({ color }) => <Feather name="home" size={24} color={color} />
+          href: null, // Evita que aparezca la pestaña física abajo
         }} 
       />
-      {/* 2. BITÁCORA */}
+
+      {/* 2. 🟢 NUEVO: RESGUARDOS / ALMACÉN (REEMPLAZANDO POSICIÓN) */}
+      <Tabs.Screen 
+        name="resguardos" 
+        options={{ 
+          title: 'Almacén',
+          tabBarIcon: ({ color }) => <FontAwesome5 name="warehouse" size={20} color={color} />
+        }} 
+      />
+
+      {/* 3. BITÁCORA */}
       <Tabs.Screen 
         name="bitacora" 
         options={{ 
@@ -39,7 +53,8 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <Feather name="book-open" size={24} color={color} />
         }} 
       />
-      {/* 3. LISTA */}
+
+      {/* 4. LISTA (ASISTENCIA) */}
       <Tabs.Screen 
         name="lista" 
         options={{ 
@@ -48,7 +63,8 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <Feather name="users" size={24} color={color} />
         }} 
       />
-      {/* 4. PLANOS */}
+
+      {/* 5. PLANOS (DOCUMENTOS) */}
       <Tabs.Screen 
         name="planos" 
         options={{ 
@@ -56,7 +72,8 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <Feather name="map" size={24} color={color} />
         }} 
       />
-      {/* 5. GASTOS */}
+
+      {/* 6. GASTOS */}
       <Tabs.Screen 
         name="gastos" 
         options={{ 
