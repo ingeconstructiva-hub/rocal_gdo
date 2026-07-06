@@ -7,12 +7,13 @@ export function generarPlantillaResponsiva(vale: any) {
       <style>
         body { font-family: 'Helvetica', 'Arial', sans-serif; color: #1e293b; padding: 30px; line-height: 1.6; }
         .header { text-align: right; font-size: 12px; margin-bottom: 40px; font-weight: bold; }
-        .subject { font-size: 14px; font-weight: bold; margin-bottom: 5px; }
         .present { font-size: 14px; font-weight: bold; margin-top: 20px; margin-bottom: 20px; }
         .content { text-align: justify; font-size: 13px; margin-bottom: 20px; }
         .equipos-box { background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; margin: 20px 0; font-family: monospace; white-space: pre-wrap; font-size: 13px; }
-        .footer-signatures { margin-top: 60px; display: flex; justify-content: space-between; }
-        .signature-col { width: 45%; text-align: center; font-size: 12px; }
+        .footer-signatures { margin-top: 60px; display: flex; justify-content: space-between; page-break-inside: avoid; }
+        .signature-col { width: 45%; text-align: center; font-size: 12px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+        .img-firma { height: 65px; max-width: 180px; object-fit: contain; margin-bottom: 4px; }
+        .signature-placeholder { height: 65px; } 
         .digital-seal { margin-top: 40px; padding: 10px; border: 1px dashed #cbd5e1; background-color: #f1f5f9; border-radius: 6px; font-size: 10px; color: #64748B; font-family: monospace; }
         .verse { text-align: center; margin-top: 50px; font-size: 11px; font-style: italic; color: #64748b; }
       </style>
@@ -41,30 +42,37 @@ export function generarPlantillaResponsiva(vale: any) {
         El receptor asume la <strong>RESPONSABILIDAD Y EL CUIDADO DE DICHO EQUIPO Y HERRAMIENTAS</strong> y se compromete a utilizarlo con un uso estrictamente laboral. Cualquier problema o fallo deberá ser informado de inmediato para su renovación o mantenimiento. En caso de que los equipos sean extraviados o dañados por el mal uso, estos tendrán que reponerse por el encargado, aceptando que se reciben listos para usarse y sin deterioros significativos.
       </div>
 
-      <!-- 🟢 BLOQUE DE DOBLE FIRMA CORREGIDO CON LAS VARIABLES DEL OBJETO 'vale' -->
       <div class="footer-signatures">
-        <!-- Columna Izquierda: Quien Entrega -->
+        
         <div class="signature-col">
-          <hr style="border: none; border-top: 1px solid #475569; margin-bottom: 8px;" />
+          ${vale.firma_entrega_url 
+            ? `<img src="${vale.firma_entrega_url}" class="img-firma" />` 
+            : `<div class="signature-placeholder"></div>`
+          }
+          <hr style="border: none; border-top: 1px solid #475569; margin-bottom: 8px; width: 100%;" />
           <p style="font-size: 12px; font-weight: bold; margin: 0;">ENTREGA</p>
           <p style="font-size: 11px; margin: 2px 0 0 0;">${vale.nombre_entrega}</p>
-          <p style="font-size: 9px; color: #16A34A; font-family: monospace; margin-top: 4px; font-weight: bold;">🔒 CO-FIRMADO DIGITALMENTE</p>
+          <p style="font-size: 8px; color: #64748B; font-family: monospace; margin-top: 4px; font-weight: bold;">🔒 EMISOR AUTORIZADO</p>
         </div>
 
-        <!-- Columna Derecha: Quien Recibe -->
         <div class="signature-col">
-          <hr style="border: none; border-top: 1px solid #475569; margin-bottom: 8px;" />
+          ${vale.firma_recibe_url 
+            ? `<img src="${vale.firma_recibe_url}" class="img-firma" />` 
+            : `<div class="signature-placeholder"></div>`
+          }
+          <hr style="border: none; border-top: 1px solid #475569; margin-bottom: 8px; width: 100%;" />
           <p style="font-size: 12px; font-weight: bold; margin: 0;">RECIBE Y ACEPTA</p>
           <p style="font-size: 11px; margin: 2px 0 0 0;">${vale.nombre_recibe}</p>
-          <p style="font-size: 9px; color: #16A34A; font-family: monospace; margin-top: 4px; font-weight: bold;">🔒 CO-FIRMADO DIGITALMENTE</p>
+          <p style="font-size: 8px; color: #16A34A; font-family: monospace; margin-top: 4px; font-weight: bold;">🔒 FIRMA AUTÓGRAFA DIGITAL</p>
         </div>
+        
       </div>
 
       <div class="digital-seal">
         <strong>🔒 SELLO DE CERTIFICACIÓN DIGITAL CRIPTOGRÁFICA MUTUA</strong><br>
         HASH DE AUDITORÍA: ${vale.token_firma || 'PENDIENTE'}<br>
         UUID DEL REGISTRO: ${vale.id}<br>
-        Estado de Validación: CERTIFICADO - CONFORMIDAD DECLARADA POR AMBAS PARTES<br>
+        Estado de Validación: CERTIFICADO - EXPEDIENTE CON INTERFAZ DE FIRMAS HISTÓRICAS PERMANENTES<br>
         Timestamp de Sello: ${vale.fecha_firma || 'N/A'}
       </div>
 

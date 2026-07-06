@@ -48,13 +48,12 @@ export default function ListaScreen() {
   const nominaBase = displayedWorkers.reduce((sum, w) => sum + (Number(w.weekly_salary) || 0), 0);
   const proyeccionFinal = displayedWorkers.reduce((sum, w) => sum + calculateFinalTotal(w), 0);
 
-  // --- MODAL ALTA ---
+  // --- MODALS ---
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('');
   const [newSalary, setNewSalary] = useState('');
 
-  // --- MODAL EDICIÓN ---
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editWorkerId, setEditWorkerId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -82,7 +81,6 @@ export default function ListaScreen() {
 
     const BloquearSalidaNativa = navigation.addListener('beforeRemove', (e) => {
       if (!hasChanges) return;
-
       e.preventDefault();
 
       Alert.alert(
@@ -278,13 +276,32 @@ export default function ListaScreen() {
     setSelectedWorkerId(null);
   };
 
+  // 🟢 CALCULADORA CON PROPORCIÓN AJUSTADA PARA SÁBADO DE 5 HORAS
   function calculateFinalTotal(w: WorkerState) {
-    const daily = w.weekly_salary / 6;
-    const daysPresent = w.attendance.filter(Boolean).length;
+    const totalHoursInWeek = 45; // 5 días de 8h (40h) + 1 día de 5h (5h)
+    const hourlyRate = w.weekly_salary / totalHoursInWeek; // Valor base por hora trabajada
+
+    let hoursEarned = 0;
+
+    // Calcular lunes a viernes (8 horas por día asistido)
+    for (let i = 0; i < 5; i++) {
+      if (w.attendance[i]) {
+        hoursEarned += 8;
+      }
+    }
+
+    // Calcular sábado (5 horas si asistió)
+    if (w.attendance[5]) {
+      hoursEarned += 5;
+    }
+
     const extraH = Number(w.extraHours || 0);
     const disc = Number(w.discount || 0);
-    const hourlyRate = (daily / 8) * 2; 
-    return (daily * daysPresent) + (extraH * hourlyRate) - disc;
+
+    // Las horas extra se calculan al doble de la tarifa ordinaria integrada
+    const extraHourlyRate = hourlyRate * 2; 
+
+    return (hoursEarned * hourlyRate) + (extraH * extraHourlyRate) - disc;
   }
 
   const handleSavePayroll = async (isSilent = false) => {
@@ -320,11 +337,9 @@ export default function ListaScreen() {
       if (error) throw error;
 
       setHasChanges(false); 
-
       if (!isSilent) {
         Alert.alert("¡Éxito!", "La lista de asistencia y nómina ha sido enviada a la oficina de forma segura.");
       }
-
     } catch (e: any) {
       console.log(e);
       if (!isSilent) Alert.alert("Error de sincronización", e.message);
@@ -355,7 +370,6 @@ export default function ListaScreen() {
         const asistencias = w.attendance.filter(Boolean).length;
         const total = calculateFinalTotal(w);
         const notaLimpia = w.reason ? w.reason.replace(/,/g, ' ') : ''; 
-        
         return `"${w.name_worker}","${w.role}",${w.weekly_salary},${asistencias},${w.extraHours},${w.discount},"${notaLimpia}",${total.toFixed(2)}`;
       }).join("\n");
 
@@ -363,7 +377,6 @@ export default function ListaScreen() {
       const nombreArchivo = `Raya_${activeCategory}_${activeProject?.name_worker?.replace(/\s+/g, '_') || 'Obra'}.csv`;
       
       const fileUri = `${FileSystem.documentDirectory}${nombreArchivo}`;
-      
       await FileSystem.writeAsStringAsync(fileUri, contenidoCSV, { encoding: 'utf8' });
       await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Exportar Nómina' });
     } catch (error: any) {
@@ -375,13 +388,9 @@ export default function ListaScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Feather name="chevron-left" size={28} color="#FFF" />
-          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.back()}><Feather name="chevron-left" size={28} color="#FFF" /></TouchableOpacity>
           <Text style={styles.headerSubtitle}>ASISTENCIA Y NÓMINA</Text>
-          <TouchableOpacity onPress={fetchWorkers}>
-            <Feather name="refresh-cw" size={20} color="#FFF" />
-          </TouchableOpacity>
+          <TouchableOpacity onPress={fetchWorkers}><Feather name="refresh-cw" size={20} color="#FFF" /></TouchableOpacity>
         </View>
         <Text style={styles.headerTitle}>{activeProject?.name_worker || "Obra"}</Text>
       </View>
@@ -389,9 +398,7 @@ export default function ListaScreen() {
       {hasChanges && (
         <View style={styles.warningBannerContainer}>
           <Feather name="alert-triangle" size={16} color="#7F1D1D" />
-          <Text style={styles.warningBannerText}>
-            Modificaciones pendientes. Presiona el botón verde de guardar arriba.
-          </Text>
+          <Text style={styles.warningBannerText}>Modificaciones pendientes. Presiona el botón verde de guardar arriba.</Text>
         </View>
       )}
 
@@ -404,17 +411,10 @@ export default function ListaScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 🟢 BOTÓN DE ENVIAR FIJO ARRIBA (Se despliega horizontalmente antes de la lista) */}
       {!loading && allWorkers.length > 0 && (
         <View style={styles.topSyncBtnContainer}>
-          <TouchableOpacity 
-            style={[styles.syncBtn, hasChanges && styles.syncBtnHighlighted]} 
-            onPress={() => handleSavePayroll(false)}
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              <ActivityIndicator color="#FFF" size="small" />
-            ) : (
+          <TouchableOpacity style={[styles.syncBtn, hasChanges && styles.syncBtnHighlighted]} onPress={() => handleSavePayroll(false)} disabled={isSaving}>
+            {isSaving ? <ActivityIndicator color="#FFF" size="small" /> : (
               <>
                 <Feather name="upload-cloud" size={18} color="#FFF" />
                 <Text style={styles.syncBtnText}>Guardar y Enviar a Oficina</Text>
@@ -426,179 +426,77 @@ export default function ListaScreen() {
 
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{flex: 1}}>
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          
-          <View style={{ marginBottom: 5 }}>
-            <SummaryCard 
-              labelLeft="Nómina Base" 
-              valueLeft={nominaBase} 
-              labelRight="Proyección Final" 
-              valueRight={proyeccionFinal} 
-              colorRight="#10B981" 
-            />
-          </View>
+          <SummaryCard labelLeft="Nómina Base" valueLeft={nominaBase} labelRight="Proyección Final" valueRight={proyeccionFinal} colorRight="#10B981" />
 
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>
-              Lista de {activeCategory === 'obrero' ? 'Obreros' : 'Técnicos'}
-            </Text>
-            
+            <Text style={styles.sectionTitle}>Lista de {activeCategory === 'obrero' ? 'Obreros' : 'Técnicos'}</Text>
             {isFinancialRole && (
               <View style={styles.exportButtonsContainer}>
-                <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#DC2626'}]} onPress={handleGeneratePDF}>
-                  <Feather name="file-text" size={14} color="#FFF" />
-                  <Text style={styles.exportBtnText}>PDF</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#10B981', marginLeft: 8}]} onPress={handleExportarExcel}>
-                  <Feather name="grid" size={14} color="#FFF" />
-                  <Text style={styles.exportBtnText}>Excel</Text>
-                </TouchableOpacity>
+                <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#DC2626'}]} onPress={handleGeneratePDF}><Feather name="file-text" size={14} color="#FFF" /><Text style={styles.exportBtnText}>PDF</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#10B981', marginLeft: 8}]} onPress={handleExportarExcel}><Feather name="grid" size={14} color="#FFF" /><Text style={styles.exportBtnText}>Excel</Text></TouchableOpacity>
               </View>
             )}
           </View>
 
-          {loading ? (
-            <ActivityIndicator size="large" color="#2563EB" style={{marginTop: 50}} />
-          ) : displayedWorkers.length === 0 ? (
-            <Text style={{textAlign: 'center', color: '#64748B', marginTop: 40}}>
-              No hay {activeCategory === 'obrero' ? 'obreros' : 'técnicos'} registrados.
-            </Text>
-          ) : (
-            displayedWorkers.map((worker) => (
-              <View key={worker.id} style={styles.workerCard}>
-                <View style={styles.cardHeader}>
-                  <View style={{flex: 1}}>
-                    <Text style={styles.workerName}>{worker.name_worker}</Text>
-                    <Text style={styles.workerRole}>
-                      {worker.role} 
-                      {isFinancialRole && <Text style={{color: '#64748B', fontWeight: 'normal'}}> • S. Día: ${(worker.weekly_salary / 6).toFixed(0)}</Text>}
-                    </Text>
+          {loading ? <ActivityIndicator size="large" color="#2563EB" style={{marginTop: 50}} /> : displayedWorkers.length === 0 ? (
+            <Text style={{textAlign: 'center', color: '#64748B', marginTop: 40}}>No hay {activeCategory === 'obrero' ? 'obreros' : 'técnicos'} registrados.</Text>
+          ) : displayedWorkers.map((worker) => (
+            <View key={worker.id} style={styles.workerCard}>
+              <View style={styles.cardHeader}>
+                <View style={{flex: 1}}>
+                  <Text style={styles.workerName}>{worker.name_worker}</Text>
+                  <Text style={styles.workerRole}>{worker.role}{isFinancialRole && <Text style={{color: '#64748B', fontWeight: 'normal'}}> • S. Hora: ${(worker.weekly_salary / 45).toFixed(1)}</Text>}</Text>
+                </View>
+                {isAdmin ? (
+                  <View style={styles.adminActionIconsRow}>
+                    <TouchableOpacity onPress={() => openEditWorkerModal(worker)} style={styles.inlineActionBtn}><Feather name="edit-2" size={13} color="#475569" /></TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleDeleteWorker(worker)} style={[styles.inlineActionBtn, {marginLeft: 8}]}><Feather name="trash-2" size={13} color="#EF4444" /></TouchableOpacity>
                   </View>
-                  
-                  {isAdmin ? (
-                    <View style={styles.adminActionIconsRow}>
-                      <TouchableOpacity onPress={() => openEditWorkerModal(worker)} style={styles.inlineActionBtn}>
-                        <Feather name="edit-2" size={13} color="#475569" />
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => handleDeleteWorker(worker)} style={[styles.inlineActionBtn, {marginLeft: 8}]}>
-                        <Feather name="trash-2" size={13} color="#EF4444" />
-                      </TouchableOpacity>
-                    </View>
-                  ) : isFinancialRole && (
-                    <View style={{alignItems: 'flex-end'}}>
-                      <Text style={styles.salaryLabel}>Semanal</Text>
-                      <Text style={styles.salaryValue}>${worker.weekly_salary}</Text>
-                    </View>
-                  )}
-                </View>
-
-                <View style={styles.attendanceRow}>
-                  {DAYS.map((day, idx) => (
-                    <TouchableOpacity 
-                      key={day + idx} 
-                      style={styles.dayBox}
-                      onPress={() => toggleAttendance(worker.id, idx)}
-                    >
-                      <Text style={styles.dayText}>{day}</Text>
-                      <Feather 
-                        name={worker.attendance[idx] ? "check-circle" : "circle"} 
-                        size={18} 
-                        color={worker.attendance[idx] ? "#2563EB" : "#CBD5E1"} 
-                      />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <View style={styles.actionsContainerRow}>
-                  <TouchableOpacity style={styles.actionCardBtn} onPress={() => openExtrasModal(worker)}>
-                    <Feather name="clock" size={13} color="#2563EB" />
-                    <View style={{flex: 1, marginLeft: 5}}>
-                      <Text style={styles.actionBtnLabel}>Hrs Extra: <Text style={styles.actionBtnValue}>{Number(worker.extraHours) > 0 ? `${worker.extraHours} H` : '0'}</Text></Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  {isFinancialRole ? (
-                    <TouchableOpacity style={[styles.actionCardBtn, {marginLeft: 6}]} onPress={() => openDiscountModal(worker)}>
-                      <Feather name="alert-circle" size={13} color="#EF4444" />
-                      <View style={{flex: 1, marginLeft: 5}}>
-                        <Text style={[styles.actionBtnLabel, {color: '#EF4444'}]}>Deducción: <Text style={styles.actionBtnValue}>{Number(worker.discount) > 0 ? `-$${worker.discount}` : worker.reason ? 'Nota' : '$0'}</Text></Text>
-                      </View>
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={[styles.actionCardBtn, {marginLeft: 6, borderColor: 'transparent', backgroundColor: 'transparent'}]} />
-                  )}
-                </View>
-
-                {isFinancialRole && (
-                  <View style={styles.totalRow}>
-                    <Text style={styles.totalLabel}>TOTAL A PAGAR:</Text>
-                    <Text style={styles.totalValue}>${calculateFinalTotal(worker).toLocaleString('es-MX', {minimumFractionDigits: 2})}</Text>
-                  </View>
+                ) : isFinancialRole && (
+                  <View style={{alignItems: 'flex-end'}}><Text style={styles.salaryLabel}>Semanal</Text><Text style={styles.salaryValue}>${worker.weekly_salary}</Text></View>
                 )}
               </View>
-            ))
-          )}
 
+              <View style={styles.attendanceRow}>
+                {DAYS.map((day, idx) => (
+                  <TouchableOpacity key={day + idx} style={styles.dayBox} onPress={() => toggleAttendance(worker.id, idx)}>
+                    <Text style={styles.dayText}>{day}</Text>
+                    <Feather name={worker.attendance[idx] ? "check-circle" : "circle"} size={18} color={worker.attendance[idx] ? "#2563EB" : "#CBD5E1"} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={styles.actionsContainerRow}>
+                <TouchableOpacity style={styles.actionCardBtn} onPress={() => openExtrasModal(worker)}>
+                  <Feather name="clock" size={13} color="#2563EB" />
+                  <View style={{flex: 1, marginLeft: 5}}><Text style={styles.actionBtnLabel}>Hrs Extra: <Text style={styles.actionBtnValue}>{Number(worker.extraHours) > 0 ? `${worker.extraHours} H` : '0'}</Text></Text></View>
+                </TouchableOpacity>
+                {isFinancialRole ? (
+                  <TouchableOpacity style={[styles.actionCardBtn, {marginLeft: 6}]} onPress={() => openDiscountModal(worker)}>
+                    <Feather name="alert-circle" size={13} color="#EF4444" />
+                    <View style={{flex: 1, marginLeft: 5}}><Text style={[styles.actionBtnLabel, {color: '#EF4444'}]}>Deducción: <Text style={styles.actionBtnValue}>{Number(worker.discount) > 0 ? `-$${worker.discount}` : worker.reason ? 'Nota' : '$0'}</Text></Text></View>
+                  </TouchableOpacity>
+                ) : <View style={[styles.actionCardBtn, {marginLeft: 6, borderColor: 'transparent', backgroundColor: 'transparent'}]} />}
+              </View>
+
+              {isFinancialRole && (
+                <View style={styles.totalRow}>
+                  <Text style={styles.totalLabel}>TOTAL A PAGAR:</Text>
+                  <Text style={styles.totalValue}>${calculateFinalTotal(worker).toLocaleString('es-MX', {minimumFractionDigits: 2})}</Text>
+                </View>
+              )}
+            </View>
+          ))}
         </ScrollView>
       </KeyboardAvoidingView>
 
       {isFinancialRole && (
         <View style={styles.fabContainer}>
-          <TouchableOpacity style={styles.fabPrimary} onPress={() => setIsModalVisible(true)}>
-            <Feather name="plus" size={30} color="#FFF" />
-          </TouchableOpacity>
+          <TouchableOpacity style={styles.fabPrimary} onPress={() => setIsModalVisible(true)}><Feather name="plus" size={30} color="#FFF" /></TouchableOpacity>
         </View>
       )}
 
-      {/* MODAL DE EDICIÓN DE TRABAJADOR */}
-      <Modal visible={isEditModalOpen} animationType="slide" transparent={true} onRequestClose={() => setIsEditModalOpen(false)}>
-        <View style={styles.modalOverlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsEditModalOpen(false)} />
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>✏️ Editar Datos del Trabajador</Text>
-            <Text style={styles.subModalLabel}>Nombre del Obrero/Técnico:</Text>
-            <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" value={editName} onChangeText={setEditName} />
-            <Text style={styles.subModalLabel}>Puesto u Oficio:</Text>
-            <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" value={editRole} onChangeText={setEditRole} />
-            <Text style={styles.subModalLabel}>Sueldo Base Semanal ($):</Text>
-            <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" keyboardType="numeric" value={editSalary} onChangeText={(v) => setEditSalary(v.replace(/[^0-9]/g, ''))} />
-            <TouchableOpacity style={styles.saveBtn} onPress={handleUpdateWorker} disabled={isSaving}>
-              {isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>Guardar Cambios</Text>}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* MODALES SECUNDARIOS */}
-      <Modal visible={isExtrasModalOpen} transparent={true} animationType="fade" onRequestClose={() => setIsExtrasModalOpen(false)}>
-        <View style={styles.modalOverlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsExtrasModalOpen(false)} />
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>🕒 Asignar Horas Extra</Text>
-            <Text style={styles.subModalLabel}>Ingresa la cantidad total de horas acumuladas en la semana:</Text>
-            <TextInput style={styles.modalInput} keyboardType="numeric" value={tempExtras} onChangeText={(v) => setTempExtras(v.replace(/[^0-9.]/g, ''))} placeholder="Ej. 4" autoFocus />
-            <TouchableOpacity style={styles.saveBtn} onPress={saveExtrasChanges}>
-              <Text style={styles.saveBtnText}>Aplicar Horas</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={isDiscountModalOpen} transparent={true} animationType="fade" onRequestClose={() => setIsDiscountModalOpen(false)}>
-        <View style={styles.modalOverlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsDiscountModalOpen(false)} />
-          <View style={styles.modalContent}>
-            <Text style={[styles.modalTitle, {color: '#EF4444'}]}>💸 Deducción y Observación</Text>
-            <Text style={styles.subModalLabel}>Monto del Descuento ($):</Text>
-            <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" keyboardType="numeric" value={tempDiscount} onChangeText={(v) => setTempDiscount(v.replace(/[^0-9.]/g, ''))} placeholder="Ej. 150" />
-            <Text style={styles.subModalLabel}>Motivo o Nota justificante:</Text>
-            <TextInput style={[styles.modalInput, {height: 50, textAlignVertical: 'top'}]} value={tempReason} onChangeText={setTempReason} placeholder="Ej. Retardo" multiline />
-            <TouchableOpacity style={[styles.saveBtn, {backgroundColor: '#EF4444'}]} onPress={saveDiscountChanges}>
-              <Text style={styles.saveBtnText}>Aplicar Descuento</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
+      {/* MODAL ALTA */}
       <Modal visible={isModalVisible} animationType="slide" transparent={true} onRequestClose={() => setIsModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsModalVisible(false)} />
@@ -607,9 +505,52 @@ export default function ListaScreen() {
             <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="Nombre completo" value={newName} onChangeText={setNewName} />
             <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="Puesto" value={newRole} onChangeText={setNewRole} />
             <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="Sueldo Semanal $" keyboardType="numeric" value={newSalary} onChangeText={setNewSalary} />
-            <TouchableOpacity style={styles.saveBtn} onPress={handleAddWorker} disabled={isSaving}>
-              {isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>Registrar en Obra</Text>}
-            </TouchableOpacity>
+            <TouchableOpacity style={styles.saveBtn} onPress={handleAddWorker} disabled={isSaving}>{isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>Registrar en Obra</Text>}</TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL EDICIÓN */}
+      <Modal visible={isEditModalOpen} animationType="slide" transparent={true} onRequestClose={() => setIsEditModalOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsEditModalOpen(false)} />
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>✏️ Editar Datos del Trabajador</Text>
+            <Text style={styles.subModalLabel}>Nombre del Obrero/Técnico:</Text>
+            <TextInput style={styles.modalInput} value={editName} onChangeText={setEditName} />
+            <Text style={styles.subModalLabel}>Puesto u Oficio:</Text>
+            <TextInput style={styles.modalInput} value={editRole} onChangeText={setEditRole} />
+            <Text style={styles.subModalLabel}>Sueldo Base Semanal ($):</Text>
+            <TextInput style={styles.modalInput} keyboardType="numeric" value={editSalary} onChangeText={(v) => setEditSalary(v.replace(/[^0-9]/g, ''))} />
+            <TouchableOpacity style={styles.saveBtn} onPress={handleUpdateWorker} disabled={isSaving}>{isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>Guardar Cambios</Text>}</TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL EXTRAS */}
+      <Modal visible={isExtrasModalOpen} transparent={true} animationType="fade" onRequestClose={() => setIsExtrasModalOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsExtrasModalOpen(false)} />
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>🕒 Asignar Horas Extra</Text>
+            <Text style={styles.subModalLabel}>Ingresa la cantidad total de horas acumuladas en la semana:</Text>
+            <TextInput style={styles.modalInput} keyboardType="numeric" value={tempExtras} onChangeText={(v) => setTempExtras(v.replace(/[^0-9.]/g, ''))} placeholder="Ej. 4" autoFocus />
+            <TouchableOpacity style={styles.saveBtn} onPress={saveExtrasChanges}><Text style={styles.saveBtnText}>Aplicar Horas</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL DESCUENTOS */}
+      <Modal visible={isDiscountModalOpen} transparent={true} animationType="fade" onRequestClose={() => setIsDiscountModalOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsDiscountModalOpen(false)} />
+          <View style={styles.modalContent}>
+            <Text style={[styles.modalTitle, {color: '#EF4444'}]}>💸 Deducción y Observación</Text>
+            <Text style={styles.subModalLabel}>Monto del Descuento ($):</Text>
+            <TextInput style={styles.modalInput} keyboardType="numeric" value={tempDiscount} onChangeText={(v) => setTempDiscount(v.replace(/[^0-9.]/g, ''))} placeholder="Ej. 150" />
+            <Text style={styles.subModalLabel}>Motivo o Nota justificante:</Text>
+            <TextInput style={[styles.modalInput, {height: 50, textAlignVertical: 'top'}]} value={tempReason} onChangeText={setTempReason} placeholder="Ej. Retardo" multiline />
+            <TouchableOpacity style={[styles.saveBtn, {backgroundColor: '#EF4444'}]} onPress={saveDiscountChanges}><Text style={styles.saveBtnText}>Aplicar Descuento</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -630,20 +571,17 @@ const styles = StyleSheet.create({
   tabBtnActive: { backgroundColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
   tabText: { fontSize: 13, fontWeight: 'bold', color: '#64748B' },
   tabTextActive: { color: '#2563EB' },
-  
-  // 🟢 CONTENEDOR NUEVO FIJO SUPERIOR PARA EL BOTÓN DE GUARDADO
   topSyncBtnContainer: { paddingHorizontal: 15, paddingTop: 10, backgroundColor: '#F1F5F9' },
-  syncBtn: { backgroundColor: '#1E293B', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4 },
+  syncBtn: { backgroundColor: '#1E293B', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 12, elevation: 2 },
   syncBtnHighlighted: { backgroundColor: '#059669' },
   syncBtnText: { color: '#FFF', fontSize: 13, fontWeight: 'bold', marginLeft: 6 },
-
   body: { padding: 12, paddingBottom: 150 },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingHorizontal: 4 },
   sectionTitle: { fontSize: 15, fontWeight: 'bold', color: '#334155' },
   exportButtonsContainer: { flexDirection: 'row' },
   exportBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5, paddingHorizontal: 10, borderRadius: 6 },
   exportBtnText: { color: '#FFF', fontSize: 11, fontWeight: 'bold', marginLeft: 4 },
-  workerCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 12, marginBottom: 10, elevation: 2, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6 },
+  workerCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 12, marginBottom: 10, elevation: 2 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' },
   workerName: { fontSize: 15, fontWeight: 'bold', color: '#1E293B' },
   workerRole: { fontSize: 11, color: '#64748B', marginTop: 1, fontWeight: '600' },
@@ -661,7 +599,6 @@ const styles = StyleSheet.create({
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, alignItems: 'center', paddingTop: 6, borderTopWidth: 1, borderTopColor: '#F1F5F9' },
   totalLabel: { fontSize: 11, fontWeight: '700', color: '#64748B' },
   totalValue: { fontSize: 16, fontWeight: 'bold', color: '#059669' },
-  
   fabContainer: { position: 'absolute', bottom: 25, right: 20 },
   fabPrimary: { width: 54, height: 54, borderRadius: 27, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', elevation: 4 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 20 },
