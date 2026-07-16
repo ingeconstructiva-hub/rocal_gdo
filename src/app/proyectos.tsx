@@ -1,3 +1,5 @@
+'use client';
+
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -20,6 +22,7 @@ export default function ProyectosScreen() {
   const isAdmin = profile?.role === 'admin';
   const [proyectos, setProyectos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false); 
   const [userId, setUserId] = useState<string | null>(null);
 
   const [listaResidentes, setListaResidentes] = useState<any[]>([]);
@@ -141,6 +144,16 @@ export default function ProyectosScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const manejarRefreshManual = async () => {
+    if (isOffline) {
+      Alert.alert("Modo Offline", "Conéctate a internet para sincronizar los cambios de la web.");
+      return;
+    }
+    setIsRefreshing(true);
+    await cargarProyectos();
+    setIsRefreshing(false);
   };
 
   const seleccionarProyecto = (proyectoId: string, projectName: string, userRole: string) => {
@@ -334,7 +347,6 @@ export default function ProyectosScreen() {
     setFotoObra(null);
   };
 
-  // 🟢 ABRIR DETALLES
   const abrirDetalles = (proyecto: any) => {
     setObraSeleccionada(proyecto);
     setIsDetalleVisible(true);
@@ -455,9 +467,25 @@ export default function ProyectosScreen() {
             <Text style={styles.headerTitle}>Mis Obras</Text>
             <Text style={styles.headerSmall}>{profile?.name || 'Cargando...'}</Text>
           </View>
-          <TouchableOpacity onPress={cerrarSesion} style={styles.logoutBtn}>
-            <Feather name="log-out" size={20} color="#FFF" />
-          </TouchableOpacity>
+          
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <TouchableOpacity 
+              onPress={manejarRefreshManual} 
+              style={styles.logoutBtn} 
+              disabled={isRefreshing}
+              activeOpacity={0.7}
+            >
+              {isRefreshing ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Feather name="refresh-cw" size={20} color="#FFF" />
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={cerrarSesion} style={styles.logoutBtn}>
+              <Feather name="log-out" size={20} color="#FFF" />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -481,7 +509,7 @@ export default function ProyectosScreen() {
       )}
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-        {loading ? (
+        {loading && !isRefreshing ? (
           <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 50 }} />
         ) : proyectos.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -489,15 +517,14 @@ export default function ProyectosScreen() {
             <Text style={styles.emptyText}>No tienes obras asignadas aún.</Text>
             <Text style={styles.emptySubText}>
               {profile?.role === 'admin'
-                ? 'Toca el botón "+" para crear tu primera obra.'
-                : 'Pídele al administrador el código QR para unirte a una obra.'}
+                ? 'Toca el botón "+" para crear tu primera obra o usa el botón de refresh arriba.'
+                : 'Pídele al administrador que te asigne la obra y toca el botón de refresh arriba.'}
             </Text>
           </View>
         ) : (
           proyectos.map((proyecto) => (
             <TouchableOpacity key={proyecto.id} style={styles.projectCard} onPress={() => abrirDetalles(proyecto)} activeOpacity={0.9}>
               <View style={styles.projectHeader}>
-
                 <View style={styles.iconBox}>
                   {proyecto.foto_url ? (
                     <Image
@@ -559,17 +586,12 @@ export default function ProyectosScreen() {
       </View>
 
       {/* ==============================================
-          🟢 MODAL 1: CREAR / EDITAR OBRA (Cierra tocando el fondo)
+          🟢 MODAL 1: CREAR / EDITAR OBRA
       ================================================ */}
       <Modal visible={isModalVisible} animationType="slide" transparent={true} onRequestClose={() => setIsModalVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-          
-          {/* Fondo invisible clickeable */}
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setIsModalVisible(false)} />
-          
-          {/* Contenedor más pequeño (maxHeight 85%) */}
           <View style={[styles.modalContent, { maxHeight: '85%', paddingBottom: 20 }]}>
-            
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{modalMode === 'edit' ? 'Editar Obra' : 'Nueva Obra'}</Text>
               <TouchableOpacity onPress={() => setIsModalVisible(false)}>
@@ -704,13 +726,11 @@ export default function ProyectosScreen() {
       </Modal>
 
       {/* ==============================================
-          🟢 MODAL 2: UNIRSE A OBRA (Cierra tocando el fondo)
+          🟢 MODAL 2: UNIRSE A OBRA
       ================================================ */}
       <Modal visible={isJoinModalVisible} animationType="slide" transparent={true} onRequestClose={() => { setIsJoinModalVisible(false); setIsScanning(false); }}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-          
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => { setIsJoinModalVisible(false); setIsScanning(false); }} />
-          
           <View style={[styles.modalContent, { maxHeight: '85%' }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Unirse a una Obra</Text>
@@ -778,12 +798,8 @@ export default function ProyectosScreen() {
       ================================================ */}
       <Modal visible={isDetalleVisible} animationType="slide" transparent={true} onRequestClose={() => setIsDetalleVisible(false)}>
         <View style={styles.modalOverlay}>
-          
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setIsDetalleVisible(false)} />
-          
           <View style={[styles.modalContent, { padding: 0, overflow: 'hidden', maxHeight: '85%' }]}>
-            
-            {/* Foto Header */}
             {obraSeleccionada?.foto_url ? (
               <Image source={{ uri: obraSeleccionada.foto_url }} style={styles.detalleImagen} />
             ) : (
@@ -792,7 +808,6 @@ export default function ProyectosScreen() {
               </View>
             )}
 
-            {/* Botón Cerrar Flotante */}
             <TouchableOpacity style={styles.detalleCloseBtn} onPress={() => setIsDetalleVisible(false)}>
               <Feather name="chevron-down" size={24} color="#FFF" />
             </TouchableOpacity>
@@ -828,7 +843,6 @@ export default function ProyectosScreen() {
                 </View>
               )}
 
-              {/* 🟢 ZONA DE ADMINISTRADOR (Botones movidos aquí) */}
               {isAdmin && (
                 <View style={styles.adminOpcionesContainer}>
                   <Text style={styles.adminOpcionesTitulo}>Opciones de Administrador</Text>
@@ -878,7 +892,7 @@ const styles = StyleSheet.create({
   headerBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerTitle: { color: '#FFF', fontSize: 26, fontWeight: 'bold' },
   headerSmall: { color: 'rgba(255,255,255,0.9)', fontSize: 14, marginTop: 4 },
-  logoutBtn: { padding: 10, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12 },
+  logoutBtn: { padding: 10, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12, justifyContent: 'center', alignItems: 'center', minWidth: 42 },
 
   body: { padding: 20, paddingBottom: 150 },
   emptyContainer: { alignItems: 'center', marginTop: 60, paddingHorizontal: 20 },
@@ -896,7 +910,6 @@ const styles = StyleSheet.create({
   roleBadge: { backgroundColor: '#F0FDF4', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#BBF7D0' },
   roleText: { color: '#166534', fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase' },
 
-  // 🟢 ESTILOS DEL BOTÓN "ENTRAR"
   entrarBtn: { backgroundColor: '#2563EB', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10, gap: 6 },
   entrarBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
 
@@ -940,7 +953,6 @@ const styles = StyleSheet.create({
   dropdownIconWrapper: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
   dropdownItemText: { marginLeft: 10, fontSize: 14, color: '#374151' },
 
-  // 🟢 ESTILOS DEL NUEVO MODAL DE DETALLES
   detalleImagen: { width: '100%', height: 220, backgroundColor: '#E5E7EB' },
   detalleImagenPlaceholder: { width: '100%', height: 200, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center' },
   detalleCloseBtn: { position: 'absolute', top: 15, right: 15, backgroundColor: 'rgba(0,0,0,0.4)', padding: 6, borderRadius: 20, zIndex: 10 },

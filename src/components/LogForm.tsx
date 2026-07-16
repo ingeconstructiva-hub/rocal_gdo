@@ -38,7 +38,11 @@ export function LogForm() {
         return;
       }
 
-      const result = await ImagePicker.launchCameraAsync({ quality: 0.6 });
+      const result = await ImagePicker.launchCameraAsync({ 
+        allowsEditing: false, // 🟢 CORREGIDO: Foto completa de campo en cámara sin recorte
+        quality: 0.6 
+      });
+      
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setImageUris(prev => [...prev, result.assets[0].uri]);
       }
@@ -58,7 +62,7 @@ export function LogForm() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
+        allowsEditing: false, // 🟢 CORREGIDO: Foto panorámica de galería sin chocar en Android
         quality: 0.6
       });
 
