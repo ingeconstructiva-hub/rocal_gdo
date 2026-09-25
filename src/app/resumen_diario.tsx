@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SkeletonLista, SkeletonTarjeta } from '../components/Skeleton';
+import { regresar } from '../lib/navegar';
 import { Aviso } from '../lib/aviso';
 import { PieChart } from 'react-native-chart-kit';
 import { useProject } from '../context/ProjectContext';
@@ -311,7 +312,7 @@ export default function ResumenDiarioScreen() {
       {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => regresar('/(tabs)/gastos')} style={styles.backButton}>
             <Feather name="chevron-left" size={28} color="#FFF" />
           </TouchableOpacity>
           <Text style={styles.headerSubtitle}>REPORTE GERENCIAL FINANCIERO</Text>
@@ -379,7 +380,7 @@ const styles = StyleSheet.create({
   progressText: { fontSize: 11, color: '#64748B', marginTop: 8, fontWeight: '500' },
 
   generalCardsContainer: { flexDirection: 'row', gap: 12, marginBottom: 15 },
-  infoCard: { flex: 1, backgroundColor: '#FFF', padding: 16, borderRadius: 16, borderWidth: 1, elevation: 1, shadowColor: '#000', shadowOpacity: 0.01, overflow: 'hidden' },
+  infoCard: { flex: 1, backgroundColor: '#FFF', padding: 16, borderRadius: 16, borderWidth: 1, elevation: 1, boxShadow: '0px 0px 0px rgba(0, 0, 0, 0.01)',   overflow: 'hidden' },
   cardHeaderIcon: { width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   infoCardValue: { fontSize: 18, fontWeight: 'bold' },
   infoCardLabel: { fontSize: 11, color: '#64748B', marginTop: 2, fontWeight: '600' },

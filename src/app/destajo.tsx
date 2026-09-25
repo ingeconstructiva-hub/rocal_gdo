@@ -25,6 +25,8 @@ import {
 } from 'react-native';
 import { useRefrescar } from '../lib/refrescar';
 import { SkeletonLista } from '../components/Skeleton';
+import { exportarPDF, exportarTexto } from '../lib/exportar';
+import { regresar } from '../lib/navegar';
 import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
@@ -431,12 +433,7 @@ export default function InventarioScreen() {
     setIsExporting(true);
     try {
       const htmlContent = generarPlantillaInventario(filteredItems);
-      const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      await Sharing.shareAsync(uri, {
-        UTI: '.pdf',
-        mimeType: 'application/pdf',
-        dialogTitle: 'Exportar Inventario'
-      });
+      await exportarPDF(htmlContent, 'Inventario.pdf');
     } catch (error: any) {
       console.error("Error al exportar inventario:", error);
       Aviso.alert("Error", "Ocurrió un problema al generar el documento.");
@@ -482,10 +479,7 @@ export default function InventarioScreen() {
       const contenidoCSV = "\uFEFF" + encabezados.join(",") + filas;
       const nombreArchivo = `Destajos_Inventario_${activeProject?.name?.replace(/\s+/g, '_') || 'Obra'}.csv`;
       
-      const fileUri = `${FileSystem.documentDirectory}${nombreArchivo}`;
-      
-      await FileSystem.writeAsStringAsync(fileUri, contenidoCSV, { encoding: 'utf8' });
-      await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Exportar a Excel' });
+      await exportarTexto(contenidoCSV, nombreArchivo);
 
     } catch (error: any) {
       Aviso.alert("Error Excel", "No se pudo generar la hoja de cálculo: " + error.message);
@@ -496,7 +490,7 @@ export default function InventarioScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => regresar('/(tabs)/gastos')} style={styles.backButton}>
             <Feather name="chevron-left" size={28} color="#FFF" />
           </TouchableOpacity>
           <View style={{ width: 28 }} />
@@ -854,7 +848,7 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#FFF', fontSize: 26, fontWeight: 'bold', bottom: 30 },
   headerSmall: { color: 'rgba(255,255,255,0.9)', fontSize: 14, marginTop: 4 },
   body: { padding: 15, flex: 1 },
-  summaryCard: { flexDirection: 'row', backgroundColor: '#1E293B', borderRadius: 16, padding: 15, marginBottom: 15, elevation: 3 },
+  summaryCard: { flexDirection: 'row', backgroundColor: '#1E293B', borderRadius: 16, padding: 15, marginBottom: 15, boxShadow: '0px 3px 8px rgba(15, 23, 42, 0.12)', elevation: 3 },
   summaryBox: { flex: 1, alignItems: 'center' },
   summaryDivider: { width: 1, backgroundColor: '#475569', marginHorizontal: 10 },
   summaryLabel: { color: '#94A3B8', fontSize: 11, marginBottom: 5, textTransform: 'uppercase' },

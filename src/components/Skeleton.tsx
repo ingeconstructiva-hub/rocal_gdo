@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, View, ViewStyle } from 'react-native';
+import { Animated, Easing, Platform, StyleSheet, View, ViewStyle } from 'react-native';
 
 const BASE = '#E5E7EB';
 const TARJETA = '#FFFFFF';
@@ -28,11 +28,15 @@ export function Skeleton({
 }) {
   const pulso = useRef(new Animated.Value(0.6)).current;
 
+  // En navegador no existe el módulo de animación nativa: pedirlo solo genera
+  // un aviso en consola y de todos modos se cae a animación por JavaScript.
+  const usarDriverNativo = Platform.OS !== 'web';
+
   useEffect(() => {
     const animacion = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulso, { toValue: 1, duration: 750, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(pulso, { toValue: 0.6, duration: 750, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulso, { toValue: 1, duration: 750, easing: Easing.inOut(Easing.ease), useNativeDriver: usarDriverNativo }),
+        Animated.timing(pulso, { toValue: 0.6, duration: 750, easing: Easing.inOut(Easing.ease), useNativeDriver: usarDriverNativo }),
       ])
     );
     animacion.start();

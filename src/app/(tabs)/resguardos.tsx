@@ -7,6 +7,8 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRefrescar } from '../../lib/refrescar';
 import { SkeletonLista } from '../../components/Skeleton';
+import { exportarPDF } from '../../lib/exportar';
+import { regresar } from '../../lib/navegar';
 import { Aviso } from '../../lib/aviso';
 import SignatureScreen, { SignatureViewRef } from 'react-native-signature-canvas';
 
@@ -225,12 +227,7 @@ export default function ResguardosScreen() {
       };
 
       const htmlContent = generarPlantillaResponsiva(valePayload);
-      const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      
-      await Sharing.shareAsync(uri, { 
-        mimeType: 'application/pdf', 
-        dialogTitle: `Responsiva_${item.codigo}` 
-      });
+      await exportarPDF(htmlContent, `Responsiva_${item.codigo}.pdf`);
     } catch (error: any) {
       Aviso.alert("Error", "No se pudo generar el PDF: " + error.message);
     }
@@ -437,7 +434,7 @@ export default function ResguardosScreen() {
       {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
-          <TouchableOpacity onPress={() => router.back()}><Feather name="chevron-left" size={28} color="#FFF" /></TouchableOpacity>
+          <TouchableOpacity onPress={() => regresar()}><Feather name="chevron-left" size={28} color="#FFF" /></TouchableOpacity>
           <Text style={styles.headerSubtitle}>CONTROL DE INVENTARIO</Text>
           <View style={{ width: 28 }} />
         </View>
@@ -804,7 +801,7 @@ const styles = StyleSheet.create({
   },
   confirmSignBtn: { flex: 2, backgroundColor: '#16A34A', padding: 12, borderRadius: 8, alignItems: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
+  modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '90%' },
   
   // 🟢 CORREGIDO EN MODO CLARO: Labels y campos vuelven a sus grises oscuros de alto contraste original
   label: { fontSize: 11, fontWeight: '700', color: '#475569', marginTop: 12, marginBottom: 4 },

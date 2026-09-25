@@ -39,10 +39,10 @@ const styles = StyleSheet.create({
     paddingVertical: 22,
     paddingHorizontal: 20,
     alignItems: 'center',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
+    boxShadow: '0px 8px 12px rgba(15, 23, 42, 0.3)', 
+    
+    
+    
     elevation: 8,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)'

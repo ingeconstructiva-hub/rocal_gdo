@@ -887,7 +887,7 @@ const styles = StyleSheet.create({
   emptyText: { color: '#6B7280', fontSize: 18, fontWeight: 'bold', marginTop: 15, textAlign: 'center' },
   emptySubText: { color: '#9CA3AF', fontSize: 14, marginTop: 8, textAlign: 'center', lineHeight: 20 },
 
-  projectCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 20, marginBottom: 15, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8 },
+  projectCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 20, marginBottom: 15, elevation: 3, boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.1)',    },
   projectHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
   iconBox: { width: 50, height: 50, backgroundColor: '#EFF6FF', borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
   projectInfo: { flex: 1 },
@@ -902,7 +902,7 @@ const styles = StyleSheet.create({
   entrarBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
 
   fabContainer: { position: 'absolute', bottom: 30, right: 25, alignItems: 'center' },
-  fab: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5 },
+  fab: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 5, boxShadow: '0px 4px 5px rgba(0, 0, 0, 0.3)',    },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25, paddingTop: 15 },
@@ -927,15 +927,18 @@ const styles = StyleSheet.create({
 
   scannerContainer: { width: '100%', height: 350, borderRadius: 20, overflow: 'hidden', backgroundColor: '#000' },
   scannerOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'space-between', alignItems: 'center', paddingVertical: 20, backgroundColor: 'rgba(0,0,0,0.3)' },
-  scannerText: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginTop: 20, textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 5 },
+  // Se queda con las props viejas a propósito: React Native ya pide usar
+  // "textShadow", pero sus tipos de TypeScript todavía no lo aceptan. Cambiarlo
+  // obligaría a desactivar la revisión de tipos de todo este bloque de estilos.
+  scannerText: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginTop: 20, textShadowColor: 'rgba(0, 0, 0, 1)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 5 },
   cancelScanBtn: { backgroundColor: '#DC2626', paddingVertical: 12, paddingHorizontal: 25, borderRadius: 30 },
   cancelScanText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
-  adminUsuariosBtn: { backgroundColor: '#FFF', marginHorizontal: 20, marginTop: 15, marginBottom: 5, borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0', padding: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
+  adminUsuariosBtn: { backgroundColor: '#FFF', marginHorizontal: 20, marginTop: 15, marginBottom: 5, borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0', padding: 14, boxShadow: '0px 4px 6px rgba(0, 0, 0, 0.04)',     elevation: 2 },
   adminUsuariosInner: { flexDirection: 'row', alignItems: 'center' },
   adminIconContainer: { backgroundColor: '#EFF6FF', padding: 10, borderRadius: 12 },
   adminBtnTitle: { fontSize: 14, fontWeight: 'bold', color: '#0F172A' },
   adminBtnSubtitle: { fontSize: 11, color: '#64748B', marginTop: 2 },
-  dropdownMenu: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, marginTop: 4, position: 'absolute', top: 52, left: 0, right: 0, zIndex: 999, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 6, maxHeight: 180 },
+  dropdownMenu: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, marginTop: 4, position: 'absolute', top: 52, left: 0, right: 0, zIndex: 999, elevation: 5, boxShadow: '0px 4px 6px rgba(0, 0, 0, 0.1)',     maxHeight: 180 },
   dropdownItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 15, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   dropdownItemActive: { backgroundColor: '#EFF6FF' },
   dropdownIconWrapper: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },

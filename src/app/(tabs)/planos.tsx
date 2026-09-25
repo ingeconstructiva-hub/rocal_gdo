@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRefrescar } from '../../lib/refrescar';
 import { SkeletonLista } from '../../components/Skeleton';
+import { regresar } from '../../lib/navegar';
 import { Aviso } from '../../lib/aviso';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
@@ -330,7 +331,7 @@ export default function DocumentosScreen() {
       
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => regresar()} style={styles.backButton}>
             <Feather name="chevron-left" size={28} color="#FFF" />
           </TouchableOpacity>
           <Text style={styles.headerSubtitle}>GESTIÓN DE OBRA</Text>
@@ -515,7 +516,7 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
   headerSmall: { color: 'rgba(255,255,255,0.8)', fontSize: 12, marginTop: 4 },
   body: { padding: 20 },
-  scanButton: { backgroundColor: '#059669', borderRadius: 16, padding: 24, flexDirection: 'row', alignItems: 'center', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, marginBottom: 30 },
+  scanButton: { backgroundColor: '#059669', borderRadius: 16, padding: 24, flexDirection: 'row', alignItems: 'center', elevation: 4, boxShadow: '0px 2px 0px rgba(0, 0, 0, 0.1)',    marginBottom: 30 },
   scanButtonTextContainer: { marginLeft: 15, flex: 1 },
   scanButtonTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
   scanButtonSub: { color: '#D1FAE5', fontSize: 13, marginTop: 4 },
@@ -546,7 +547,7 @@ const styles = StyleSheet.create({
   filterDropdownBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderWidth: 1, borderColor: '#D1D5DB', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, gap: 6, maxWidth: 160 },
   filterDropdownText: { fontSize: 13, fontWeight: '600', color: '#374151' },
   // 🟢 AÑADIDO: overflow hidden y eliminamos el maxHeight de aquí para pasarlo al ScrollView
-  filterDropdownMenu: { position: 'absolute', top: '100%', right: 0, marginTop: 4, backgroundColor: '#FFF', borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB', width: 150, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 5, overflow: 'hidden' },
+  filterDropdownMenu: { position: 'absolute', top: '100%', right: 0, marginTop: 4, backgroundColor: '#FFF', borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB', width: 150, boxShadow: '0px 4px 6px rgba(0, 0, 0, 0.1)',     elevation: 5, overflow: 'hidden' },
   filterDropdownItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 15, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   filterDropdownItemActive: { backgroundColor: '#EFF6FF' },
   filterDropdownItemText: { fontSize: 14, color: '#4B5563', flex: 1, marginRight: 5 },

@@ -10,7 +10,7 @@
  * internet para que la app las mande a su bandeja de salida.
  */
 
-const CACHE = 'rocal-pwa-v3';
+const CACHE = 'rocal-pwa-v4';
 
 // Lo mínimo para que la app abra sin internet desde cero.
 const ARCHIVOS_BASE = ['/', '/manifest.json', '/icon-192.png', '/icon-512.png'];
@@ -66,13 +66,17 @@ self.addEventListener('fetch', (event) => {
         guardarCopia(request, respuesta);
         return respuesta;
       })
-      .catch(async () => (await caches.match(request)) || sinConexion())
+      .catch(async () => (await caches.match(request)) || Response.error())
   );
 });
 
-// respondWith() SIEMPRE necesita una Response. Si no hay red ni copia guardada,
-// devolvemos un 503 propio; si no, el navegador lanza
+// respondWith() SIEMPRE necesita una Response: devolver undefined revienta con
 // "Failed to convert value to 'Response'".
+//
+// Al NAVEGAR sin copia guardada devolvemos este 503 con su explicación.
+// Para archivos sueltos usamos Response.error() en su lugar: así el fallo se ve
+// en la consola tal como es (un archivo que no cargó) y no disfrazado de 503
+// inventado por nosotros, que despista al depurar.
 function sinConexion() {
   return new Response('Sin conexión y sin copia guardada de este archivo.', {
     status: 503,

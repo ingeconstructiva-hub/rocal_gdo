@@ -8,7 +8,8 @@
  * del contexto llama a las registradas.
  */
 
-import { useEffect, useRef } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useRef } from 'react';
 
 type Recarga = () => void | Promise<void>;
 
@@ -33,20 +34,27 @@ export function escucharSiHayQueRefrescar(oyente: (hay: boolean) => void) {
  *
  * Guardamos la función en una referencia y registramos un envoltorio fijo: así
  * la pantalla puede pasar una función nueva en cada dibujado sin que esto se
- * dé de alta y de baja a cada rato. */
+ * dé de alta y de baja a cada rato.
+ *
+ * Va con useFocusEffect, NO con useEffect: las pantallas con pestañas se quedan
+ * cargadas en memoria aunque no se estén viendo. Con useEffect, el botón seguía
+ * registrado desde otra pantalla y aparecía encima de pantallas que ya tienen
+ * su propio botón de refrescar. */
 export function useRefrescar(recarga: Recarga) {
   const ultima = useRef(recarga);
   ultima.current = recarga;
 
-  useEffect(() => {
-    const envoltorio = () => ultima.current();
-    registradas.add(envoltorio);
-    avisarCambio();
-    return () => {
-      registradas.delete(envoltorio);
+  useFocusEffect(
+    useCallback(() => {
+      const envoltorio = () => ultima.current();
+      registradas.add(envoltorio);
       avisarCambio();
-    };
-  }, []);
+      return () => {
+        registradas.delete(envoltorio);
+        avisarCambio();
+      };
+    }, [])
+  );
 }
 
 /** Lo llama el botón. Devuelve cuando todas las recargas terminaron. */

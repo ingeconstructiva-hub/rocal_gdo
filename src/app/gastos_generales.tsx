@@ -27,6 +27,8 @@ import {
 import { useRefrescar } from '../lib/refrescar';
 import { SkeletonLista } from '../components/Skeleton';
 import { subirArchivo } from '../lib/subidas';
+import { exportarPDF, exportarTexto } from '../lib/exportar';
+import { regresar } from '../lib/navegar';
 import { Aviso } from '../lib/aviso';
 
 import SummaryCard from '../components/SummaryCard';
@@ -416,9 +418,7 @@ export default function GastosGeneralesScreen() {
       const nombreArchivo = `Gastos_Filtrados_${activeProject?.name?.replace(/\s+/g, '_') || 'Obra'}.csv`;
 
       const fsModulo = FileSystem as any;
-      const fileUri = `${fsModulo.documentDirectory}${nombreArchivo}`;
-      await fsModulo.writeAsStringAsync(fileUri, contenidoCSV, { encoding: 'utf8' });
-      await Sharing.shareAsync(fileUri, { mimeType: 'text/csv' });
+      await exportarTexto(contenidoCSV, nombreArchivo);
     } catch (error: any) { Aviso.alert("Error Excel", error.message); }
   };
 
@@ -439,8 +439,7 @@ export default function GastosGeneralesScreen() {
         gastosFiltrados
       );
       
-      const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Compartir Reporte de Gastos' });
+      await exportarPDF(htmlContent, 'Gastos_Generales.pdf');
     } catch (error: any) { 
       Aviso.alert("Error PDF", error.message); 
     } finally { 
@@ -489,7 +488,7 @@ export default function GastosGeneralesScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => regresar('/(tabs)/gastos')} style={styles.backButton}>
             <Feather name="chevron-left" size={32} color="#FFF" />
           </TouchableOpacity>
           <Text style={styles.headerSubtitle}>REGISTRO ESTRUCTURAL</Text>
@@ -976,7 +975,7 @@ export default function GastosGeneralesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F1F5F9' },
-  header: { backgroundColor: '#2563EB', paddingTop: 60, paddingBottom: 25, paddingHorizontal: 25, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, elevation: 5, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10 },
+  header: { backgroundColor: '#2563EB', paddingTop: 60, paddingBottom: 25, paddingHorizontal: 25, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, elevation: 5, boxShadow: '0px 0px 10px rgba(0, 0, 0, 0.2)',   },
   headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backButton: { padding: 5, marginLeft: -10 },
   headerSubtitle: { color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: 'bold', letterSpacing: 1.5 },
@@ -986,7 +985,7 @@ const styles = StyleSheet.create({
   
   body: { padding: 20, paddingBottom: 120 },
   exportContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20, gap: 12 },
-  bigExportBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4 },
+  bigExportBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12, elevation: 2, boxShadow: '0px 0px 4px rgba(0, 0, 0, 0.1)',   },
   bigExportText: { color: '#FFF', fontSize: 13, fontWeight: 'bold', marginLeft: 8 },
 
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
@@ -1034,9 +1033,9 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
     borderRadius: 12,
     elevation: 5,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+    boxShadow: '0px 0px 8px rgba(0, 0, 0, 0.08)', 
+    
+    
     overflow: 'hidden',
     zIndex: 100,
   },
@@ -1061,7 +1060,7 @@ const styles = StyleSheet.create({
 
   emptyText: { textAlign: 'center', color: '#94A3B8', marginTop: 60, fontStyle: 'italic' },
   
-  gastoCard: { backgroundColor: '#FFF', padding: 16, borderRadius: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6 },
+  gastoCard: { backgroundColor: '#FFF', padding: 16, borderRadius: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, elevation: 2, boxShadow: '0px 0px 6px rgba(0, 0, 0, 0.05)',   },
   cardStatusIconContainer: { marginRight: 14, justifyContent: 'center', alignItems: 'center' },
   gastoConcepto: { fontSize: 15, fontWeight: 'bold', color: '#1E293B' },
   gastoDetalleTexto: { fontSize: 11, color: '#475569', fontWeight: '600' },
@@ -1071,7 +1070,7 @@ const styles = StyleSheet.create({
   gastoFecha: { fontSize: 11, color: '#94A3B8', marginLeft: 8 },
   gastoMonto: { fontSize: 18, fontWeight: 'bold', color: '#0F172A' },
 
-  fab: { position: 'absolute', bottom: 35, right: 25, width: 65, height: 65, borderRadius: 32.5, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', elevation: 8, shadowColor: '#2563EB', shadowOpacity: 0.4, shadowRadius: 10 },
+  fab: { position: 'absolute', bottom: 35, right: 25, width: 65, height: 65, borderRadius: 32.5, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', elevation: 8, boxShadow: '0px 0px 10px rgba(37, 99, 235, 0.4)',   },
   
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25, paddingBottom: 45 },
@@ -1103,7 +1102,7 @@ const styles = StyleSheet.create({
   totalCalculadoBox: { backgroundColor: '#F8FAFC', padding: 14, borderRadius: 12, marginTop: 12, borderWidth: 1, borderColor: '#E2E8F0', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 
   modalOverlayDetail: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.7)', justifyContent: 'center', padding: 20 },
-  detailModalContent: { backgroundColor: '#FFF', borderRadius: 24, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 10, maxHeight: '90%' },
+  detailModalContent: { backgroundColor: '#FFF', borderRadius: 24, padding: 24, boxShadow: '0px 10px 20px rgba(0, 0, 0, 0.25)',     elevation: 10, maxHeight: '90%' },
   detailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 15 },
   detailTitleBox: { flex: 1, paddingRight: 15 },
   detailTitleCat: { fontSize: 11, fontWeight: 'bold', color: '#2563EB', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },

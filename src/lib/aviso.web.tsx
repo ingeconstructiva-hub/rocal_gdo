@@ -63,13 +63,17 @@ export function ContenedorDeAvisos() {
           <Text style={estilos.titulo}>{actual.titulo}</Text>
           {actual.mensaje ? <Text style={estilos.mensaje}>{actual.mensaje}</Text> : null}
 
-          <View style={estilos.botones}>
+          {/* Con tres botones (o etiquetas largas como "Tomar Foto (Cámara)")
+              la fila no cabe en un celular y el primero se sale de la pantalla.
+              A partir de tres, se acomodan uno debajo de otro. */}
+          <View style={[estilos.botones, botones.length > 2 && estilos.botonesEnColumna]}>
             {botones.map((boton, i) => (
               <Pressable
                 key={`${boton.text}-${i}`}
                 onPress={() => cerrar(boton)}
                 style={({ pressed }) => [
                   estilos.boton,
+                  botones.length > 2 && estilos.botonAncho,
                   boton.style === 'cancel' && estilos.botonCancelar,
                   boton.style === 'destructive' && estilos.botonPeligro,
                   pressed && estilos.botonPresionado,
@@ -106,19 +110,21 @@ const estilos = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
+    boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.18)', 
+    
+    
+    
     elevation: 8,
   },
   titulo: { fontSize: 17, fontWeight: '700', color: '#111827' },
   mensaje: { fontSize: 14, color: '#4B5563', marginTop: 8, lineHeight: 20 },
-  botones: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 20 },
+  botones: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 20, flexWrap: 'wrap' },
+  botonesEnColumna: { flexDirection: 'column', alignItems: 'stretch' },
+  botonAncho: { width: '100%' },
   boton: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, backgroundColor: '#1A56DB' },
   botonCancelar: { backgroundColor: '#F1F5F9' },
   botonPeligro: { backgroundColor: '#EF4444' },
   botonPresionado: { opacity: 0.8 },
-  textoBoton: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+  textoBoton: { color: '#FFFFFF', fontWeight: '700', fontSize: 14, textAlign: 'center' },
   textoCancelar: { color: '#334155' },
 });

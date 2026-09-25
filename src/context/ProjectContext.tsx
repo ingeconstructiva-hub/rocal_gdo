@@ -339,7 +339,7 @@ export function useProject() {
 }
 
 const styles = StyleSheet.create({
-  offlineBanner: { position: 'absolute', top: Platform.OS === 'ios' ? 50 : 40, alignSelf: 'center', backgroundColor: '#D97706', paddingVertical: 8, paddingHorizontal: 20, borderRadius: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', zIndex: 9999, elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5 },
+  offlineBanner: { pointerEvents: 'none', position: 'absolute', top: Platform.OS === 'ios' ? 50 : 40, alignSelf: 'center', backgroundColor: '#D97706', paddingVertical: 8, paddingHorizontal: 20, borderRadius: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', zIndex: 9999, elevation: 10, boxShadow: '0px 4px 5px rgba(0, 0, 0, 0.3)',    },
   offlineText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
   pendingBanner: { backgroundColor: '#1A56DB' },
   botonRefrescar: {
@@ -354,9 +354,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 9998,
     elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
+    boxShadow: '0px 2px 6px rgba(0, 0, 0, 0.18)', 
+    
+    
+    
   }
 });

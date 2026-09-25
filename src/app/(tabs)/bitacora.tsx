@@ -10,6 +10,8 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRefrescar } from '../../lib/refrescar';
 import { SkeletonLista } from '../../components/Skeleton';
+import { exportarPDF } from '../../lib/exportar';
+import { regresar } from '../../lib/navegar';
 import { Aviso } from '../../lib/aviso';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
@@ -331,12 +333,7 @@ export default function BitacoraScreen() {
     setIsExporting(true);
     try {
       const htmlContent = await generarPlantillaBitacora(logs, isOffline);
-      const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      await Sharing.shareAsync(uri, { 
-        UTI: '.pdf', 
-        mimeType: 'application/pdf',
-        dialogTitle: 'Exportar Bitácora de Obra'
-      });
+      await exportarPDF(htmlContent, 'Bitacora.pdf');
     } catch (error) {
       console.error("Error al exportar:", error);
       Aviso.alert("Error", "Ocurrió un problema al generar el documento.");
@@ -374,7 +371,7 @@ export default function BitacoraScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => regresar()} style={styles.backButton}>
             <Feather name="chevron-left" size={28} color="#FFF" />
           </TouchableOpacity>
           <Text style={styles.headerSubtitle}>GESTIÓN DE OBRA</Text>
@@ -601,7 +598,7 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#FFF', fontSize: 26, fontWeight: 'bold' },
   body: { padding: 20 },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: '#6B7280', letterSpacing: 0.5 },
-  chartCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 20, marginBottom: 25, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3 },
+  chartCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 20, marginBottom: 25, boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.05)',     elevation: 3 },
   chartRow: { marginBottom: 16 },
   chartTextRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   chartLabel: { fontSize: 15, fontWeight: '600', color: '#1F2937' },
@@ -611,7 +608,7 @@ const styles = StyleSheet.create({
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 5, marginBottom: 15 },
   pdfButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#DC2626', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10 },
   saveButtonText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', marginLeft: 4 },
-  entryCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 18, marginBottom: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
+  entryCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 18, marginBottom: 15, boxShadow: '0px 2px 6px rgba(0, 0, 0, 0.04)',     elevation: 2 },
   entryCardPending: { borderWidth: 1, borderColor: '#FCD34D', backgroundColor: '#FFFBEB' },
   entryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
   entryTitle: { flex: 1, fontSize: 16, fontWeight: 'bold', color: '#111827', marginRight: 10, lineHeight: 22 },
@@ -628,13 +625,13 @@ const styles = StyleSheet.create({
   emptyState: { padding: 20, alignItems: 'center' },
   emptyStateText: { color: '#9CA3AF', fontStyle: 'italic', fontSize: 14 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#FFF', borderRadius: 24, padding: 22 },
+  modalContent: { backgroundColor: '#FFF', borderRadius: 24, padding: 22, maxHeight: '85%' },
   modalInput: { backgroundColor: '#F1F5F9', borderRadius: 10, padding: 12, fontSize: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0', color: '#1E293B' },
   saveBtn: { backgroundColor: '#2563EB', padding: 14, borderRadius: 10, alignItems: 'center', marginTop: 10 },
   saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
   subModalLabel: { fontSize: 12, fontWeight: '700', color: '#475569', marginTop: 8, marginBottom: 5 },
   textAreaInput: { height: 90, textAlignVertical: 'top' },
-  fab: { position: 'absolute', bottom: 30, right: 25, backgroundColor: '#2563EB', width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5 },
+  fab: { position: 'absolute', bottom: 30, right: 25, backgroundColor: '#2563EB', width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 5, boxShadow: '0px 4px 5px rgba(37, 99, 235, 0.3)',    },
   modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#1E293B', marginBottom: 15 },
   
   detailModalContent: { backgroundColor: '#FFF', borderRadius: 24, padding: 22, maxHeight: '85%' },

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SkeletonLista } from '../components/Skeleton';
 import { subirArchivo } from '../lib/subidas';
+import { regresar } from '../lib/navegar';
 import { Aviso } from '../lib/aviso';
 import { supabase } from '../lib/supabase';
 
@@ -222,7 +223,7 @@ export default function AdminUsuariosScreen() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => regresar('/(tabs)')} style={styles.backButton}>
           <Feather name="chevron-left" size={32} color="#0F172A" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Control de Personal</Text>
@@ -426,12 +427,12 @@ const styles = StyleSheet.create({
   cameraBtnText: { color: '#2563EB', fontSize: 13, fontWeight: 'bold', marginLeft: 8 },
   saveBtn: { backgroundColor: '#1E293B', padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 20 },
   saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
-  dropdownMenu: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, marginTop: 6, overflow: 'hidden', position: 'absolute', top: 50, left: 0, right: 0, zIndex: 999, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 6 },
+  dropdownMenu: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, marginTop: 6, overflow: 'hidden', position: 'absolute', top: 50, left: 0, right: 0, zIndex: 999, elevation: 4, boxShadow: '0px 4px 6px rgba(0, 0, 0, 0.1)',    },
   dropdownItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
   dropdownItemActive: { backgroundColor: '#EFF6FF' },
   dropdownIconWrapper: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
   dropdownItemText: { marginLeft: 12, fontSize: 14, color: '#334155', fontWeight: '500' },
-  userCard: { backgroundColor: '#FFF', padding: 16, borderRadius: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 },
+  userCard: { backgroundColor: '#FFF', padding: 16, borderRadius: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0', boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.03)',     elevation: 1 },
   cardName: { fontSize: 15, fontWeight: 'bold', color: '#1E293B' },
   cardMeta: { fontSize: 13, color: '#64748B', marginTop: 4 },
   roleBadge: { backgroundColor: '#E0F2FE', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },

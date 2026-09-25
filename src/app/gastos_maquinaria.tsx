@@ -24,6 +24,8 @@ import {
 } from 'react-native';
 import { useRefrescar } from '../lib/refrescar';
 import { SkeletonLista } from '../components/Skeleton';
+import { exportarPDF, exportarTexto } from '../lib/exportar';
+import { regresar } from '../lib/navegar';
 import { Aviso } from '../lib/aviso';
 
 import SummaryCard from '../components/SummaryCard';
@@ -530,9 +532,7 @@ export default function GastosMaquinariaScreen() {
       }).filter(Boolean).join("\n");
       const contenidoCSV = "\uFEFF" + encabezados.join(",") + filas;
       const nombreArchivo = `Maquinaria_${activeProject?.name?.replace(/\s+/g, '_') || 'Obra'}.csv`;
-      const fileUri = `${FileSystem.documentDirectory}${nombreArchivo}`;
-      await FileSystem.writeAsStringAsync(fileUri, contenidoCSV, { encoding: 'utf8' });
-      await Sharing.shareAsync(fileUri, { mimeType: 'text/csv' });
+      await exportarTexto(contenidoCSV, nombreArchivo);
     } catch (error: any) { 
       Aviso.alert("Error Excel", error.message); 
     }
@@ -547,8 +547,7 @@ export default function GastosMaquinariaScreen() {
     setIsExportingPDF(true);
     try {
       const htmlContent = generarPlantillaMaquinaria(activeProject?.name || 'Obra', globalGenerado, globalPagado, globalDeuda, gastos);
-      const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      await Sharing.shareAsync(uri, { mimeType: 'application/pdf' });
+      await exportarPDF(htmlContent, 'Gastos_Maquinaria.pdf');
     } catch (error: any) { 
       Aviso.alert("Error PDF", error.message); 
     } finally { 
@@ -561,7 +560,7 @@ export default function GastosMaquinariaScreen() {
       <View style={styles.header}>
         <View style={styles.headerInner}>
           <View style={styles.headerTopRow}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <TouchableOpacity onPress={() => regresar('/(tabs)/gastos')} style={styles.backButton}>
               <Feather name="chevron-left" size={32} color="#FFF" />
             </TouchableOpacity>
           </View>
@@ -977,7 +976,7 @@ export default function GastosMaquinariaScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F1F5F9' },
-  header: { backgroundColor: '#2563EB', paddingTop: 60, paddingBottom: 30, paddingHorizontal: 25, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, elevation: 5 },
+  header: { backgroundColor: '#2563EB', paddingTop: 60, paddingBottom: 30, paddingHorizontal: 25, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, boxShadow: '0px 5px 12px rgba(15, 23, 42, 0.16)', elevation: 5 },
   headerInner: { width: '100%', maxWidth: 800, alignSelf: 'center' },
   headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backButton: { padding: 5, marginLeft: -10 },
@@ -985,13 +984,13 @@ const styles = StyleSheet.create({
   projectBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, marginTop: 8 },
   projectName: { color: '#FFF', fontSize: 12, fontWeight: '600', marginLeft: 5 },
   body: { padding: 20, paddingBottom: 120, width: '100%', maxWidth: 800, alignSelf: 'center' },
-  saldoPill: { marginTop: 3, marginHorizontal: 16, padding: 10, borderRadius: 12, borderWidth: 1, alignItems: 'center', width: 350, alignSelf: 'center' },
+  saldoPill: { marginTop: 3, marginHorizontal: 16, padding: 10, borderRadius: 12, borderWidth: 1, alignItems: 'center', alignSelf: 'stretch', maxWidth: 350 },
   saldoText: { fontWeight: '900', fontSize: 13, textAlign: 'center' },
   exportContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20, marginTop: 5 },
-  bigExportBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 14, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+  bigExportBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 14, boxShadow: '0px 0px 4px rgba(0, 0, 0, 0.1)',    elevation: 2 },
   bigExportText: { color: '#FFF', fontSize: 13, fontWeight: 'bold', marginLeft: 8 },
   emptyText: { textAlign: 'center', color: '#94A3B8', marginTop: 60, fontStyle: 'italic' },
-  machineCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 16, marginBottom: 15, borderWidth: 1, borderColor: '#E2E8F0', elevation: 3 },
+  machineCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 16, marginBottom: 15, borderWidth: 1, borderColor: '#E2E8F0', boxShadow: '0px 3px 8px rgba(15, 23, 42, 0.12)', elevation: 3 },
   machineCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 15 },
   machineTitle: { fontSize: 17, fontWeight: '900', color: '#1E293B', marginBottom: 2 },
   machineProvider: { fontSize: 12, color: '#64748B', fontWeight: '500' },
@@ -1005,7 +1004,7 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 14, fontWeight: '900', color: '#0F172A' },
   openDetailBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC', padding: 10, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0' },
   openDetailText: { fontSize: 12, fontWeight: 'bold', color: '#64748B', marginRight: 5 },
-  fab: { position: 'absolute', bottom: 35, right: '50%', transform: [{translateX: 32.5}], width: 65, height: 65, borderRadius: 32.5, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', elevation: 8, shadowColor: '#2563EB', shadowOpacity: 0.4 },
+  fab: { position: 'absolute', bottom: 35, right: '50%', transform: [{translateX: 32.5}], width: 65, height: 65, borderRadius: 32.5, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', elevation: 8, boxShadow: '0px 0px 0px rgba(37, 99, 235, 0.4)',  },
   modalOverlayFull: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalWrapperFull: { backgroundColor: '#F1F5F9', borderTopLeftRadius: 25, borderTopRightRadius: 25, width: '100%', height: '90%' },
   modalHeaderFull: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: '#FFF', borderTopLeftRadius: 25, borderTopRightRadius: 25 },
@@ -1020,7 +1019,7 @@ const styles = StyleSheet.create({
   footerActionsFull: { flexDirection: 'row', padding: 20, backgroundColor: '#FFF', borderTopWidth: 1, borderTopColor: '#E2E8F0', gap: 15, paddingBottom: Platform.OS === 'ios' ? 40 : 20 },
   footerBtnFull: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 14, borderRadius: 12 },
   footerBtnTextFull: { fontSize: 14, fontWeight: 'bold', marginLeft: 8 },
-  historyCard: { backgroundColor: '#FFF', padding: 16, borderRadius: 16, flexDirection: 'row', alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 5, elevation: 1 },
+  historyCard: { backgroundColor: '#FFF', padding: 16, borderRadius: 16, flexDirection: 'row', alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0', boxShadow: '0px 0px 5px rgba(0, 0, 0, 0.03)',    elevation: 1 },
   historyIconBox: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
   historyInfo: { flex: 1, paddingRight: 10 },
   historyConcept: { fontSize: 14, fontWeight: 'bold', color: '#1E293B' },

@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
   container: { flex: 1, padding: 20 },
   previewContainer: { backgroundColor: '#FFF', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 30 },
-  scanButton: { backgroundColor: '#059669', borderRadius: 16, padding: 24, flexDirection: 'row', alignItems: 'center', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, marginBottom: 20 },
+  scanButton: { backgroundColor: '#059669', borderRadius: 16, padding: 24, flexDirection: 'row', alignItems: 'center', elevation: 4, boxShadow: '0px 2px 0px rgba(0, 0, 0, 0.1)',    marginBottom: 20 },
   scanButtonTextContainer: { marginLeft: 15, flex: 1 },
   scanButtonTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
   scanButtonSub: { color: '#D1FAE5', fontSize: 13, marginTop: 4 },

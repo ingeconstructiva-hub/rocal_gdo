@@ -10,6 +10,8 @@ import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SkeletonLista } from '../../components/Skeleton';
+import { exportarPDF, exportarTexto } from '../../lib/exportar';
+import { regresar } from '../../lib/navegar';
 import { Aviso } from '../../lib/aviso';
 import SummaryCard from '../../components/SummaryCard';
 import { useProject } from '../../context/ProjectContext';
@@ -369,8 +371,7 @@ export default function ListaScreen() {
     try {
       const weekLabel = new Date().toLocaleDateString('es-MX');
       const htmlContent = generarPlantillaNomina(displayedWorkers, weekLabel);
-      const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      await Sharing.shareAsync(uri, { mimeType: 'application/pdf' });
+      await exportarPDF(htmlContent, 'Nomina.pdf');
     } catch (error: any) { Aviso.alert("Error PDF", error.message); }
   };
 
@@ -392,9 +393,7 @@ export default function ListaScreen() {
       const contenidoCSV = "\uFEFF" + encabezados.join(",") + filas;
       const nombreArchivo = `Raya_${activeCategory}_${activeProject?.name_worker?.replace(/\s+/g, '_') || 'Obra'}.csv`;
       
-      const fileUri = `${FileSystem.documentDirectory}${nombreArchivo}`;
-      await FileSystem.writeAsStringAsync(fileUri, contenidoCSV, { encoding: 'utf8' });
-      await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Exportar Nómina' });
+      await exportarTexto(contenidoCSV, nombreArchivo);
     } catch (error: any) {
       Aviso.alert("Error Excel", "No se pudo generar la hoja de cálculo: " + error.message);
     }
@@ -404,7 +403,7 @@ export default function ListaScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
-          <TouchableOpacity onPress={() => router.back()}><Feather name="chevron-left" size={28} color="#FFF" /></TouchableOpacity>
+          <TouchableOpacity onPress={() => regresar()}><Feather name="chevron-left" size={28} color="#FFF" /></TouchableOpacity>
           <Text style={styles.headerSubtitle}>ASISTENCIA Y NÓMINA</Text>
           <TouchableOpacity onPress={fetchWorkers}><Feather name="refresh-cw" size={20} color="#FFF" /></TouchableOpacity>
         </View>
@@ -517,11 +516,13 @@ export default function ListaScreen() {
         <View style={styles.modalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsModalVisible(false)} />
           <View style={styles.modalContent}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <Text style={styles.modalTitle}>Nuevo {activeCategory === 'obrero' ? 'Trabajador' : 'Técnico'}</Text>
             <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="Nombre completo" value={newName} onChangeText={setNewName} />
             <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="Puesto" value={newRole} onChangeText={setNewRole} />
             <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="Sueldo Semanal $" keyboardType="numeric" value={newSalary} onChangeText={setNewSalary} />
             <TouchableOpacity style={styles.saveBtn} onPress={handleAddWorker} disabled={isSaving}>{isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>Registrar en Obra</Text>}</TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -531,6 +532,7 @@ export default function ListaScreen() {
         <View style={styles.modalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsEditModalOpen(false)} />
           <View style={styles.modalContent}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <Text style={styles.modalTitle}>✏️ Editar Datos del Trabajador</Text>
             <Text style={styles.subModalLabel}>Nombre del Obrero/Técnico:</Text>
             <TextInput style={styles.modalInput} value={editName} onChangeText={setEditName} />
@@ -539,6 +541,7 @@ export default function ListaScreen() {
             <Text style={styles.subModalLabel}>Sueldo Base Semanal ($):</Text>
             <TextInput style={styles.modalInput} keyboardType="numeric" value={editSalary} onChangeText={(v) => setEditSalary(v.replace(/[^0-9]/g, ''))} />
             <TouchableOpacity style={styles.saveBtn} onPress={handleUpdateWorker} disabled={isSaving}>{isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>Guardar Cambios</Text>}</TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -584,11 +587,11 @@ const styles = StyleSheet.create({
   warningBannerText: { color: '#991B1B', fontSize: 12, fontWeight: '700', flex: 1 },
   tabContainer: { flexDirection: 'row', backgroundColor: '#E2E8F0', borderRadius: 12, padding: 4, marginTop: 12, marginHorizontal: 15 },
   tabBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
-  tabBtnActive: { backgroundColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
+  tabBtnActive: { backgroundColor: '#FFF', boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)',     elevation: 2 },
   tabText: { fontSize: 13, fontWeight: 'bold', color: '#64748B' },
   tabTextActive: { color: '#2563EB' },
   topSyncBtnContainer: { paddingHorizontal: 15, paddingTop: 10, backgroundColor: '#F1F5F9' },
-  syncBtn: { backgroundColor: '#1E293B', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 12, elevation: 2 },
+  syncBtn: { backgroundColor: '#1E293B', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 12, boxShadow: '0px 2px 6px rgba(15, 23, 42, 0.1)', elevation: 2 },
   syncBtnHighlighted: { backgroundColor: '#059669' },
   syncBtnText: { color: '#FFF', fontSize: 13, fontWeight: 'bold', marginLeft: 6 },
   body: { padding: 12, paddingBottom: 150 },
@@ -597,7 +600,7 @@ const styles = StyleSheet.create({
   exportButtonsContainer: { flexDirection: 'row' },
   exportBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5, paddingHorizontal: 10, borderRadius: 6 },
   exportBtnText: { color: '#FFF', fontSize: 11, fontWeight: 'bold', marginLeft: 4 },
-  workerCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 12, marginBottom: 10, elevation: 2 },
+  workerCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 12, marginBottom: 10, boxShadow: '0px 2px 6px rgba(15, 23, 42, 0.1)', elevation: 2 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' },
   workerName: { fontSize: 15, fontWeight: 'bold', color: '#1E293B' },
   workerRole: { fontSize: 11, color: '#64748B', marginTop: 1, fontWeight: '600' },
@@ -616,9 +619,9 @@ const styles = StyleSheet.create({
   totalLabel: { fontSize: 11, fontWeight: '700', color: '#64748B' },
   totalValue: { fontSize: 16, fontWeight: 'bold', color: '#059669' },
   fabContainer: { position: 'absolute', bottom: 25, right: 20 },
-  fabPrimary: { width: 54, height: 54, borderRadius: 27, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', elevation: 4 },
+  fabPrimary: { width: 54, height: 54, borderRadius: 27, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', boxShadow: '0px 4px 10px rgba(15, 23, 42, 0.14)', elevation: 4 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#FFF', borderRadius: 24, padding: 22 },
+  modalContent: { backgroundColor: '#FFF', borderRadius: 24, padding: 22, maxHeight: '85%' },
   modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#1E293B', marginBottom: 15 },
   modalInput: { backgroundColor: '#F1F5F9', borderRadius: 10, padding: 12, fontSize: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0', color: '#1E293B' },
   saveBtn: { backgroundColor: '#2563EB', padding: 14, borderRadius: 10, alignItems: 'center', marginTop: 10 },

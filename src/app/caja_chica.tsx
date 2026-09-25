@@ -32,6 +32,8 @@ import { useRefrescar } from '../lib/refrescar';
 import { SkeletonLista } from '../components/Skeleton';
 import { guardarArchivoLocal } from '../lib/archivos';
 import { subirArchivo } from '../lib/subidas';
+import { exportarPDF, exportarTexto } from '../lib/exportar';
+import { regresar } from '../lib/navegar';
 import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
@@ -139,8 +141,7 @@ export default function CajaChicaScreen() {
         movimientosFiltrados
       );
       
-      const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Exportar Reporte' });
+      await exportarPDF(htmlContent, 'Caja_Chica.pdf');
     } catch (error: any) {
       Aviso.alert("Error PDF", error.message);
     } finally {
@@ -535,9 +536,7 @@ export default function CajaChicaScreen() {
       const contenidoCSV = "\uFEFF" + encabezados.join(",") + filas;
       const nombreArchivo = `Caja_Chica_${activeProject?.name?.replace(/\s+/g, '_') || 'Obra'}.csv`;
       const fsModulo = FileSystem as any;
-      const fileUri = `${fsModulo.documentDirectory}${nombreArchivo}`;
-      await fsModulo.writeAsStringAsync(fileUri, contenidoCSV, { encoding: 'utf8' });
-      await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Exportar Reporte Financiero' });
+      await exportarTexto(contenidoCSV, nombreArchivo);
     } catch (error: any) { Aviso.alert("Error", error.message); }
   };
 
@@ -545,7 +544,7 @@ export default function CajaChicaScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
-          <TouchableOpacity onPress={() => { Keyboard.dismiss(); router.back(); }} style={styles.backButton}>
+          <TouchableOpacity onPress={() => { Keyboard.dismiss(); regresar('/(tabs)/gastos'); }} style={styles.backButton}>
             <Feather name="chevron-left" size={28} color="#FFF" />
           </TouchableOpacity>
           <Text style={styles.headerSubtitle}>LIBRO MAYOR DE CAJA</Text>
@@ -886,17 +885,17 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 15, fontWeight: 'bold', color: '#334155' },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   emptyText: { textAlign: 'center', color: '#64748B', marginTop: 30, fontStyle: 'italic' },
-  gastoCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0', elevation: 2 },
+  gastoCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0', boxShadow: '0px 2px 6px rgba(15, 23, 42, 0.1)', elevation: 2 },
   gastoMainRow: { flexDirection: 'row', alignItems: 'center' },
   gastoJustificacion: { fontSize: 13, fontWeight: 'bold', color: '#1E293B' },
   gastoMeta: { fontSize: 11, color: '#64748B', marginTop: 4 },
   gastoMonto: { fontSize: 16, fontWeight: 'bold', marginLeft: 10 },
-  fab: { position: 'absolute', bottom: 30, right: 25, width: 60, height: 60, borderRadius: 30, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', elevation: 5 },
+  fab: { position: 'absolute', bottom: 30, right: 25, width: 60, height: 60, borderRadius: 30, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', boxShadow: '0px 5px 12px rgba(15, 23, 42, 0.16)', elevation: 5 },
   
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalOverlayDetail: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', padding: 0 }, 
   modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
-  detailModalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: -5 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10, maxHeight: '90%' },
+  detailModalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, boxShadow: '0px -5px 20px rgba(0, 0, 0, 0.1)',     elevation: 10, maxHeight: '90%' },
   
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#0F172A' },

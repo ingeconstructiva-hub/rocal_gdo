@@ -528,7 +528,7 @@ const styles = StyleSheet.create({
   userName: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
   role: { color: 'rgba(255,255,255,0.8)', fontSize: 13, marginTop: 2, fontWeight: '500' },
   
-  projectCard: { backgroundColor: '#FFF', padding: 20, borderRadius: 20, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1 },
+  projectCard: { backgroundColor: '#FFF', padding: 20, borderRadius: 20, elevation: 5, boxShadow: '0px 2px 0px rgba(0, 0, 0, 0.1)',   },
   projectTitle: { fontSize: 16, fontWeight: 'bold', color: Colors.text, marginBottom: 4 },
   projectSub: { fontSize: 12, color: Colors.textSub, marginTop: 2 },
   inviteButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: '#BFDBFE' },
@@ -540,19 +540,21 @@ const styles = StyleSheet.create({
   emptyText: { color: Colors.textSub, fontSize: 13, marginBottom: 15 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, color: Colors.text },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', gap: 12 },
-  card: { width: '48%', backgroundColor: '#FFF', padding: 20, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: '#F1F5F9', elevation: 1 },
+  // Tenían solo elevation (que es exclusivo de Android) y un borde casi invisible:
+  // en iPhone y en navegador se veían completamente planas contra el fondo gris.
+  card: { width: '48%', backgroundColor: '#FFF', padding: 20, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0', elevation: 3, boxShadow: '0px 2px 8px rgba(15, 23, 42, 0.1)' },
   cardText: { marginTop: 10, fontWeight: '600', color: Colors.text, fontSize: 13, textAlign: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { width: '100%', backgroundColor: '#FFF', borderRadius: 24, padding: 25, alignItems: 'center' },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#111827' },
   modalSubtitle: { fontSize: 14, color: '#6B7280', textAlign: 'center', marginTop: 10, marginBottom: 25, paddingHorizontal: 10 },
-  qrContainer: { padding: 15, backgroundColor: '#FFF', borderRadius: 16, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, marginBottom: 20 },
+  qrContainer: { padding: 15, backgroundColor: '#FFF', borderRadius: 16, elevation: 3, boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',     marginBottom: 20 },
   orText: { fontSize: 14, color: '#9CA3AF', marginBottom: 10 },
   codeBox: { backgroundColor: '#F3F4F6', paddingVertical: 12, paddingHorizontal: 30, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', borderStyle: 'dashed' },
   codeText: { fontSize: 24, fontWeight: '900', color: '#111827', letterSpacing: 5 },
   shareButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2563EB', paddingVertical: 14, paddingHorizontal: 25, borderRadius: 14, marginTop: 25, width: '100%', justifyContent: 'center' },
   shareButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 15, marginLeft: 10 },
-  syncBanner: { position: 'absolute', bottom: 20, left: 20, right: 20, backgroundColor: '#059669', padding: 12, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', elevation: 5, zIndex: 100 },
+  syncBanner: { position: 'absolute', bottom: 20, left: 20, right: 20, backgroundColor: '#059669', padding: 12, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', boxShadow: '0px 5px 12px rgba(15, 23, 42, 0.16)', elevation: 5, zIndex: 100 },
   syncText: { color: '#FFF', fontWeight: 'bold', marginLeft: 8 },
 
   // 🟢 ESTILOS DEL MODAL DE PERFIL

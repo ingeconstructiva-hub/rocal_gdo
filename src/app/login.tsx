@@ -119,7 +119,8 @@ const styles = StyleSheet.create({
     marginTop: 20
   },
   logo: {
-    width: 350,
+    width: '100%',
+    maxWidth: 350,
     height: 220, // Ajusta esta altura dependiendo de las proporciones reales de tu logo
   },
 
@@ -128,10 +129,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 30,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
+    boxShadow: '0px 10px 20px rgba(0, 0, 0, 0.15)', 
+    
+    
+    
     elevation: 10,
   },
 
@@ -188,10 +189,10 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     justifyContent: 'center', 
     marginTop: 35, 
-    shadowColor: '#2563EB', 
-    shadowOffset: { width: 0, height: 6 }, 
-    shadowOpacity: 0.3, 
-    shadowRadius: 8, 
+    boxShadow: '0px 6px 8px rgba(37, 99, 235, 0.3)',  
+     
+     
+     
     elevation: 5 
   },
   loginBtnText: { 

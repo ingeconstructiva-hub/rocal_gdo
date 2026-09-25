@@ -6,6 +6,7 @@ import Almacen from '../../lib/almacen';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { regresar } from '../../lib/navegar';
 import { Aviso } from '../../lib/aviso';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
@@ -136,7 +137,7 @@ export default function GastosHubScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => regresar()} style={styles.backButton}>
             <Feather name="chevron-left" size={28} color="#FFF" />
           </TouchableOpacity>
           
@@ -205,7 +206,7 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
   headerSmall: { color: 'rgba(255,255,255,0.8)', fontSize: 12, marginTop: 4, fontWeight: '600' },
   body: { padding: 20, paddingBottom: 60 },
-  card: { backgroundColor: '#FFF', borderRadius: 16, padding: 20, flexDirection: 'row', alignItems: 'center', marginBottom: 15, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 },
+  card: { backgroundColor: '#FFF', borderRadius: 16, padding: 20, flexDirection: 'row', alignItems: 'center', marginBottom: 15, elevation: 2, boxShadow: '0px 0px 5px rgba(0, 0, 0, 0.05)',   },
   iconBox: { width: 55, height: 55, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
   textBox: { flex: 1 },
   cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#1E293B' },
