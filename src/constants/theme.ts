@@ -25,7 +25,6 @@ export const Colors = {
   navBg:    "#FFFFFF",
 } as const;
 
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
 export const Fonts = Platform.select({
   ios: {

@@ -8,13 +8,26 @@ import * as Print from 'expo-print';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
 
 import SummaryCard from '../components/SummaryCard';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
-import { generarPlantillaMaquinaria } from './utils/pdfMaquinaria';
+import { generarPlantillaMaquinaria } from '../utils/pdfMaquinaria';
 
 interface GastoMaquinaria {
   id: string;
@@ -57,6 +70,7 @@ export default function GastosMaquinariaScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
 
+  // Estados para modales y navegación interna
   const [modalDetalleMaquina, setModalDetalleMaquina] = useState(false);
   const [detalleTab, setDetalleTab] = useState<'uso' | 'anticipo'>('uso');
   const [selectedMaquina, setSelectedMaquina] = useState<MaquinaAgrupada | null>(null);
@@ -67,6 +81,7 @@ export default function GastosMaquinariaScreen() {
   const [modalHoras, setModalHoras] = useState(false);
   const [modalAnticipo, setModalAnticipo] = useState(false);
 
+  // Estados para configuración de equipo
   const [editingMachineConfigId, setEditingMachineConfigId] = useState<string | null>(null);
   const [originalMachineName, setOriginalMachineName] = useState('');
   const [equipo, setEquipo] = useState('');
@@ -74,10 +89,12 @@ export default function GastosMaquinariaScreen() {
   const [modalidad, setModalidad] = useState<'dia' | 'semana' | 'mes'>('semana');
   const [tarifaHora, setTarifaHora] = useState('');
   
+  // Estados para registro operativo
   const [horasOperacion, setHorasOperacion] = useState('');
   const [montoAnticipo, setMontoAnticipo] = useState('');
   const [concepto, setConcepto] = useState('');
 
+  // Estados para control de horario
   const [horaEntrada, setHoraEntrada] = useState('');
   const [horaSalida, setHoraSalida] = useState('');
   const [timeEntradaDate, setTimeEntradaDate] = useState(new Date());
@@ -85,10 +102,19 @@ export default function GastosMaquinariaScreen() {
   const [showPickerEntrada, setShowPickerEntrada] = useState(false);
   const [showPickerSalida, setShowPickerSalida] = useState(false);
 
+  /**
+   * 📌 NOTA: useEffect (Carga inicial de obra)
+   * Dispara la consulta del historial de maquinaria cuando cambia la obra activa o el estado de red.
+   */
   useEffect(() => {
     if (activeProject?.id) fetchGastos();
   }, [activeProject, isOffline]);
 
+  /**
+   * 📌 NOTA: fetchGastos
+   * Consulta a Supabase todos los registros asociados a 'gastos_maquinaria' para la obra activa
+   * y los almacena en caché local (AsyncStorage) para permitir acceso fuera de línea.
+   */
   const fetchGastos = async () => {
     setLoading(true);
     const pid = activeProject?.id;
@@ -110,9 +136,18 @@ export default function GastosMaquinariaScreen() {
           await AsyncStorage.setItem(`@gastos_maquinaria_log_${pid}`, JSON.stringify(data));
         }
       }
-    } catch (error) { console.log(error); } finally { setLoading(false); }
+    } catch (error) { 
+      console.log(error); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
+  /**
+   * 📌 NOTA: maquinasMap
+   * Agrupa los registros por máquina (equipo) para consolidar sus horas acumuladas, 
+   * el costo total generado, los anticipos pagados y el saldo pendiente.
+   */
   const maquinasMap = useMemo(() => {
     const map: Record<string, MaquinaAgrupada> = {};
     gastos.forEach(g => {
@@ -147,7 +182,11 @@ export default function GastosMaquinariaScreen() {
     return Object.values(map);
   }, [gastos]);
 
-  // 🟢 CALCULO EN TIEMPO REAL PARA EL MODAL DE NUEVA MÁQUINA
+  /**
+   * 📌 NOTA: estimacionGastoPeriodo
+   * Calcula en tiempo real el costo proyectado (por día, semana o mes) 
+   * tomando como base una jornada estándar de 8 horas de operación.
+   */
   const estimacionGastoPeriodo = useMemo(() => {
     const tarifa = Number(tarifaHora) || 0;
     if (tarifa <= 0) return 0;
@@ -155,11 +194,12 @@ export default function GastosMaquinariaScreen() {
     const costoDia = tarifa * JORNADA_HORAS;
 
     if (modalidad === 'dia') return costoDia;
-    if (modalidad === 'semana') return costoDia * 6; // Semana de 6 días laborables de obra
-    if (modalidad === 'mes') return costoDia * 30;   // Mes completo de 30 días
+    if (modalidad === 'semana') return costoDia * 6; // 6 días laborables por semana
+    if (modalidad === 'mes') return costoDia * 30;   // Mes de 30 días
     return 0;
   }, [tarifaHora, modalidad]);
 
+  // Filtros reactivos para el modal de detalle
   const historialUsoActivo = useMemo(() => {
     if(!selectedMaquina) return [];
     return gastos.filter(g => g.equipo === selectedMaquina.equipo && g.categoria === 'uso').sort((a,b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
@@ -170,10 +210,15 @@ export default function GastosMaquinariaScreen() {
     return gastos.filter(g => g.equipo === selectedMaquina.equipo && g.categoria === 'anticipo').sort((a,b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
   }, [gastos, selectedMaquina]);
 
+  // Totales globales para tarjetas de balance
   const globalGenerado = maquinasMap.reduce((sum, m) => sum + m.costoGenerado, 0);
   const globalPagado = maquinasMap.reduce((sum, m) => sum + m.totalAnticipos, 0);
   const globalDeuda = globalGenerado - globalPagado;
 
+  /**
+   * 📌 NOTA: iniciarEdicionMaquina
+   * Carga los datos de configuración del equipo (tarifa, proveedor, modalidad) en el formulario modal.
+   */
   const iniciarEdicionMaquina = (maquina: MaquinaAgrupada) => {
     const configRecord = gastos.find(g => g.equipo === maquina.equipo && g.categoria === 'config');
     setEditingMachineConfigId(configRecord?.id || null);
@@ -187,12 +232,21 @@ export default function GastosMaquinariaScreen() {
     setModalNuevaMaquina(true);
   };
 
+  /**
+   * 📌 NOTA: limpiarFormularioMaquina
+   * Restablece los estados del modal de configuración de equipo.
+   */
   const limpiarFormularioMaquina = () => {
     setModalNuevaMaquina(false);
     setEquipo(''); setProveedor(''); setTarifaHora('');
     setEditingMachineConfigId(null); setOriginalMachineName('');
   };
 
+  /**
+   * 📌 NOTA: handleGuardarConfig
+   * Guarda o actualiza los parámetros base de una máquina (tarifa por hora, proveedor, modalidad de renta).
+   * Si cambia el nombre del equipo, renombra en cascada todos los registros previos asociados.
+   */
   const handleGuardarConfig = async () => {
     if (!equipo.trim() || !tarifaHora.trim()) { Alert.alert("Campos Vacíos", "El nombre y tarifa son obligatorios."); return; }
     if (isOffline) { Alert.alert("Modo Offline", "Conéctate a internet para editar la configuración de la máquina."); return; }
@@ -269,6 +323,10 @@ export default function GastosMaquinariaScreen() {
     }
   };
 
+  /**
+   * 📌 NOTA: recalcularHoraSalida
+   * Calcula automáticamente la hora de salida sumando las horas de operación a la hora de entrada.
+   */
   const recalcularHoraSalida = (horasStr: string, entradaDate: Date) => {
     setHorasOperacion(horasStr);
     const hrs = parseFloat(horasStr);
@@ -285,12 +343,20 @@ export default function GastosMaquinariaScreen() {
     setHoraSalida(nuevaSalida.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
   };
 
+  /**
+   * 📌 NOTA: handleEntradaChange
+   * Actualiza el valor de la hora de entrada y dispara el recálculo automático de la salida.
+   */
   const handleEntradaChange = (date: Date) => {
     setTimeEntradaDate(date);
     setHoraEntrada(date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
     if (horasOperacion) recalcularHoraSalida(horasOperacion, date);
   };
 
+  /**
+   * 📌 NOTA: handleGuardarUso
+   * Inserta o edita un reporte de uso de horas (bitácora) calculando el costo del día (horas * tarifa).
+   */
   const handleGuardarUso = async () => {
     if (!selectedMaquina || !horasOperacion.trim()) { Alert.alert("Faltan Horas", "Ingresa las horas de trabajo."); return; }
     setIsSaving(true);
@@ -324,9 +390,17 @@ export default function GastosMaquinariaScreen() {
       }
       setModalHoras(false); limpiarFormsSecundarios(); fetchGastos();
       Alert.alert("¡Éxito!", editingRecordId ? "Bitácora actualizada." : "Bitácora guardada.");
-    } catch (e: any) { Alert.alert("Error", e.message); } finally { setIsSaving(false); }
+    } catch (e: any) { 
+      Alert.alert("Error", e.message); 
+    } finally { 
+      setIsSaving(false); 
+    }
   };
 
+  /**
+   * 📌 NOTA: handleGuardarAnticipo
+   * Registra un pago o abono financiero al proveedor del equipo en 'gastos_maquinaria'.
+   */
   const handleGuardarAnticipo = async () => {
     if (!selectedMaquina || !montoAnticipo.trim()) { Alert.alert("Campos Vacíos", "Ingresa el monto."); return; }
     setIsSaving(true);
@@ -349,9 +423,17 @@ export default function GastosMaquinariaScreen() {
       }
       setModalAnticipo(false); limpiarFormsSecundarios(); fetchGastos();
       Alert.alert("¡Éxito!", "Pago registrado.");
-    } catch (e: any) { Alert.alert("Error", e.message); } finally { setIsSaving(false); }
+    } catch (e: any) { 
+      Alert.alert("Error", e.message); 
+    } finally { 
+      setIsSaving(false); 
+    }
   };
 
+  /**
+   * 📌 NOTA: iniciarEdicionRegistro
+   * Carga los datos de una línea específica (uso o anticipo) para su modificación.
+   */
   const iniciarEdicionRegistro = (record: GastoMaquinaria) => {
     setModalDetalleMaquina(false);
 
@@ -381,23 +463,48 @@ export default function GastosMaquinariaScreen() {
     }, 350); 
   };
 
+  /**
+   * 📌 NOTA: handleEliminarRegistro
+   * Realiza un borrado físico permanente (.delete()) en Supabase para evitar registros huérfanos.
+   */
   const handleEliminarRegistro = (id: string) => {
-    Alert.alert("Eliminar", "¿Borrar permanentemente?", [
+    Alert.alert("Eliminar Registro", "¿Deseas borrar permanentemente este movimiento del sistema?", [
       { text: "Cancelar", style: "cancel" },
-      { text: "Borrar", style: "destructive", onPress: async () => {
+      { 
+        text: "Borrar", 
+        style: "destructive", 
+        onPress: async () => {
           try {
-            await supabase.from('gastos_maquinaria').update({ is_active: false }).eq('id', id);
+            // 🟢 Borrado físico permanente sincronizado con la Web
+            const { error } = await supabase
+              .from('gastos_maquinaria')
+              .delete()
+              .eq('id', id);
+
+            if (error) throw error;
+            
             fetchGastos();
-          } catch (e: any) { Alert.alert("Error", e.message); }
-      }}
+          } catch (e: any) { 
+            Alert.alert("Error al eliminar", e.message); 
+          }
+        }
+      }
     ]);
   };
 
+  /**
+   * 📌 NOTA: limpiarFormsSecundarios
+   * Restablece los campos de los modales de captura de horas y anticipos.
+   */
   const limpiarFormsSecundarios = () => {
     setHorasOperacion(''); setMontoAnticipo(''); setConcepto('');
     setHoraEntrada(''); setHoraSalida(''); setEditingRecordId(null);
   };
 
+  /**
+   * 📌 NOTA: handleExportarExcel
+   * Construye un archivo CSV con las bitácoras diarias y pagos de maquinaria y lo comparte.
+   */
   const handleExportarExcel = async () => {
     if (gastos.length === 0) return;
     try {
@@ -421,17 +528,27 @@ export default function GastosMaquinariaScreen() {
       const fileUri = `${FileSystem.documentDirectory}${nombreArchivo}`;
       await FileSystem.writeAsStringAsync(fileUri, contenidoCSV, { encoding: 'utf8' });
       await Sharing.shareAsync(fileUri, { mimeType: 'text/csv' });
-    } catch (error: any) { Alert.alert("Error Excel", error.message); }
+    } catch (error: any) { 
+      Alert.alert("Error Excel", error.message); 
+    }
   };
 
+  /**
+   * 📌 NOTA: handleExportPDF
+   * Genera el reporte ejecutivo de maquinaria en PDF a partir de la plantilla HTML y lo comparte.
+   */
   const handleExportPDF = async () => {
     if (gastos.length === 0) return;
     setIsExportingPDF(true);
     try {
-        const htmlContent = generarPlantillaMaquinaria(activeProject?.name || 'Obra', globalGenerado, globalPagado, globalDeuda, gastos);
-        const { uri } = await Print.printToFileAsync({ html: htmlContent });
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf' });
-    } catch (error: any) { Alert.alert("Error PDF", error.message); } finally { setIsExportingPDF(false); }
+      const htmlContent = generarPlantillaMaquinaria(activeProject?.name || 'Obra', globalGenerado, globalPagado, globalDeuda, gastos);
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
+      await Sharing.shareAsync(uri, { mimeType: 'application/pdf' });
+    } catch (error: any) { 
+      Alert.alert("Error PDF", error.message); 
+    } finally { 
+      setIsExportingPDF(false); 
+    }
   };
 
   return (
@@ -439,7 +556,9 @@ export default function GastosMaquinariaScreen() {
       <View style={styles.header}>
         <View style={styles.headerInner}>
           <View style={styles.headerTopRow}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}><Feather name="chevron-left" size={32} color="#FFF" /></TouchableOpacity>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+              <Feather name="chevron-left" size={32} color="#FFF" />
+            </TouchableOpacity>
           </View>
           <Text style={styles.headerTitle}>Directorio de Maquinaria</Text>
           <View style={styles.projectBadge}>
@@ -451,7 +570,13 @@ export default function GastosMaquinariaScreen() {
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <View style={{ marginBottom: 15 }}>
-          <SummaryCard labelLeft="Abonado a Proveedores" valueLeft={globalPagado} labelRight="Costo Generado" valueRight={globalGenerado} colorRight="#10B981" />
+          <SummaryCard 
+            labelLeft="Abonado a Proveedores" 
+            valueLeft={globalPagado} 
+            labelRight="Costo Generado" 
+            valueRight={globalGenerado} 
+            colorRight="#10B981" 
+          />
           <View style={[styles.saldoPill, { backgroundColor: globalDeuda > 0 ? '#FEF2F2' : '#F0FDF4', borderColor: globalDeuda > 0 ? '#FECACA' : '#BBF7D0' }]}>
             <Text style={[styles.saldoText, { color: globalDeuda > 0 ? '#DC2626' : '#15803D' }]}>
               {globalDeuda > 0 ? '⚠️ Saldo pendiente de pago: ' : '✅ Obra al corriente o saldo a favor: '}
@@ -472,7 +597,9 @@ export default function GastosMaquinariaScreen() {
           </View>
         )}
 
-        {loading ? ( <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 50 }} /> ) : (
+        {loading ? ( 
+          <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 50 }} /> 
+        ) : (
           maquinasMap.length === 0 ? (
             <Text style={styles.emptyText}>Da de alta tu primera máquina tocando el botón "+".</Text>
           ) : (
@@ -672,7 +799,7 @@ export default function GastosMaquinariaScreen() {
               <Text style={styles.modalLabel}>Tarifa por HORA ($)</Text>
               <TextInput style={styles.modalInput} placeholder="Ej. 1200" keyboardType="numeric" value={tarifaHora} onChangeText={(v) => setTarifaHora(v.replace(/[^0-9.]/g, ''))} />
               
-              {/* 🟢 SECCIÓN DE GASTO ESTIMADO DINÁMICO EN TIEMPO REAL */}
+              {/* 🟢 GASTO ESTIMADO DINÁMICO */}
               {Number(tarifaHora) > 0 && (
                 <View style={styles.calcBox}>
                   <Text style={styles.calcLabel}>

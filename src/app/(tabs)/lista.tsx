@@ -12,7 +12,7 @@ import SummaryCard from '../../components/SummaryCard';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
 import { supabase } from '../../lib/supabase';
-import { generarPlantillaNomina } from '../utils/pdfNomina';
+import { generarPlantillaNomina } from '../../utils/pdfNomina';
 
 interface WorkerState {
   id: string;

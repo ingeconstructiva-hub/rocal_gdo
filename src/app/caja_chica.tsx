@@ -1,3 +1,5 @@
+'use client';
+
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -6,11 +8,28 @@ import * as Print from 'expo-print';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
-import { generarPlantillaCajaChica } from './utils/pdfCajaChica';
+import { generarPlantillaCajaChica } from '../utils/pdfCajaChica';
 
 interface ArticuloGasto {
   id: string;
@@ -48,7 +67,6 @@ export default function CajaChicaScreen() {
 
   const [isFormModalVisible, setIsFormModalVisible] = useState(false);
   const [movimientoSeleccionado, setMovimientoSeleccionado] = useState<MovimientoFinanciero | null>(null);
-  const [showTrabajadorModal, setShowTrabajadorModal] = useState(false);
   const [trabajadores, setTrabajadores] = useState<any[]>([]);
 
   const [isEditing, setIsEditing] = useState(false);
@@ -71,13 +89,14 @@ export default function CajaChicaScreen() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const isAdminOrOficina = profile?.role === 'admin' || profile?.role === 'oficina';
-
   const [isExportingPDF, setIsExportingPDF] = useState(false);
 
+  // Cálculos reactivos de balance global de caja
   const totalIngresos = movimientos.filter(m => m.tipo === 'ingreso').reduce((sum, m) => sum + m.monto, 0);
   const totalEgresos = movimientos.filter(m => m.tipo === 'egreso').reduce((sum, m) => sum + m.monto, 0);
   const saldoDisponible = totalIngresos - totalEgresos;
 
+  // Filtrado reactivo por tipo de movimiento (todos/ingreso/egreso) y texto de búsqueda
   const movimientosFiltrados = useMemo(() => {
     let filtrados = movimientos;
     if (filtroActivo !== 'todos') {
@@ -94,6 +113,10 @@ export default function CajaChicaScreen() {
     return filtrados;
   }, [movimientos, filtroActivo, searchQuery]);
 
+  /**
+   * 📌 NOTA: handleExportarPDF
+   * Genera el estado financiero de caja chica en formato PDF y abre el diálogo nativo para compartirlo.
+   */
   const handleExportarPDF = async () => {
     if (movimientos.length === 0) {
       Alert.alert("Sin datos", "No hay movimientos registrados para exportar.");
@@ -118,6 +141,10 @@ export default function CajaChicaScreen() {
     }
   };
 
+  /**
+   * 📌 NOTA: useEffect (Carga inicial de obra)
+   * Dispara la consulta del libro mayor y la lista de personal al cambiar de obra o estado offline.
+   */
   useEffect(() => {
     if (activeProject?.id) {
       loadLibroMayor();
@@ -125,6 +152,10 @@ export default function CajaChicaScreen() {
     }
   }, [activeProject, isOffline]);
 
+  /**
+   * 📌 NOTA: onRefresh
+   * Ejecuta la recarga manual de ingresos, egresos y personal mediante Pull-to-Refresh.
+   */
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadLibroMayor();
@@ -132,6 +163,10 @@ export default function CajaChicaScreen() {
     setRefreshing(false);
   }, [activeProject, isOffline]);
 
+  /**
+   * 📌 NOTA: loadTrabajadores
+   * Carga el catálogo de trabajadores activos de la obra para autocompletar responsables.
+   */
   const loadTrabajadores = async () => {
     const pid = activeProject?.id;
     if (!pid) return;
@@ -141,12 +176,17 @@ export default function CajaChicaScreen() {
       if (cached) setTrabajadores(JSON.parse(cached));
 
       if (!isOffline) {
-        const { data, error } = await supabase.from('workers').select('id, name, role').eq('project_id', pid).eq('is_active', true).order('name', { ascending: true });
+        const { data, error } = await supabase.from('workers').select('id, name_worker, role').eq('project_id', pid).eq('is_active', true).order('name_worker', { ascending: true });
         if (data && !error) { setTrabajadores(data); await AsyncStorage.setItem(storageKey, JSON.stringify(data)); }
       }
     } catch (e) { console.log(e); }
   };
 
+  /**
+   * 📌 NOTA: loadLibroMayor
+   * Consulta las tablas 'caja_chica' (egresos) e 'ingresos_obra' (ingresos),
+   * unifica ambos historiales cronológicamente y gestiona la caché local.
+   */
   const loadLibroMayor = async () => {
     setLoading(true);
     const pid = activeProject?.id;
@@ -202,6 +242,10 @@ export default function CajaChicaScreen() {
     } catch (e) { console.log(e); } finally { setLoading(false); }
   };
 
+  /**
+   * 📌 NOTA: seleccionarFoto
+   * Abre la cámara del dispositivo para capturar la evidencia física del ticket de compra.
+   */
   const seleccionarFoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') { Alert.alert("Permiso", "Necesitamos acceso a la cámara."); return; }
@@ -209,25 +253,42 @@ export default function CajaChicaScreen() {
     if (!result.canceled) setFotoTicket(result.assets[0].uri);
   };
 
+  /**
+   * 📌 NOTA: agregarArticulo
+   * Inserta un nuevo renglón de insumo dentro del desglose del ticket actual.
+   */
   const agregarArticulo = () => {
     setArticulos([...articulos, { id: Date.now().toString(), concepto: '', cantidad: '1', unidad: '', precioUnitario: '' }]);
   };
 
+  /**
+   * 📌 NOTA: eliminarArticulo
+   * Quita un artículo específico de la lista del formulario.
+   */
   const eliminarArticulo = (id: string) => {
     if (articulos.length === 1) return;
     setArticulos(articulos.filter(art => art.id !== id));
   };
 
+  /**
+   * 📌 NOTA: actualizarArticulo
+   * Actualiza en tiempo real el valor de un campo específico (concepto, cantidad, precio) de un insumo.
+   */
   const actualizarArticulo = (id: string, campo: keyof ArticuloGasto, valor: string) => {
     setArticulos(articulos.map(art => art.id === id ? { ...art, [campo]: valor } : art));
   };
 
+  // Cálculo de la suma total del ticket
   const gastoCalculado = articulos.reduce((total, art) => {
     const cant = Number(art.cantidad) || 0;
     const precio = Number(art.precioUnitario) || 0;
     return total + (cant * precio);
   }, 0);
 
+  /**
+   * 📌 NOTA: iniciarEdicion
+   * Prepara los estados del formulario con la información del movimiento seleccionado para su edición.
+   */
   const iniciarEdicion = (mov: MovimientoFinanciero) => {
     Keyboard.dismiss();
     setMovimientoSeleccionado(null);
@@ -260,12 +321,20 @@ export default function CajaChicaScreen() {
     setIsFormModalVisible(true);
   };
 
+  /**
+   * 📌 NOTA: handleGuardarOLlamarActualizar
+   * Enrutador para guardar un movimiento nuevo o actualizar uno existente según el estado 'isEditing'.
+   */
   const handleGuardarOLlamarActualizar = () => {
     Keyboard.dismiss();
     if (isEditing) handleActualizarMovimiento();
     else handleCrearNuevoMovimiento();
   };
 
+  /**
+   * 📌 NOTA: procesarDatosEgreso
+   * Valida y formatea el payload de un egreso de caja con su desglose en JSON y monto acumulado.
+   */
   const procesarDatosEgreso = () => {
     const articulosValidos = articulos.filter(a => a.concepto.trim() !== '' && Number(a.precioUnitario) > 0);
     if (articulosValidos.length === 0) throw new Error("Debes registrar al menos un artículo válido con precio.");
@@ -281,10 +350,18 @@ export default function CajaChicaScreen() {
       tipo_deposito: tipoDeposito,
       concepto: conceptoFinal,
       justificacion: justificacionGeneral.trim(),
-      detalles_json: articulosValidos
+      detalles_json: articulosValidos,
+      cantidad: articulosValidos.reduce((acc, a) => acc + (Number(a.cantidad) || 1), 0),
+      precio_unitario: gastoCalculado,
+      is_active: true
     };
   };
 
+  /**
+   * 📌 NOTA: handleCrearNuevoMovimiento
+   * Inserta un nuevo ingreso en 'ingresos_obra' o un nuevo egreso en 'caja_chica',
+   * subiendo la foto del ticket al bucket de almacenamiento si existe.
+   */
   const handleCrearNuevoMovimiento = async () => {
     const pid = activeProject?.id;
     if (!pid) return;
@@ -293,7 +370,14 @@ export default function CajaChicaScreen() {
     try {
       if (tipoMovimientoForm === 'ingreso') {
         if (!importeInvertido.trim() || !encargado.trim()) throw new Error("El importe y el solicitante son obligatorios.");
-        const nuevoIngreso = { project_id: pid, monto: Number(importeInvertido), concepto: `Fondeo a: ${encargado.trim()}`, referencia: tipoDeposito, fecha: new Date().toISOString() };
+        const nuevoIngreso = { 
+          project_id: pid, 
+          monto: Number(importeInvertido), 
+          concepto: `Fondeo a: ${encargado.trim()}`, 
+          referencia: tipoDeposito, 
+          is_active: true,
+          fecha: new Date().toISOString() 
+        };
         if (!isOffline) await supabase.from('ingresos_obra').insert([nuevoIngreso]);
       } else {
         if (!encargado.trim()) throw new Error("El nombre del encargado es obligatorio.");
@@ -321,6 +405,10 @@ export default function CajaChicaScreen() {
     } catch (e: any) { Alert.alert("Atención", e.message); } finally { setIsSaving(false); }
   };
 
+  /**
+   * 📌 NOTA: handleActualizarMovimiento
+   * Actualiza en Supabase los datos de un registro de ingreso o egreso previamente guardado.
+   */
   const handleActualizarMovimiento = async () => {
     const pid = activeProject?.id;
     if (!pid || !editingRecordId) return;
@@ -330,7 +418,12 @@ export default function CajaChicaScreen() {
       if (tipoMovimientoForm === 'ingreso') {
         if (!importeInvertido.trim() || !encargado.trim()) throw new Error("Importe y solicitante son obligatorios.");
         if (!isOffline) {
-          await supabase.from('ingresos_obra').update({ monto: Number(importeInvertido), solicitante: encargado.trim(), referencia: tipoDeposito, concepto: `Fondeo a: ${encargado.trim()}` }).eq('id', editingRecordId);
+          await supabase.from('ingresos_obra').update({ 
+            monto: Number(importeInvertido), 
+            solicitante: encargado.trim(), 
+            referencia: tipoDeposito, 
+            concepto: `Fondeo a: ${encargado.trim()}` 
+          }).eq('id', editingRecordId);
         }
       } else {
         if (!encargado.trim()) throw new Error("El encargado es obligatorio.");
@@ -344,21 +437,39 @@ export default function CajaChicaScreen() {
     } catch (e: any) { Alert.alert("Atención", e.message); } finally { setIsSaving(false); }
   };
 
+  /**
+   * 📌 NOTA: handleEliminarMovimiento
+   * Ejecuta un borrado físico permanente (.delete()) en Supabase para ingresos o egresos,
+   * manteniendo sincronizados y limpios los balances en el móvil y la plataforma web.
+   */
   const handleEliminarMovimiento = async (id: string, tipo: 'ingreso' | 'egreso') => {
-    if (isOffline) { Alert.alert("Offline", "Necesitas internet para eliminar."); return; }
-    Alert.alert("Eliminar", "¿Borrar este movimiento?", [
+    if (isOffline) { Alert.alert("Offline", "Necesitas internet para eliminar registros."); return; }
+    Alert.alert("Eliminar Registro", "¿Deseas borrar permanentemente este movimiento del sistema?", [
       { text: "Cancelar", style: "cancel" },
-      { text: "Sí", style: "destructive", onPress: async () => {
+      { 
+        text: "Sí, eliminar", 
+        style: "destructive", 
+        onPress: async () => {
           try {
             const tabla = tipo === 'ingreso' ? 'ingresos_obra' : 'caja_chica';
-            await supabase.from(tabla).update({ is_active: false }).eq('id', id);
+            // 🟢 Borrado definitivo sincronizado
+            const { error } = await supabase.from(tabla).delete().eq('id', id);
+            if (error) throw error;
+            
             setMovimientos(prev => prev.filter(m => m.id !== id));
             setMovimientoSeleccionado(null);
-          } catch (e: any) { Alert.alert("Error", e.message); }
-      }}
+          } catch (e: any) { 
+            Alert.alert("Error al eliminar", e.message); 
+          }
+        }
+      }
     ]);
   };
 
+  /**
+   * 📌 NOTA: cerrarModalYLimpiar
+   * Cierra el formulario modal y restablece todos los campos a su estado inicial.
+   */
   const cerrarModalYLimpiar = () => {
     setIsFormModalVisible(false); setIsEditing(false); setEditingRecordId(null);
     setNumeroNota(''); setEncargado(''); setFrenteUnidad(''); setJustificacionGeneral('');
@@ -366,10 +477,18 @@ export default function CajaChicaScreen() {
     setArticulos([{ id: Date.now().toString(), concepto: '', cantidad: '1', unidad: '', precioUnitario: '' }]);
   };
 
+  /**
+   * 📌 NOTA: toggleFiltro
+   * Alterna el filtro visual de la lista entre todos, solo ingresos o solo egresos.
+   */
   const toggleFiltro = (nuevoFiltro: 'ingreso' | 'egreso') => {
     setFiltroActivo(filtroActivo === nuevoFiltro ? 'todos' : nuevoFiltro);
   };
 
+  /**
+   * 📌 NOTA: handleExportarExcel
+   * Construye un archivo CSV con la relación de caja chica y lo comparte a través de expo-sharing.
+   */
   const handleExportarExcel = async () => {
     if (movimientos.length === 0) { Alert.alert("Sin datos", "No hay movimientos registrados para exportar."); return; }
     try {
@@ -689,7 +808,7 @@ export default function CajaChicaScreen() {
                   </View>
 
                   <Text style={styles.modalLabel}>Nota / Justificación Adicional</Text>
-                  <TextInput style={[styles.modalInput, { height: 50, textAlignVertical: 'top' }]} placeholderTextColor="#94A3B8"placeholder="Ej. Compra urgente para loza" value={justificacionGeneral} onChangeText={setJustificacionGeneral} multiline />
+                  <TextInput style={[styles.modalInput, { height: 50, textAlignVertical: 'top' }]} placeholderTextColor="#94A3B8" placeholder="Ej. Compra urgente para loza" value={justificacionGeneral} onChangeText={setJustificacionGeneral} multiline />
 
                   <Text style={styles.modalLabel}>Evidencia (Foto del Ticket)</Text>
                   <TouchableOpacity style={styles.cameraBtn} onPress={seleccionarFoto}>
@@ -743,7 +862,6 @@ const styles = StyleSheet.create({
   gastoMonto: { fontSize: 16, fontWeight: 'bold', marginLeft: 10 },
   fab: { position: 'absolute', bottom: 30, right: 25, width: 60, height: 60, borderRadius: 30, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', elevation: 5 },
   
-  // MODAL BOTTOM SHEET GLOBALES
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalOverlayDetail: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', padding: 0 }, 
   modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },

@@ -11,7 +11,7 @@ import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform,
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
 import { supabase } from '../../lib/supabase';
-import { generarPlantillaBitacora } from '../utils/pdfTemplate';
+import { generarPlantillaBitacora } from '../../utils/pdfTemplate';
 
 export default function BitacoraScreen() {
   const router = useRouter();

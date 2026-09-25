@@ -1,3 +1,5 @@
+'use client';
+
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { decode } from 'base64-arraybuffer';
@@ -7,13 +9,27 @@ import * as Print from 'expo-print';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
 
 import SummaryCard from '../components/SummaryCard';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
-import { generarPlantillaGastos } from './utils/pdfGastosGen';
+import { generarPlantillaGastos } from '../utils/pdfGastosGen';
 
 interface GastoEstructural {
   id: string;
@@ -40,16 +56,19 @@ export default function GastosGeneralesScreen() {
 
   const isAdmin = profile?.role === 'admin';
 
+  // Estados de filtrado por rubro y estado de liquidación
   const [filtroCategoria, setFiltroCategoria] = useState<'todos' | 'material' | 'administrativo' | 'burocrata' | 'asesoria'>('todos');
   const [filtroPago, setFiltroPago] = useState<'todos' | 'pagado' | 'credito' | 'abono_parcial'>('todos'); 
 
-  // 🟢 NUEVOS ESTADOS PARA LOS DROPDOWNS DE FILTRO
+  // Menús desplegables de filtrado
   const [showCatDropdown, setShowCatDropdown] = useState(false);
   const [showPagoDropdown, setShowPagoDropdown] = useState(false);
 
+  // Estados de selección y edición
   const [gastoSeleccionado, setGastoSeleccionado] = useState<GastoEstructural | null>(null);
   const [isEditing, setIsEditing] = useState(false);
 
+  // Estados del Formulario Modal
   const [isFormModalVisible, setIsFormModalVisible] = useState(false);
   const [concepto, setConcepto] = useState('');
   const [categoriaForm, setCategoriaForm] = useState<'material' | 'administrativo' | 'burocrata' | 'asesoria'>('material');
@@ -67,22 +86,33 @@ export default function GastosGeneralesScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
 
+  // Cálculo automático del importe total (cantidad * precio unitario)
   const montoTotalCalculado = useMemo(() => {
     return Number(cantidad) * Number(precioUnitario) || 0;
   }, [cantidad, precioUnitario]);
 
+  // Cálculo automático del saldo restante según el abono o crédito
   const saldoRestanteCalculado = useMemo(() => {
     if (estadoPagoForm === 'pagado') return 0;
     if (estadoPagoForm === 'credito') return montoTotalCalculado;
     return Math.max(0, montoTotalCalculado - (Number(montoAbonadoForm) || 0));
   }, [estadoPagoForm, montoTotalCalculado, montoAbonadoForm]);
 
+  /**
+   * 📌 NOTA: useEffect (Carga inicial de gastos)
+   * Dispara la consulta al cambiar de obra o detectar cambios en el estado de red.
+   */
   useEffect(() => {
     if (activeProject?.id) {
       fetchGastos();
     }
   }, [activeProject, isOffline]);
 
+  /**
+   * 📌 NOTA: fetchGastos
+   * Consulta la tabla 'gastos_generales' filtrando por la obra activa ('project_id')
+   * y guarda el resultado en AsyncStorage para disponibilidad offline.
+   */
   const fetchGastos = async () => {
     setLoading(true);
     const pid = activeProject?.id;
@@ -122,6 +152,10 @@ export default function GastosGeneralesScreen() {
     }
   };
 
+  /**
+   * 📌 NOTA: iniciarEdicion
+   * Carga los datos de un gasto existente en los campos del modal para permitir su modificación.
+   */
   const iniciarEdicion = (gasto: GastoEstructural) => {
     setGastoSeleccionado(null);
     setConcepto(gasto.concepto);
@@ -142,6 +176,10 @@ export default function GastosGeneralesScreen() {
     setIsFormModalVisible(true);
   };
 
+  /**
+   * 📌 NOTA: seleccionarFotoComprobante
+   * Abre un selector para tomar una fotografía con la cámara o elegir una imagen de la galería.
+   */
   const seleccionarFotoComprobante = () => {
     Alert.alert("Comprobante de Pago", "¿De dónde quieres subir la imagen?", [
       { text: "Cancelar", style: "cancel" },
@@ -160,6 +198,11 @@ export default function GastosGeneralesScreen() {
     ]);
   };
 
+  /**
+   * 📌 NOTA: handleGuardarGasto
+   * Valida la información, sube el comprobante al bucket 'comprobantes' de Supabase Storage
+   * e inserta o actualiza el registro en la tabla 'gastos_generales'.
+   */
   const handleGuardarGasto = async () => {
     if (!concepto.trim() || !cantidad.trim() || !precioUnitario.trim()) {
       Alert.alert("Campos incompletos", "Por favor ingresa la descripción, cantidad y precio unitario.");
@@ -189,6 +232,7 @@ export default function GastosGeneralesScreen() {
     try {
       let finalFotoUrl = fotoComprobante;
 
+      // Subida de imagen codificada en base64 al Storage
       if (fotoComprobante && !fotoComprobante.startsWith('http')) {
         const filename = `comprobante_${Date.now()}.jpg`;
         const base64 = await FileSystem.readAsStringAsync(fotoComprobante, { encoding: 'base64' });
@@ -200,7 +244,8 @@ export default function GastosGeneralesScreen() {
         if (uploadErr) {
           throw new Error(`Error subiendo foto: ${uploadErr.message}`);
         } else {
-          finalFotoUrl = `https://ckvuwlcjlyzmxprwjyup.supabase.co/storage/v1/object/public/comprobantes/${filename}`;
+          const { data: urlData } = supabase.storage.from('comprobantes').getPublicUrl(filename);
+          finalFotoUrl = urlData?.publicUrl || null;
         }
       }
 
@@ -217,6 +262,7 @@ export default function GastosGeneralesScreen() {
         monto_pagado: finalMontoPagado, 
         numero_cotizacion: numeroCotizacion.trim() ? numeroCotizacion.trim() : null,
         cantidad: Number(cantidad),
+        precio_unitario: Number(precioUnitario),
         unidad: unidad.trim() ? unidad.trim() : null,
         proveedor: proveedor.trim() ? proveedor.trim() : null,
         foto_url: finalFotoUrl || null,
@@ -243,6 +289,10 @@ export default function GastosGeneralesScreen() {
     }
   };
 
+  /**
+   * 📌 NOTA: handleRegistrarAbonoDesdeDetalle
+   * Permite ingresar un abono parcial a una deuda directamente desde la vista de detalle.
+   */
   const handleRegistrarAbonoDesdeDetalle = (gasto: GastoEstructural) => {
     const saldoPendiente = gasto.monto - (gasto.monto_pagado || 0);
 
@@ -297,6 +347,10 @@ export default function GastosGeneralesScreen() {
     );
   };
 
+  /**
+   * 📌 NOTA: limpiarFormulario
+   * Restablece los campos del formulario de registro y edición a sus valores iniciales.
+   */
   const limpiarFormulario = () => {
     setConcepto('');
     setCantidad('');
@@ -311,21 +365,32 @@ export default function GastosGeneralesScreen() {
     setGastoSeleccionado(null);
   };
 
+  /**
+   * 📌 NOTA: handleEliminarGasto
+   * Ejecuta un borrado físico permanente (.delete()) en Supabase para evitar registros residuales
+   * y mantener consistencia con las métricas del panel web.
+   */
   const handleEliminarGasto = async (id: string, nombre: string) => {
     if (isOffline) {
       Alert.alert("Modo Lectura", "Requiere conexión para eliminar registros.");
       return;
     }
 
-    Alert.alert("Eliminar gasto", `¿Quitar "${nombre}" de la lista permanentemente?`, [
+    Alert.alert("Eliminar gasto", `¿Deseas eliminar permanentemente "${nombre}" de la base de datos?`, [
       { text: "Cancelar", style: "cancel" },
       {
         text: "Eliminar",
         style: "destructive",
         onPress: async () => {
           try {
-            const { error } = await supabase.from('gastos_generales').update({ is_active: false }).eq('id', id);
+            // 🟢 Borrado definitivo sincronizado
+            const { error } = await supabase
+              .from('gastos_generales')
+              .delete()
+              .eq('id', id);
+
             if (error) throw error;
+            
             setGastos(prev => prev.filter(g => g.id !== id));
             setGastoSeleccionado(null);
           } catch (e: any) {
@@ -336,6 +401,10 @@ export default function GastosGeneralesScreen() {
     ]);
   };
 
+  /**
+   * 📌 NOTA: handleExportarExcel
+   * Construye un archivo CSV estructurado con los gastos filtrados y lo abre mediante el gestor nativo de compartir.
+   */
   const handleExportarExcel = async () => {
     if (gastosFiltrados.length === 0) { Alert.alert("Sin datos", "No hay registros en esta vista."); return; }
     try {
@@ -359,6 +428,10 @@ export default function GastosGeneralesScreen() {
     } catch (error: any) { Alert.alert("Error Excel", error.message); }
   };
 
+  /**
+   * 📌 NOTA: handleExportarPDF
+   * Genera el reporte impreso en formato PDF a partir de la plantilla HTML y lo comparte.
+   */
   const handleExportarPDF = async () => {
     if (gastosFiltrados.length === 0) { Alert.alert("Sin datos", "No hay registros."); return; }
     
@@ -381,6 +454,10 @@ export default function GastosGeneralesScreen() {
     }
   };
 
+  /**
+   * 📌 NOTA: renderBadge
+   * Retorna una etiqueta visual coloreada según el rubro de gasto.
+   */
   const renderBadge = (cat: string) => {
     switch (cat) {
       case 'material': return <Text style={[styles.badge, { backgroundColor: '#FEF3C7', color: '#D97706' }]}>📦 Material</Text>;
@@ -391,6 +468,10 @@ export default function GastosGeneralesScreen() {
     }
   };
 
+  /**
+   * 📌 NOTA: getProveedorLabel
+   * Adapta dinámicamente la etiqueta del formulario de acuerdo a la categoría seleccionada.
+   */
   const getProveedorLabel = () => {
     if (categoriaForm === 'burocrata') return 'Dependencia / Institución';
     if (categoriaForm === 'asesoria') return 'Consultor / Especialista';
@@ -398,6 +479,7 @@ export default function GastosGeneralesScreen() {
     return 'Proveedor de Materiales';
   };
 
+  // Filtrado reactivo de gastos en memoria
   const gastosFiltrados = useMemo(() => {
     return gastos.filter(g => {
       const cumpleCategoria = filtroCategoria === 'todos' || g.categoria === filtroCategoria;
@@ -463,7 +545,7 @@ export default function GastosGeneralesScreen() {
             </View>
         </View>
 
-        {/* 🟢 NUEVOS FILTROS DESPLEGABLES */}
+        {/* 🟢 FILTROS DESPLEGABLES */}
         <View style={styles.webFiltersRow}>
           
           {/* DESPLEGABLE 1: CATEGORÍAS */}
@@ -600,7 +682,7 @@ export default function GastosGeneralesScreen() {
               <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
                 <Text style={[
                   styles.gastoMonto, 
-                  g.estado_pago === 'credito' ? {color: '#DC2626'} : null,
+                  g.estado_pago === 'credito' ? {color: '#DC2626'} : null, 
                   g.estado_pago === 'abono_parcial' ? {color: '#D97706'} : null
                 ]}>
                   ${g.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
@@ -620,6 +702,7 @@ export default function GastosGeneralesScreen() {
         <Feather name="plus" size={30} color="#FFF" />
       </TouchableOpacity>
 
+      {/* 🔍 MODAL DETALLE DE GASTO */}
       <Modal visible={!!gastoSeleccionado} animationType="fade" transparent={true} onRequestClose={() => setGastoSeleccionado(null)}>
         <View style={styles.modalOverlayDetail}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setGastoSeleccionado(null)} />
@@ -738,6 +821,7 @@ export default function GastosGeneralesScreen() {
         </View>
       </Modal>
 
+      {/* ✏️ MODAL FORMULARIO DE ALTA / EDICIÓN */}
       <Modal visible={isFormModalVisible} animationType="slide" transparent={true} onRequestClose={() => { setIsFormModalVisible(false); limpiarFormulario(); }}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
           
@@ -916,7 +1000,6 @@ const styles = StyleSheet.create({
   countBadge: { backgroundColor: '#E2E8F0', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
   countText: { fontSize: 11, color: '#64748B', fontWeight: 'bold' },
   
-  // 🟢 ESTILOS DE LOS NUEVOS FILTROS DESPLEGABLES
   webFiltersRow: {
     flexDirection: 'row',
     gap: 12,

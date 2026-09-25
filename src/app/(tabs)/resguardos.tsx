@@ -12,7 +12,7 @@ import * as Sharing from 'expo-sharing';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
 import { supabase } from '../../lib/supabase';
-import { generarPlantillaResponsiva } from '../utils/pdfResponsiva';
+import { generarPlantillaResponsiva } from '../../utils/pdfResponsiva';
 
 interface HerramientaAlmacen {
   id: string;

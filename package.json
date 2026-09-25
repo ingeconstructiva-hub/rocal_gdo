@@ -1,5 +1,5 @@
 {
-  "name": "rocal-mobile",
+  "name": "rocal-mobile-pwa",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {

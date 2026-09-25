@@ -8,11 +8,25 @@ import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
-import { generarPlantillaInventario } from './utils/pdfInventario';
+import { generarPlantillaInventario } from '../utils/pdfInventario';
 
 interface InventoryItem {
   id: string;
@@ -36,18 +50,17 @@ export default function InventarioScreen() {
   const { activeProject, isOffline, lastSync } = useProject();
   const { profile } = useUser(); 
 
+  // Permiso para exportaciones y acciones financieras (admin u oficina)
   const isFinancialRole = profile?.role === 'admin' || profile?.role === 'oficina';
 
   const [items, setItems] = useState<InventoryItem[]>([]);
-  
-  // Catálogo combinado unificado (Residentes + Trabajadores)
   const [workers, setWorkers] = useState<WorkerSimple[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [searchQuery, setSearchQuery] = useState('');
-
   const [expandedWeeks, setExpandedWeeks] = useState<Record<string, boolean>>({});
 
+  // Estados del Formulario Modal
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -63,12 +76,21 @@ export default function InventarioScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
+  /**
+   * 📌 NOTA: onRefresh
+   * Ejecuta la recarga manual de datos al deslizar la pantalla hacia abajo (Pull-to-Refresh).
+   */
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchData(); 
     setRefreshing(false);
   }, [activeProject, isOffline]);
 
+  /**
+   * 📌 NOTA: getWeekRange
+   * Calcula de forma dinámica el rango semanal laboral (Lunes a Viernes) 
+   * en base a la fecha actual para asignar la etiqueta de semana por defecto.
+   */
   const getWeekRange = () => {
     const today = new Date();
     const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay(); 
@@ -80,6 +102,10 @@ export default function InventarioScreen() {
     return `${start.getDate()} ${months[start.getMonth()]} - ${end.getDate()} ${months[end.getMonth()]} ${start.getFullYear()}`;
   };
 
+  /**
+   * 📌 NOTA: useFocusEffect
+   * Recarga automáticamente los registros cada vez que la pantalla pasa al primer plano en la app.
+   */
   useFocusEffect(
     useCallback(() => {
       if (activeProject?.id) {
@@ -88,6 +114,10 @@ export default function InventarioScreen() {
     }, [activeProject]) 
   );
 
+  /**
+   * 📌 NOTA: useEffect (Sincronización de estado de red)
+   * Dispara la consulta al detectar cambios en la conectividad (isOffline) o sincronización.
+   */
   useEffect(() => {
     if (activeProject?.id) {
       setTimeout(() => {
@@ -96,6 +126,11 @@ export default function InventarioScreen() {
     }
   }, [isOffline, lastSync, activeProject?.id]);
 
+  /**
+   * 📌 NOTA: fetchData
+   * Obtiene los destajos de la tabla 'inventory' y unifica la lista de responsables 
+   * (residentes desde 'profiles' y obreros desde 'workers'). Maneja persistencia en caché local (AsyncStorage).
+   */
   const fetchData = async () => {
     setLoading(true);
     const projectId = activeProject?.id;
@@ -118,7 +153,7 @@ export default function InventarioScreen() {
       }
     } else {
       try {
-        // 1. Cargar registros de destajos activos
+        // 1. Cargar registros de destajos activos de la obra
         const { data: invData, error: invError } = await supabase
           .from('inventory')
           .select('*')
@@ -132,7 +167,7 @@ export default function InventarioScreen() {
           await AsyncStorage.setItem(storageKeyItems, JSON.stringify(invData));
         }
 
-        // 🟢 CONSULTA MULTI-TABLA EN PARALELO (TRABAJADORES DE OBRA + RESIDENTES)
+        // 2. Consulta combinada en paralelo: Trabajadores de la obra + Residentes
         const [workersResponse, profilesResponse] = await Promise.all([
           supabase.from('workers').select('id, name_worker').eq('is_active', true).eq('project_id', projectId),
           supabase.from('profiles').select('id, full_name, role').or('role.eq.residente')
@@ -143,7 +178,6 @@ export default function InventarioScreen() {
 
         const listaCombinada: WorkerSimple[] = [];
 
-        // Inyectar primero a los encargados/residentes de la tabla profiles
         if (profilesResponse.data) {
           profilesResponse.data.forEach(p => {
             listaCombinada.push({
@@ -153,7 +187,6 @@ export default function InventarioScreen() {
           });
         }
 
-        // Inyectar a los obreros/técnicos de la tabla workers mapeando el campo real name_worker
         if (workersResponse.data) {
           workersResponse.data.forEach(w => {
             listaCombinada.push({
@@ -163,7 +196,7 @@ export default function InventarioScreen() {
           });
         }
 
-        // Eliminar duplicados de nombres por si acaso
+        // Limpiar nombres duplicados
         const listaLimpia = listaCombinada.filter((item, index, self) =>
           index === self.findIndex((t) => t.name.trim().toLowerCase() === item.name.trim().toLowerCase())
         );
@@ -181,6 +214,7 @@ export default function InventarioScreen() {
     }
   };
 
+  // Filtrado reactivo por texto de búsqueda
   const filteredItems = items.filter(item => {
     const normalizeText = (text: string) => 
       text?.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "") || "";
@@ -202,6 +236,7 @@ export default function InventarioScreen() {
 
   const totalInvertido = filteredItems.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
 
+  // Agrupador de destajos por etiqueta de semana
   const groupedItems = filteredItems.reduce((acc, item) => {
     const week = item.week_label || 'Semana sin definir';
     if (!acc[week]) acc[week] = [];
@@ -209,12 +244,17 @@ export default function InventarioScreen() {
     return acc;
   }, {} as Record<string, InventoryItem[]>);
 
+  // Listado único para sugerencias rápidas de conceptos
   const uniqueMaterials = items.filter((item, index, self) =>
     index === self.findIndex((t) => (
       t.name.toLowerCase().trim() === item.name.toLowerCase().trim()
     ))
   );
 
+  /**
+   * 📌 NOTA: toggleWeek
+   * Alterna la visibilidad (abrir/cerrar) del bloque de tabla de una semana específica.
+   */
   const toggleWeek = (week: string) => {
     setExpandedWeeks(prev => ({
       ...prev,
@@ -222,6 +262,10 @@ export default function InventarioScreen() {
     }));
   };
 
+  /**
+   * 📌 NOTA: openAddModal
+   * Inicializa los campos en blanco y abre el modal para registrar un nuevo concepto.
+   */
   const openAddModal = () => {
     setEditingId(null);
     setName('');
@@ -235,6 +279,10 @@ export default function InventarioScreen() {
     setIsModalVisible(true);
   };
 
+  /**
+   * 📌 NOTA: openEditModal
+   * Carga los datos de un destajo existente en el modal para su modificación.
+   */
   const openEditModal = (item: InventoryItem) => {
     if (isOffline) {
       Alert.alert("Modo Lectura Activo", "No puedes editar registros antiguos sin conexión a internet.");
@@ -252,6 +300,11 @@ export default function InventarioScreen() {
     setIsModalVisible(true);
   };
 
+  /**
+   * 📌 NOTA: confirmDelete
+   * Solicita confirmación y ejecuta el borrado físico permanente (.delete()) en Supabase,
+   * garantizando que el registro desaparezca al instante en web y móvil.
+   */
   const confirmDelete = (id: string, itemName: string) => {
     if (isOffline) {
       Alert.alert("Modo Lectura Activo", "No puedes eliminar registros sin conexión a internet.");
@@ -260,7 +313,7 @@ export default function InventarioScreen() {
 
     Alert.alert(
       "Eliminar Registro",
-      `¿Estás seguro de que deseas quitar "${itemName}" del reporte?`,
+      `¿Estás seguro de que deseas eliminar permanentemente "${itemName}" del reporte?`,
       [
         { text: "Cancelar", style: "cancel" },
         { 
@@ -268,8 +321,14 @@ export default function InventarioScreen() {
           style: "destructive", 
           onPress: async () => {
             try {
-              const { error } = await supabase.from('inventory').update({ is_active: false }).eq('id', id);
+              // 🟢 Borrado físico permanente sincronizado con la Web
+              const { error } = await supabase
+                .from('inventory')
+                .delete()
+                .eq('id', id);
+
               if (error) throw error;
+              
               setItems(prev => prev.filter(i => i.id !== id));
             } catch (error: any) {
               Alert.alert("Error al eliminar", error.message);
@@ -280,6 +339,11 @@ export default function InventarioScreen() {
     );
   };
 
+  /**
+   * 📌 NOTA: handleSaveItem
+   * Valida y guarda un nuevo registro o actualiza uno existente en 'inventory'.
+   * Si está sin conexión, lo almacena en la bandeja de salida offline local.
+   */
   const handleSaveItem = async () => {
     if (!name.trim() || !unit.trim() || !quantity.trim() || !price.trim() || !weekLabelModal.trim()) {
       Alert.alert("Campos incompletos", "Por favor llena los datos básicos (Semana, Concepto, Cantidad y Mano de Obra).");
@@ -301,7 +365,8 @@ export default function InventarioScreen() {
       week_label: weekLabelModal.toUpperCase(),
       requested_by: requestedBy,
       in_charge: inCharge,
-      project_id: projectId 
+      project_id: projectId,
+      is_active: true
     };
 
     if (isOffline) {
@@ -324,7 +389,7 @@ export default function InventarioScreen() {
 
         setItems(prev => [offlineItem as InventoryItem, ...prev]);
         setIsModalVisible(false);
-        Alert.alert("Guardado Offline", "El gasto se ha registrado en tu celular y se sincronizará cuando regrese el internet.");
+        Alert.alert("Guardado Offline", "El registro se guardó localmente y se sincronizará al recuperar conexión.");
       } catch (error) {
         Alert.alert("Error", "Hubo un problema guardando el registro offline.");
       } finally {
@@ -353,6 +418,10 @@ export default function InventarioScreen() {
     }
   };
 
+  /**
+   * 📌 NOTA: ejecutarGeneracionPDF
+   * Genera el documento PDF de destajos a partir de la plantilla HTML y abre el diálogo nativo para compartir.
+   */
   const ejecutarGeneracionPDF = async () => {
     setIsExporting(true);
     try {
@@ -371,6 +440,10 @@ export default function InventarioScreen() {
     }
   };
 
+  /**
+   * 📌 NOTA: handleExportPDF
+   * Valida que existan registros visibles antes de iniciar la generación del PDF.
+   */
   const handleExportPDF = async () => {
     if (filteredItems.length === 0) {
       Alert.alert("Sin datos", "No hay registros en esta vista para exportar.");
@@ -379,6 +452,10 @@ export default function InventarioScreen() {
     ejecutarGeneracionPDF();
   };
 
+  /**
+   * 📌 NOTA: handleExportarExcel
+   * Crea un archivo CSV estructurado con codificación UTF-8 BOM para descarga y apertura en Excel.
+   */
   const handleExportarExcel = async () => {
     if (filteredItems.length === 0) {
       Alert.alert("Sin datos", "No hay registros en esta vista para exportar.");
@@ -496,13 +573,19 @@ export default function InventarioScreen() {
           </View>
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }} keyboardShouldPersistTaps="handled" refreshControl={
+        <ScrollView 
+          showsVerticalScrollIndicator={false} 
+          contentContainerStyle={{ paddingBottom: 100 }} 
+          keyboardShouldPersistTaps="handled" 
+          refreshControl={
             <RefreshControl 
               refreshing={refreshing} 
               onRefresh={onRefresh} 
               colors={['#2563EB']} 
               tintColor="#2563EB"
-            />}>
+            />
+          }
+        >
           {loading ? (
             <Text style={styles.emptyText}>Cargando datos...</Text>
           ) : Object.keys(groupedItems).length === 0 ? (

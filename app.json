@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "ROCAL",
-    "slug": "rocal-mobile",
+    "slug": "rocal-mobile-pwa",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icono.png",
@@ -30,7 +30,7 @@
       ]
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
