@@ -1,7 +1,7 @@
 'use client';
 
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Almacen from '../../lib/almacen';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import { useNavigation, useRouter } from 'expo-router';
@@ -327,7 +327,7 @@ export default function ListaScreen() {
       }).filter(r => !r.worker_id.startsWith('temp_'));
 
       if (isOffline) {
-        await AsyncStorage.setItem(`@nomina_cache_${activeProject?.id}`, JSON.stringify(recordsToSave));
+        await Almacen.setItem(`@nomina_cache_${activeProject?.id}`, JSON.stringify(recordsToSave));
         if (!isSilent) Alert.alert("Guardado Local", "Estás sin conexión. Se sincronizará al tener internet.");
         setHasChanges(false); 
         return;

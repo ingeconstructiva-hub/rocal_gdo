@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Almacen from '../../lib/almacen';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
@@ -83,8 +83,8 @@ export default function DashboardScreen() {
   useFocusEffect(
     useCallback(() => {
       const checkOutbox = async () => {
-        const logs = await AsyncStorage.getItem('@bandeja_salida_logs');
-        const inv = await AsyncStorage.getItem('@bandeja_salida_caja');
+        const logs = await Almacen.getItem('@bandeja_salida_logs');
+        const inv = await Almacen.getItem('@bandeja_salida_caja');
         setHasPendingItems(!!logs || !!inv);
       };
       checkOutbox();  
@@ -116,7 +116,7 @@ export default function DashboardScreen() {
 
         if (isOffline) {
           try {
-            const cachedData = await AsyncStorage.getItem(storageKey);
+            const cachedData = await Almacen.getItem(storageKey);
             if (cachedData) {
               const parsed = JSON.parse(cachedData);
               setProject(parsed.project);
@@ -156,7 +156,7 @@ export default function DashboardScreen() {
           const combinedNotifications = [...mappedLogs, ...mappedCaja].sort((a, b) => b.timestamp - a.timestamp).slice(0, 4); 
 
           setNotifications(combinedNotifications);
-          await AsyncStorage.setItem(storageKey, JSON.stringify({ project: projectData, notifications: combinedNotifications }));
+          await Almacen.setItem(storageKey, JSON.stringify({ project: projectData, notifications: combinedNotifications }));
 
         } catch (err: any) {
           if (err.message !== 'Network request failed' && err.message !== 'Failed to fetch') console.error(err);

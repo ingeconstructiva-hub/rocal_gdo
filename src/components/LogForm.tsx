@@ -1,7 +1,7 @@
 'use client';
 
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Almacen from '../lib/almacen';
 import { decode } from 'base64-arraybuffer';
 import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -140,10 +140,10 @@ export function LogForm() {
           local_uuid: Crypto.randomUUID()
         };
 
-        const existing = await AsyncStorage.getItem('@bandeja_salida_logs');
+        const existing = await Almacen.getItem('@bandeja_salida_logs');
         const outbox = existing ? JSON.parse(existing) : [];
         outbox.push(offlineLog);
-        await AsyncStorage.setItem('@bandeja_salida_logs', JSON.stringify(outbox));
+        await Almacen.setItem('@bandeja_salida_logs', JSON.stringify(outbox));
 
         Alert.alert("📴 Guardado Offline", "Tu reporte se guardó en el celular. Se subirá automáticamente cuando vuelva el internet.");
         router.replace('/(tabs)/bitacora');

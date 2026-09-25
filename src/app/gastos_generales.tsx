@@ -1,7 +1,7 @@
 'use client';
 
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Almacen from '../lib/almacen';
 import { decode } from 'base64-arraybuffer';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
@@ -122,7 +122,7 @@ export default function GastosGeneralesScreen() {
 
     if (isOffline) {
       try {
-        const cached = await AsyncStorage.getItem(storageKey);
+        const cached = await Almacen.getItem(storageKey);
         if (cached) setGastos(JSON.parse(cached));
       } catch (e) {
         console.log("Error leyendo caché:", e);
@@ -143,7 +143,7 @@ export default function GastosGeneralesScreen() {
       if (error) throw error;
       if (data) {
         setGastos(data);
-        await AsyncStorage.setItem(storageKey, JSON.stringify(data));
+        await Almacen.setItem(storageKey, JSON.stringify(data));
       }
     } catch (error) {
       console.log("Error cargando gastos:", error);

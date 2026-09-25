@@ -1,7 +1,7 @@
 'use client';
 
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Almacen from '../lib/almacen';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
@@ -121,7 +121,7 @@ export default function GastosMaquinariaScreen() {
     if (!pid) return;
     try {
       if (isOffline) {
-        const cached = await AsyncStorage.getItem(`@gastos_maquinaria_log_${pid}`);
+        const cached = await Almacen.getItem(`@gastos_maquinaria_log_${pid}`);
         if (cached) setGastos(JSON.parse(cached));
       } else {
         const { data, error } = await supabase
@@ -133,7 +133,7 @@ export default function GastosMaquinariaScreen() {
         if (error) throw error;
         if (data) {
           setGastos(data);
-          await AsyncStorage.setItem(`@gastos_maquinaria_log_${pid}`, JSON.stringify(data));
+          await Almacen.setItem(`@gastos_maquinaria_log_${pid}`, JSON.stringify(data));
         }
       }
     } catch (error) { 

@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Almacen from '../../lib/almacen';
 import { decode } from 'base64-arraybuffer';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
@@ -66,7 +66,7 @@ export default function DocumentosScreen() {
 
     let uiPending: any[] = [];
     try {
-      const pendingData = await AsyncStorage.getItem('@bandeja_salida_planos');
+      const pendingData = await Almacen.getItem('@bandeja_salida_planos');
       if (pendingData) {
         const pendingDocs = JSON.parse(pendingData);
         const projectPending = pendingDocs.filter((d: any) => d.project_id === projectId);
@@ -82,7 +82,7 @@ export default function DocumentosScreen() {
 
     if (isOffline) {
       try {
-        const cachedDocs = await AsyncStorage.getItem(storageKeyDocs);
+        const cachedDocs = await Almacen.getItem(storageKeyDocs);
         const parsedDocs = cachedDocs ? JSON.parse(cachedDocs) : [];
         setDocumentosList([...uiPending, ...parsedDocs]);
       } catch (error) {
@@ -99,14 +99,14 @@ export default function DocumentosScreen() {
         if (error) throw error;
         
         if (data) {
-          await AsyncStorage.setItem(storageKeyDocs, JSON.stringify(data));
+          await Almacen.setItem(storageKeyDocs, JSON.stringify(data));
           setDocumentosList([...uiPending, ...data]);
         }
       } catch (error: any) {
         if (error.message !== 'Network request failed' && error.message !== 'Failed to fetch') {
           console.log("Error cargando documentos:", error.message);
         } else {
-          const cachedDocs = await AsyncStorage.getItem(storageKeyDocs);
+          const cachedDocs = await Almacen.getItem(storageKeyDocs);
           if (cachedDocs) setDocumentosList([...uiPending, ...JSON.parse(cachedDocs)]);
         }
       }
@@ -189,10 +189,10 @@ export default function DocumentosScreen() {
           project_id: projectId
         };
 
-        const existingOutbox = await AsyncStorage.getItem('@bandeja_salida_planos');
+        const existingOutbox = await Almacen.getItem('@bandeja_salida_planos');
         const outbox = existingOutbox ? JSON.parse(existingOutbox) : [];
         outbox.push(localDocData);
-        await AsyncStorage.setItem('@bandeja_salida_planos', JSON.stringify(outbox));
+        await Almacen.setItem('@bandeja_salida_planos', JSON.stringify(outbox));
 
         Alert.alert("Guardado Offline", "El documento PDF se guardó localmente. Se subirá automáticamente al recuperar internet.");
         setScannedImages([]);

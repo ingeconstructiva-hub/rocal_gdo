@@ -1,7 +1,7 @@
 'use client';
 
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Almacen from '../lib/almacen';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import * as Print from 'expo-print';
@@ -172,12 +172,12 @@ export default function CajaChicaScreen() {
     if (!pid) return;
     try {
       const storageKey = `@lista_workers_${pid}`;
-      const cached = await AsyncStorage.getItem(storageKey);
+      const cached = await Almacen.getItem(storageKey);
       if (cached) setTrabajadores(JSON.parse(cached));
 
       if (!isOffline) {
         const { data, error } = await supabase.from('workers').select('id, name_worker, role').eq('project_id', pid).eq('is_active', true).order('name_worker', { ascending: true });
-        if (data && !error) { setTrabajadores(data); await AsyncStorage.setItem(storageKey, JSON.stringify(data)); }
+        if (data && !error) { setTrabajadores(data); await Almacen.setItem(storageKey, JSON.stringify(data)); }
       }
     } catch (e) { console.log(e); }
   };
@@ -197,8 +197,8 @@ export default function CajaChicaScreen() {
       let listaIngresos: any[] = [];
 
       if (isOffline) {
-        const cachedCaja = await AsyncStorage.getItem(`@caja_chica_cache_${pid}`);
-        const cachedIngresos = await AsyncStorage.getItem(`@ingresos_cache_${pid}`);
+        const cachedCaja = await Almacen.getItem(`@caja_chica_cache_${pid}`);
+        const cachedIngresos = await Almacen.getItem(`@ingresos_cache_${pid}`);
         listaEgresos = cachedCaja ? JSON.parse(cachedCaja) : [];
         listaIngresos = cachedIngresos ? JSON.parse(cachedIngresos) : [];
       } else {
@@ -206,8 +206,8 @@ export default function CajaChicaScreen() {
         const { data: ingresos } = await supabase.from('ingresos_obra').select('*').eq('project_id', pid).eq('is_active', true);
         listaEgresos = egresos || [];
         listaIngresos = ingresos || [];
-        await AsyncStorage.setItem(`@caja_chica_cache_${pid}`, JSON.stringify(listaEgresos));
-        await AsyncStorage.setItem(`@ingresos_cache_${pid}`, JSON.stringify(listaIngresos));
+        await Almacen.setItem(`@caja_chica_cache_${pid}`, JSON.stringify(listaEgresos));
+        await Almacen.setItem(`@ingresos_cache_${pid}`, JSON.stringify(listaIngresos));
       }
 
       const egresosFormateados: MovimientoFinanciero[] = listaEgresos.map(e => ({

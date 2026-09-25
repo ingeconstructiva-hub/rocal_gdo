@@ -1,7 +1,7 @@
 'use client';
 
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Almacen from '../lib/almacen';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { decode } from 'base64-arraybuffer';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -91,7 +91,7 @@ export default function ProyectosScreen() {
       const storageKey = `@proyectos_cache_${session.user.id}`;
 
       if (isOffline) {
-        const cachedData = await AsyncStorage.getItem(storageKey);
+        const cachedData = await Almacen.getItem(storageKey);
         if (cachedData) setProyectos(JSON.parse(cachedData));
         else setProyectos([]);
         return;
@@ -111,7 +111,7 @@ export default function ProyectosScreen() {
             userRole: 'Administrador'
           }));
           setProyectos(proyectosFormateados);
-          await AsyncStorage.setItem(storageKey, JSON.stringify(proyectosFormateados));
+          await Almacen.setItem(storageKey, JSON.stringify(proyectosFormateados));
         }
       }
       else {
@@ -134,7 +134,7 @@ export default function ProyectosScreen() {
               userRole: item.role
             }));
           setProyectos(proyectosFormateados);
-          await AsyncStorage.setItem(storageKey, JSON.stringify(proyectosFormateados));
+          await Almacen.setItem(storageKey, JSON.stringify(proyectosFormateados));
         }
       }
     } catch (error: any) {

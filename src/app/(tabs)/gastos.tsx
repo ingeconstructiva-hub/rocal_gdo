@@ -2,7 +2,7 @@
 
 import { Feather } from '@expo/vector-icons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Almacen from '../../lib/almacen';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -21,7 +21,7 @@ export default function GastosHubScreen() {
    * 📌 NOTA: handleSyncAllGastos
    * Sincroniza en paralelo todos los módulos financieros de la obra activa
    * (Destajos, Caja Chica, Ingresos, Maquinaria y Gastos Generales)
-   * consultando a Supabase y reescribiendo la caché local de AsyncStorage.
+   * consultando a Supabase y reescribiendo la caché local de Almacen.
    */
   const handleSyncAllGastos = async () => {
     if (isOffline) {
@@ -55,19 +55,19 @@ export default function GastosHubScreen() {
 
       // Guardar en las llaves de caché correspondientes
       if (destajosRes.data) {
-        await AsyncStorage.setItem(`@inventario_cache_${projectId}`, JSON.stringify(destajosRes.data));
+        await Almacen.setItem(`@inventario_cache_${projectId}`, JSON.stringify(destajosRes.data));
       }
       if (cajaEgresosRes.data) {
-        await AsyncStorage.setItem(`@caja_chica_cache_${projectId}`, JSON.stringify(cajaEgresosRes.data));
+        await Almacen.setItem(`@caja_chica_cache_${projectId}`, JSON.stringify(cajaEgresosRes.data));
       }
       if (cajaIngresosRes.data) {
-        await AsyncStorage.setItem(`@ingresos_cache_${projectId}`, JSON.stringify(cajaIngresosRes.data));
+        await Almacen.setItem(`@ingresos_cache_${projectId}`, JSON.stringify(cajaIngresosRes.data));
       }
       if (maquinariaRes.data) {
-        await AsyncStorage.setItem(`@gastos_maquinaria_log_${projectId}`, JSON.stringify(maquinariaRes.data));
+        await Almacen.setItem(`@gastos_maquinaria_log_${projectId}`, JSON.stringify(maquinariaRes.data));
       }
       if (generalesRes.data) {
-        await AsyncStorage.setItem(`@gastos_generales_log_${projectId}`, JSON.stringify(generalesRes.data));
+        await Almacen.setItem(`@gastos_generales_log_${projectId}`, JSON.stringify(generalesRes.data));
       }
 
       Alert.alert(

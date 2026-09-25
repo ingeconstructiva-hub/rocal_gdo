@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Almacen from '../lib/almacen';
 import NetInfo from '@react-native-community/netinfo';
 import { decode } from 'base64-arraybuffer'; // <-- NUEVA CAPACIDAD BINARIA
 import * as FileSystem from 'expo-file-system/legacy'; // <-- NUEVA CAPACIDAD BINARIA
@@ -51,53 +51,53 @@ const sincronizarBandejasDeSalida = async () => {
 
   try {
     // --- A. BITÁCORAS ---
-    const pendingLogsData = await AsyncStorage.getItem('@bandeja_salida_logs');
+    const pendingLogsData = await Almacen.getItem('@bandeja_salida_logs');
     if (pendingLogsData) {
       const logsPendientes = JSON.parse(pendingLogsData);
       if (logsPendientes.length > 0) {
         const { error } = await supabase.from('logs').upsert(logsPendientes, { onConflict: 'local_uuid' });
-        if (!error) { await AsyncStorage.removeItem('@bandeja_salida_logs'); huboSincronizacion = true; }
+        if (!error) { await Almacen.removeItem('@bandeja_salida_logs'); huboSincronizacion = true; }
       }
     }
 
     // --- B. GASTOS ---
-    const pendingInvData = await AsyncStorage.getItem('@bandeja_salida_inventario');
+    const pendingInvData = await Almacen.getItem('@bandeja_salida_inventario');
     if (pendingInvData) {
       const invPendientes = JSON.parse(pendingInvData);
       if (invPendientes.length > 0) {
         const { error } = await supabase.from('inventory').upsert(invPendientes, { onConflict: 'local_uuid' });
-        if (!error) { await AsyncStorage.removeItem('@bandeja_salida_inventario'); huboSincronizacion = true; }
+        if (!error) { await Almacen.removeItem('@bandeja_salida_inventario'); huboSincronizacion = true; }
       }
     }
 
     // --- C. TRABAJADORES NUEVOS ---
-    const pendingWorkersData = await AsyncStorage.getItem('@bandeja_salida_lista');
+    const pendingWorkersData = await Almacen.getItem('@bandeja_salida_lista');
     if (pendingWorkersData) {
       const workersPendientes = JSON.parse(pendingWorkersData);
       if (workersPendientes.length > 0) {
         const { error } = await supabase.from('workers').upsert(workersPendientes, { onConflict: 'local_uuid' });
-        if (!error) { await AsyncStorage.removeItem('@bandeja_salida_lista'); huboSincronizacion = true; }
+        if (!error) { await Almacen.removeItem('@bandeja_salida_lista'); huboSincronizacion = true; }
       }
     }
 
     // El resto queda igual desde D en adelante...
       // --- D. ASISTENCIA Y NÓMINA ---
-      const pendingPayrollData = await AsyncStorage.getItem('@bandeja_salida_nomina');
+      const pendingPayrollData = await Almacen.getItem('@bandeja_salida_nomina');
       if (pendingPayrollData) {
         const payrollPendientes = JSON.parse(pendingPayrollData);
         if (payrollPendientes.length > 0) {
           const validPayroll = payrollPendientes.filter((r: any) => !r.worker_id.startsWith('temp_'));
           if (validPayroll.length > 0) {
             const { error } = await supabase.from('payroll_records').upsert(validPayroll, { onConflict: 'worker_id,week_start' });
-            if (!error) { await AsyncStorage.removeItem('@bandeja_salida_nomina'); huboSincronizacion = true; }
+            if (!error) { await Almacen.removeItem('@bandeja_salida_nomina'); huboSincronizacion = true; }
           } else {
-            await AsyncStorage.removeItem('@bandeja_salida_nomina');
+            await Almacen.removeItem('@bandeja_salida_nomina');
           }
         }
       }
 
       // --- 🏗️ E. NUEVO: SUBIR DOCUMENTOS Y PLANOS PESADOS DESDE EL DISCO ---
-      const pendingPlanosData = await AsyncStorage.getItem('@bandeja_salida_planos');
+      const pendingPlanosData = await Almacen.getItem('@bandeja_salida_planos');
       if (pendingPlanosData) {
         const planosPendientes = JSON.parse(pendingPlanosData);
         if (planosPendientes.length > 0) {
@@ -136,11 +136,11 @@ const sincronizarBandejasDeSalida = async () => {
           }
           
           // Vaciamos la bandeja completa de planos
-          await AsyncStorage.removeItem('@bandeja_salida_planos');
+          await Almacen.removeItem('@bandeja_salida_planos');
           huboSincronizacion = true;
         }
         // --- F. CAJA CHICA (Gastos Menores) ---
-      const pendingCajaData = await AsyncStorage.getItem('@bandeja_salida_caja');
+      const pendingCajaData = await Almacen.getItem('@bandeja_salida_caja');
       if (pendingCajaData) {
         const cajaPendientes = JSON.parse(pendingCajaData);
         if (cajaPendientes.length > 0) {
@@ -171,7 +171,7 @@ const sincronizarBandejasDeSalida = async () => {
 
             } catch (err) { console.log("Gasto fallido:", err); }
           }
-          await AsyncStorage.removeItem('@bandeja_salida_caja');
+          await Almacen.removeItem('@bandeja_salida_caja');
           huboSincronizacion = true;
         }
       }

@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Almacen from '../lib/almacen';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -63,7 +63,7 @@ export default function ResumenDiarioScreen() {
 
     let gastosPendientesLocales: any[] = [];
     try {
-      const pendingData = await AsyncStorage.getItem('@bandeja_salida_caja');
+      const pendingData = await Almacen.getItem('@bandeja_salida_caja');
       if (pendingData) {
         gastosPendientesLocales = JSON.parse(pendingData).filter((g: any) => g.project_id === pid);
       }
@@ -74,8 +74,8 @@ export default function ResumenDiarioScreen() {
 
       if (isOffline) {
         const caches = await Promise.all([
-          AsyncStorage.getItem(keys.ingresos), AsyncStorage.getItem(keys.caja), AsyncStorage.getItem(keys.nomina),
-          AsyncStorage.getItem(keys.destajos), AsyncStorage.getItem(keys.generales), AsyncStorage.getItem(keys.maquinaria)
+          Almacen.getItem(keys.ingresos), Almacen.getItem(keys.caja), Almacen.getItem(keys.nomina),
+          Almacen.getItem(keys.destajos), Almacen.getItem(keys.generales), Almacen.getItem(keys.maquinaria)
         ]);
         
         data.ingresos = caches[0] ? JSON.parse(caches[0]) : [];
@@ -104,12 +104,12 @@ export default function ResumenDiarioScreen() {
         data.generales = resG.data || [];
         data.maquinaria = resM.data || [];
 
-        await AsyncStorage.setItem(keys.ingresos, JSON.stringify(data.ingresos));
-        await AsyncStorage.setItem(keys.caja, JSON.stringify(data.caja));
-        await AsyncStorage.setItem(keys.nomina, JSON.stringify(data.nomina));
-        await AsyncStorage.setItem(keys.destajos, JSON.stringify(data.destajos));
-        await AsyncStorage.setItem(keys.generales, JSON.stringify(data.generales));
-        await AsyncStorage.setItem(keys.maquinaria, JSON.stringify(data.maquinaria));
+        await Almacen.setItem(keys.ingresos, JSON.stringify(data.ingresos));
+        await Almacen.setItem(keys.caja, JSON.stringify(data.caja));
+        await Almacen.setItem(keys.nomina, JSON.stringify(data.nomina));
+        await Almacen.setItem(keys.destajos, JSON.stringify(data.destajos));
+        await Almacen.setItem(keys.generales, JSON.stringify(data.generales));
+        await Almacen.setItem(keys.maquinaria, JSON.stringify(data.maquinaria));
       }
 
       const cajaTotalArr = [...gastosPendientesLocales, ...data.caja];

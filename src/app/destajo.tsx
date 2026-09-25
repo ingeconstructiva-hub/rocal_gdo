@@ -1,7 +1,7 @@
 'use client';
 
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Almacen from '../lib/almacen';
 import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
@@ -141,8 +141,8 @@ export default function InventarioScreen() {
 
     if (isOffline) {
       try {
-        const cachedItems = await AsyncStorage.getItem(storageKeyItems);
-        const cachedWorkers = await AsyncStorage.getItem(storageKeyWorkers);
+        const cachedItems = await Almacen.getItem(storageKeyItems);
+        const cachedWorkers = await Almacen.getItem(storageKeyWorkers);
         
         if (cachedItems) setItems(JSON.parse(cachedItems));
         if (cachedWorkers) setWorkers(JSON.parse(cachedWorkers));
@@ -164,7 +164,7 @@ export default function InventarioScreen() {
         if (invError) throw invError;
         if (invData) {
           setItems(invData);
-          await AsyncStorage.setItem(storageKeyItems, JSON.stringify(invData));
+          await Almacen.setItem(storageKeyItems, JSON.stringify(invData));
         }
 
         // 2. Consulta combinada en paralelo: Trabajadores de la obra + Residentes
@@ -202,7 +202,7 @@ export default function InventarioScreen() {
         );
 
         setWorkers(listaLimpia);
-        await AsyncStorage.setItem(storageKeyWorkers, JSON.stringify(listaLimpia));
+        await Almacen.setItem(storageKeyWorkers, JSON.stringify(listaLimpia));
 
       } catch (error: any) {
         if (error.message !== 'Network request failed' && error.message !== 'Failed to fetch') {
@@ -382,10 +382,10 @@ export default function InventarioScreen() {
           local_uuid: Crypto.randomUUID() 
         };
 
-        const existing = await AsyncStorage.getItem('@bandeja_salida_inventario');
+        const existing = await Almacen.getItem('@bandeja_salida_inventario');
         const outbox = existing ? JSON.parse(existing) : [];
         outbox.push(itemConUUID); 
-        await AsyncStorage.setItem('@bandeja_salida_inventario', JSON.stringify(outbox));
+        await Almacen.setItem('@bandeja_salida_inventario', JSON.stringify(outbox));
 
         setItems(prev => [offlineItem as InventoryItem, ...prev]);
         setIsModalVisible(false);

@@ -1,7 +1,7 @@
 'use client';
 
 import { Feather } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Almacen from '../../lib/almacen';
 import * as ImagePicker from 'expo-image-picker';
 import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -94,7 +94,7 @@ export default function BitacoraScreen() {
 
     const getOutboxLogs = async () => {
       try {
-        const outboxData = await AsyncStorage.getItem('@bandeja_salida_logs');
+        const outboxData = await Almacen.getItem('@bandeja_salida_logs');
         if (outboxData) {
           const parsed = JSON.parse(outboxData);
           return parsed
@@ -107,7 +107,7 @@ export default function BitacoraScreen() {
 
     if (isOffline) {
       try {
-        const cachedData = await AsyncStorage.getItem(storageKey);
+        const cachedData = await Almacen.getItem(storageKey);
         let finalLogs = cachedData ? JSON.parse(cachedData) : [];
 
         const pendingLogs = await getOutboxLogs();
@@ -135,7 +135,7 @@ export default function BitacoraScreen() {
           finalLogs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
           
           processData(finalLogs);
-          await AsyncStorage.setItem(storageKey, JSON.stringify(data)); 
+          await Almacen.setItem(storageKey, JSON.stringify(data)); 
         }
       } catch (error: any) {
         if (error.message !== 'Network request failed' && error.message !== 'Failed to fetch') {
