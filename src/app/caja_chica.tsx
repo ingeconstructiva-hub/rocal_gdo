@@ -2,6 +2,8 @@
 
 import { Feather } from '@expo/vector-icons';
 import Almacen from '../lib/almacen';
+import { guardarEnBandeja } from '../lib/bandeja';
+import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import * as Print from 'expo-print';
@@ -26,6 +28,8 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { useRefrescar } from '../lib/refrescar';
+import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
@@ -119,7 +123,7 @@ export default function CajaChicaScreen() {
    */
   const handleExportarPDF = async () => {
     if (movimientos.length === 0) {
-      Alert.alert("Sin datos", "No hay movimientos registrados para exportar.");
+      Aviso.alert("Sin datos", "No hay movimientos registrados para exportar.");
       return;
     }
     setIsExportingPDF(true);
@@ -135,7 +139,7 @@ export default function CajaChicaScreen() {
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
       await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Exportar Reporte' });
     } catch (error: any) {
-      Alert.alert("Error PDF", error.message);
+      Aviso.alert("Error PDF", error.message);
     } finally {
       setIsExportingPDF(false);
     }
@@ -187,6 +191,8 @@ export default function CajaChicaScreen() {
    * Consulta las tablas 'caja_chica' (egresos) e 'ingresos_obra' (ingresos),
    * unifica ambos historiales cronológicamente y gestiona la caché local.
    */
+  useRefrescar(() => loadLibroMayor());
+
   const loadLibroMayor = async () => {
     setLoading(true);
     const pid = activeProject?.id;
@@ -248,7 +254,7 @@ export default function CajaChicaScreen() {
    */
   const seleccionarFoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') { Alert.alert("Permiso", "Necesitamos acceso a la cámara."); return; }
+    if (status !== 'granted') { Aviso.alert("Permiso", "Necesitamos acceso a la cámara."); return; }
     const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 0.6 });
     if (!result.canceled) setFotoTicket(result.assets[0].uri);
   };
@@ -370,39 +376,64 @@ export default function CajaChicaScreen() {
     try {
       if (tipoMovimientoForm === 'ingreso') {
         if (!importeInvertido.trim() || !encargado.trim()) throw new Error("El importe y el solicitante son obligatorios.");
-        const nuevoIngreso = { 
-          project_id: pid, 
-          monto: Number(importeInvertido), 
-          concepto: `Fondeo a: ${encargado.trim()}`, 
-          referencia: tipoDeposito, 
+        const nuevoIngreso = {
+          project_id: pid,
+          monto: Number(importeInvertido),
+          concepto: `Fondeo a: ${encargado.trim()}`,
+          referencia: tipoDeposito,
           is_active: true,
-          fecha: new Date().toISOString() 
+          fecha: new Date().toISOString()
         };
-        if (!isOffline) await supabase.from('ingresos_obra').insert([nuevoIngreso]);
+
+        if (isOffline) {
+          // Sin internet va a la bandeja de salida, NO se pierde.
+          await guardarEnBandeja('@bandeja_salida_ingresos', { ...nuevoIngreso, local_uuid: Crypto.randomUUID() });
+        } else {
+          await supabase.from('ingresos_obra').insert([nuevoIngreso]);
+        }
       } else {
         if (!encargado.trim()) throw new Error("El nombre del encargado es obligatorio.");
-        
+
         const baseEgreso = procesarDatosEgreso();
         let fotoUrl = null;
 
         if (fotoTicket && !isOffline) {
-          const filename = `ticket_${Date.now()}.jpg`;
+          // Bucket 'tickets_caja_chica'. Antes decía 'tickets', que no existe en
+          // Supabase, y como el error se ignoraba, el gasto se guardaba sin foto
+          // sin avisarle a nadie.
+          const filename = `ticket_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
           const formData = new FormData();
           formData.append('file', { uri: fotoTicket, name: filename, type: 'image/jpeg' } as any);
-          const { error: uploadError } = await supabase.storage.from('tickets').upload(filename, formData as any);
-          if (!uploadError) {
-            const { data: urlData } = supabase.storage.from('tickets').getPublicUrl(filename);
-            fotoUrl = urlData.publicUrl;
-          }
+          const { error: uploadError } = await supabase.storage.from('tickets_caja_chica').upload(filename, formData as any);
+          if (uploadError) throw new Error(`No se pudo subir la foto del ticket: ${uploadError.message}`);
+
+          const { data: urlData } = supabase.storage.from('tickets_caja_chica').getPublicUrl(filename);
+          fotoUrl = urlData.publicUrl;
         }
 
         const nuevoGasto = { ...baseEgreso, project_id: pid, foto_ticket: fotoUrl, fecha: new Date().toISOString() };
-        if (!isOffline) await supabase.from('caja_chica').insert([nuevoGasto]);
+
+        if (isOffline) {
+          // Sin internet va a la bandeja de salida. La foto se queda apuntada
+          // como archivo local y se sube junto con el gasto al volver la señal.
+          await guardarEnBandeja('@bandeja_salida_caja', {
+            ...nuevoGasto,
+            foto_local_uri: fotoTicket || null,
+            local_uuid: Crypto.randomUUID(),
+          });
+        } else {
+          await supabase.from('caja_chica').insert([nuevoGasto]);
+        }
       }
-      Alert.alert("¡Éxito!", "Movimiento financiero registrado.");
+      Aviso.alert(
+        isOffline ? "Guardado sin conexión" : "¡Éxito!",
+        isOffline
+          ? "El movimiento quedó guardado en este dispositivo y se subirá solo cuando vuelva el internet."
+          : "Movimiento financiero registrado."
+      );
       cerrarModalYLimpiar();
       loadLibroMayor();
-    } catch (e: any) { Alert.alert("Atención", e.message); } finally { setIsSaving(false); }
+    } catch (e: any) { Aviso.alert("Atención", e.message); } finally { setIsSaving(false); }
   };
 
   /**
@@ -431,10 +462,10 @@ export default function CajaChicaScreen() {
         if (!isOffline) await supabase.from('caja_chica').update(baseEgreso).eq('id', editingRecordId);
       }
 
-      Alert.alert("¡Éxito!", "Registro actualizado en el Libro Mayor.");
+      Aviso.alert("¡Éxito!", "Registro actualizado en el Libro Mayor.");
       cerrarModalYLimpiar();
       loadLibroMayor();
-    } catch (e: any) { Alert.alert("Atención", e.message); } finally { setIsSaving(false); }
+    } catch (e: any) { Aviso.alert("Atención", e.message); } finally { setIsSaving(false); }
   };
 
   /**
@@ -443,8 +474,8 @@ export default function CajaChicaScreen() {
    * manteniendo sincronizados y limpios los balances en el móvil y la plataforma web.
    */
   const handleEliminarMovimiento = async (id: string, tipo: 'ingreso' | 'egreso') => {
-    if (isOffline) { Alert.alert("Offline", "Necesitas internet para eliminar registros."); return; }
-    Alert.alert("Eliminar Registro", "¿Deseas borrar permanentemente este movimiento del sistema?", [
+    if (isOffline) { Aviso.alert("Offline", "Necesitas internet para eliminar registros."); return; }
+    Aviso.alert("Eliminar Registro", "¿Deseas borrar permanentemente este movimiento del sistema?", [
       { text: "Cancelar", style: "cancel" },
       { 
         text: "Sí, eliminar", 
@@ -459,7 +490,7 @@ export default function CajaChicaScreen() {
             setMovimientos(prev => prev.filter(m => m.id !== id));
             setMovimientoSeleccionado(null);
           } catch (e: any) { 
-            Alert.alert("Error al eliminar", e.message); 
+            Aviso.alert("Error al eliminar", e.message); 
           }
         }
       }
@@ -490,7 +521,7 @@ export default function CajaChicaScreen() {
    * Construye un archivo CSV con la relación de caja chica y lo comparte a través de expo-sharing.
    */
   const handleExportarExcel = async () => {
-    if (movimientos.length === 0) { Alert.alert("Sin datos", "No hay movimientos registrados para exportar."); return; }
+    if (movimientos.length === 0) { Aviso.alert("Sin datos", "No hay movimientos registrados para exportar."); return; }
     try {
       const encabezados = ["Fecha", "Tipo", "No. Nota", "Concepto/Justificacion", "Responsable", "Unidad/Frente", "Metodo Pago", "Cantidad", "P.U. ($)", "Monto Total ($)\n"];
       const filas = movimientosFiltrados.map(g => {
@@ -507,7 +538,7 @@ export default function CajaChicaScreen() {
       const fileUri = `${fsModulo.documentDirectory}${nombreArchivo}`;
       await fsModulo.writeAsStringAsync(fileUri, contenidoCSV, { encoding: 'utf8' });
       await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Exportar Reporte Financiero' });
-    } catch (error: any) { Alert.alert("Error", error.message); }
+    } catch (error: any) { Aviso.alert("Error", error.message); }
   };
 
   return (

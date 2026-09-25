@@ -10,7 +10,7 @@
  * internet para que la app las mande a su bandeja de salida.
  */
 
-const CACHE = 'rocal-pwa-v2';
+const CACHE = 'rocal-pwa-v3';
 
 // Lo mínimo para que la app abra sin internet desde cero.
 const ARCHIVOS_BASE = ['/', '/manifest.json', '/icon-192.png', '/icon-512.png'];
@@ -82,8 +82,14 @@ function sinConexion() {
 }
 
 function guardarCopia(request, respuesta) {
-  // Solo guardamos respuestas buenas y propias.
-  if (!respuesta || !respuesta.ok || respuesta.type !== 'basic') return;
+  // Solo respuestas buenas. El origen ya se filtró antes de llegar aquí.
+  //
+  // Se aceptan 'basic' y 'cors': las fuentes de los iconos se piden en modo
+  // cors aunque vengan de nuestro propio dominio, y al exigir solo 'basic'
+  // nunca se guardaban. Resultado: sin internet la app salía sin iconos.
+  if (!respuesta || !respuesta.ok) return;
+  if (respuesta.type !== 'basic' && respuesta.type !== 'cors') return;
+
   const copia = respuesta.clone();
   caches.open(CACHE).then((cache) => cache.put(request, copia));
 }

@@ -6,6 +6,7 @@ import Almacen from '../../lib/almacen';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Aviso } from '../../lib/aviso';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
 import { supabase } from '../../lib/supabase';
@@ -25,13 +26,13 @@ export default function GastosHubScreen() {
    */
   const handleSyncAllGastos = async () => {
     if (isOffline) {
-      Alert.alert("Modo Offline", "Conéctate a internet para sincronizar los datos con el servidor web.");
+      Aviso.alert("Modo Offline", "Conéctate a internet para sincronizar los datos con el servidor web.");
       return;
     }
 
     const projectId = activeProject?.id;
     if (!projectId) {
-      Alert.alert("Atención", "No hay una obra activa seleccionada.");
+      Aviso.alert("Atención", "No hay una obra activa seleccionada.");
       return;
     }
 
@@ -70,12 +71,12 @@ export default function GastosHubScreen() {
         await Almacen.setItem(`@gastos_generales_log_${projectId}`, JSON.stringify(generalesRes.data));
       }
 
-      Alert.alert(
+      Aviso.alert(
         "¡Sincronización Completa!", 
         "Todos los módulos de gastos (Destajos, Caja Chica, Maquinaria y Gastos Generales) se han actualizado desde el servidor web."
       );
     } catch (error: any) {
-      Alert.alert("Error de Sincronización", error.message || "No se pudo actualizar la información.");
+      Aviso.alert("Error de Sincronización", error.message || "No se pudo actualizar la información.");
     } finally {
       setIsSyncingAll(false);
     }

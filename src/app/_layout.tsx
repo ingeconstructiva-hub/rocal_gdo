@@ -2,6 +2,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ProjectProvider } from '../context/ProjectContext'; // <-- Ajusta la ruta si tus context están en /src/context
 import { UserProvider } from '../context/UserContext';
+import { ContenedorDeAvisos } from '../lib/aviso';
 import { supabase } from '../lib/supabase';
 
 export default function RootLayout() {
@@ -46,6 +47,9 @@ export default function RootLayout() {
           <Stack.Screen name="proyectos" />
           <Stack.Screen name="(tabs)" />
         </Stack>
+
+        {/* Dibuja los avisos en web. En nativo no pinta nada: usa el cuadro del sistema. */}
+        <ContenedorDeAvisos />
       </ProjectProvider>
     </UserProvider>
   );

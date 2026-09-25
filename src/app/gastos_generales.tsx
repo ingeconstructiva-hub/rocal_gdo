@@ -24,6 +24,8 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { useRefrescar } from '../lib/refrescar';
+import { Aviso } from '../lib/aviso';
 
 import SummaryCard from '../components/SummaryCard';
 import { useProject } from '../context/ProjectContext';
@@ -113,6 +115,8 @@ export default function GastosGeneralesScreen() {
    * Consulta la tabla 'gastos_generales' filtrando por la obra activa ('project_id')
    * y guarda el resultado en AsyncStorage para disponibilidad offline.
    */
+  useRefrescar(() => fetchGastos());
+
   const fetchGastos = async () => {
     setLoading(true);
     const pid = activeProject?.id;
@@ -181,17 +185,17 @@ export default function GastosGeneralesScreen() {
    * Abre un selector para tomar una fotografía con la cámara o elegir una imagen de la galería.
    */
   const seleccionarFotoComprobante = () => {
-    Alert.alert("Comprobante de Pago", "¿De dónde quieres subir la imagen?", [
+    Aviso.alert("Comprobante de Pago", "¿De dónde quieres subir la imagen?", [
       { text: "Cancelar", style: "cancel" },
       { text: "Tomar Foto", onPress: async () => {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== 'granted') { Alert.alert("Permiso Denegado"); return; }
+        if (status !== 'granted') { Aviso.alert("Permiso Denegado"); return; }
         const result = await ImagePicker.launchCameraAsync({ allowsEditing: false, quality: 0.7 });
         if (!result.canceled) setFotoComprobante(result.assets[0].uri);
       }},
       { text: "Galería", onPress: async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') { Alert.alert("Permiso Denegado"); return; }
+        if (status !== 'granted') { Aviso.alert("Permiso Denegado"); return; }
         const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: false, quality: 0.7 });
         if (!result.canceled) setFotoComprobante(result.assets[0].uri);
       }}
@@ -205,17 +209,17 @@ export default function GastosGeneralesScreen() {
    */
   const handleGuardarGasto = async () => {
     if (!concepto.trim() || !cantidad.trim() || !precioUnitario.trim()) {
-      Alert.alert("Campos incompletos", "Por favor ingresa la descripción, cantidad y precio unitario.");
+      Aviso.alert("Campos incompletos", "Por favor ingresa la descripción, cantidad y precio unitario.");
       return;
     }
 
     if (estadoPagoForm === 'abono_parcial' && (!montoAbonadoForm.trim() || Number(montoAbonadoForm) <= 0)) {
-      Alert.alert("Monto de abono inválido", "Por favor ingresa la cantidad que se está abonando.");
+      Aviso.alert("Monto de abono inválido", "Por favor ingresa la cantidad que se está abonando.");
       return;
     }
 
     if (estadoPagoForm === 'abono_parcial' && Number(montoAbonadoForm) >= montoTotalCalculado) {
-      Alert.alert("Monto excedido", "El abono no puede ser igual o mayor al importe total. Si ya se cubrió todo, marca el estado como 'Liquidado'.");
+      Aviso.alert("Monto excedido", "El abono no puede ser igual o mayor al importe total. Si ya se cubrió todo, marca el estado como 'Liquidado'.");
       return;
     }
 
@@ -223,7 +227,7 @@ export default function GastosGeneralesScreen() {
     if (!pid) return;
 
     if (isOffline) {
-      Alert.alert("Modo Offline", "Conéctate a internet para registrar gastos.");
+      Aviso.alert("Modo Offline", "Conéctate a internet para registrar gastos.");
       return;
     }
 
@@ -281,9 +285,9 @@ export default function GastosGeneralesScreen() {
       setIsFormModalVisible(false);
       limpiarFormulario();
       fetchGastos();
-      Alert.alert("¡Éxito!", isEditing ? "Gasto actualizado correctamente." : "Gasto registrado correctamente.");
+      Aviso.alert("¡Éxito!", isEditing ? "Gasto actualizado correctamente." : "Gasto registrado correctamente.");
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      Aviso.alert("Error", error.message);
     } finally {
       setIsSaving(false);
     }
@@ -307,11 +311,11 @@ export default function GastosGeneralesScreen() {
             const abono = Number(montoIngresado?.replace(/[^0-9.]/g, ''));
             
             if (!abono || abono <= 0) {
-              Alert.alert("Error", "Monto inválido.");
+              Aviso.alert("Error", "Monto inválido.");
               return;
             }
             if (abono > saldoPendiente) {
-              Alert.alert("Monto Excedido", "El abono no puede ser mayor al saldo pendiente.");
+              Aviso.alert("Monto Excedido", "El abono no puede ser mayor al saldo pendiente.");
               return;
             }
 
@@ -332,10 +336,10 @@ export default function GastosGeneralesScreen() {
 
               setGastos(prev => prev.map(g => g.id === gasto.id ? { ...g, monto_pagado: nuevoMontoPagado, estado_pago: nuevoEstado } : g));
               setGastoSeleccionado(null); 
-              Alert.alert("¡Éxito!", `Se abonaron $${abono.toLocaleString('es-MX')} a la cuenta.`);
+              Aviso.alert("¡Éxito!", `Se abonaron $${abono.toLocaleString('es-MX')} a la cuenta.`);
               fetchGastos(); 
             } catch (err: any) {
-              Alert.alert("Error", err.message);
+              Aviso.alert("Error", err.message);
             } finally {
               setLoading(false);
             }
@@ -372,11 +376,11 @@ export default function GastosGeneralesScreen() {
    */
   const handleEliminarGasto = async (id: string, nombre: string) => {
     if (isOffline) {
-      Alert.alert("Modo Lectura", "Requiere conexión para eliminar registros.");
+      Aviso.alert("Modo Lectura", "Requiere conexión para eliminar registros.");
       return;
     }
 
-    Alert.alert("Eliminar gasto", `¿Deseas eliminar permanentemente "${nombre}" de la base de datos?`, [
+    Aviso.alert("Eliminar gasto", `¿Deseas eliminar permanentemente "${nombre}" de la base de datos?`, [
       { text: "Cancelar", style: "cancel" },
       {
         text: "Eliminar",
@@ -394,7 +398,7 @@ export default function GastosGeneralesScreen() {
             setGastos(prev => prev.filter(g => g.id !== id));
             setGastoSeleccionado(null);
           } catch (e: any) {
-            Alert.alert("Error", e.message);
+            Aviso.alert("Error", e.message);
           }
         }
       }
@@ -406,7 +410,7 @@ export default function GastosGeneralesScreen() {
    * Construye un archivo CSV estructurado con los gastos filtrados y lo abre mediante el gestor nativo de compartir.
    */
   const handleExportarExcel = async () => {
-    if (gastosFiltrados.length === 0) { Alert.alert("Sin datos", "No hay registros en esta vista."); return; }
+    if (gastosFiltrados.length === 0) { Aviso.alert("Sin datos", "No hay registros en esta vista."); return; }
     try {
       const encabezados = ["Fecha", "Categoria", "Cotizacion", "Concepto", "Cantidad", "Unidad", "Proveedor/Origen", "Estado de Pago", "Abonado ($)", "Monto Total ($)\n"];
       const filas = gastosFiltrados.map(g => {
@@ -425,7 +429,7 @@ export default function GastosGeneralesScreen() {
       const fileUri = `${fsModulo.documentDirectory}${nombreArchivo}`;
       await fsModulo.writeAsStringAsync(fileUri, contenidoCSV, { encoding: 'utf8' });
       await Sharing.shareAsync(fileUri, { mimeType: 'text/csv' });
-    } catch (error: any) { Alert.alert("Error Excel", error.message); }
+    } catch (error: any) { Aviso.alert("Error Excel", error.message); }
   };
 
   /**
@@ -433,7 +437,7 @@ export default function GastosGeneralesScreen() {
    * Genera el reporte impreso en formato PDF a partir de la plantilla HTML y lo comparte.
    */
   const handleExportarPDF = async () => {
-    if (gastosFiltrados.length === 0) { Alert.alert("Sin datos", "No hay registros."); return; }
+    if (gastosFiltrados.length === 0) { Aviso.alert("Sin datos", "No hay registros."); return; }
     
     setIsExportingPDF(true);
     try {
@@ -448,7 +452,7 @@ export default function GastosGeneralesScreen() {
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
       await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Compartir Reporte de Gastos' });
     } catch (error: any) { 
-      Alert.alert("Error PDF", error.message); 
+      Aviso.alert("Error PDF", error.message); 
     } finally { 
       setIsExportingPDF(false); 
     }

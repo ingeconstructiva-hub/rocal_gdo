@@ -22,6 +22,8 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { useRefrescar } from '../lib/refrescar';
+import { Aviso } from '../lib/aviso';
 
 import SummaryCard from '../components/SummaryCard';
 import { useProject } from '../context/ProjectContext';
@@ -115,6 +117,8 @@ export default function GastosMaquinariaScreen() {
    * Consulta a Supabase todos los registros asociados a 'gastos_maquinaria' para la obra activa
    * y los almacena en caché local (AsyncStorage) para permitir acceso fuera de línea.
    */
+  useRefrescar(() => fetchGastos());
+
   const fetchGastos = async () => {
     setLoading(true);
     const pid = activeProject?.id;
@@ -248,8 +252,8 @@ export default function GastosMaquinariaScreen() {
    * Si cambia el nombre del equipo, renombra en cascada todos los registros previos asociados.
    */
   const handleGuardarConfig = async () => {
-    if (!equipo.trim() || !tarifaHora.trim()) { Alert.alert("Campos Vacíos", "El nombre y tarifa son obligatorios."); return; }
-    if (isOffline) { Alert.alert("Modo Offline", "Conéctate a internet para editar la configuración de la máquina."); return; }
+    if (!equipo.trim() || !tarifaHora.trim()) { Aviso.alert("Campos Vacíos", "El nombre y tarifa son obligatorios."); return; }
+    if (isOffline) { Aviso.alert("Modo Offline", "Conéctate a internet para editar la configuración de la máquina."); return; }
     
     setIsSaving(true);
     
@@ -296,7 +300,7 @@ export default function GastosMaquinariaScreen() {
           if (errInsertConfig) throw errInsertConfig;
         }
 
-        Alert.alert("¡Actualizado!", "Los datos del equipo han sido modificados.");
+        Aviso.alert("¡Actualizado!", "Los datos del equipo han sido modificados.");
       } else {
         const nuevoRegistro = {
           project_id: activeProject?.id,
@@ -317,7 +321,7 @@ export default function GastosMaquinariaScreen() {
       limpiarFormularioMaquina(); 
       fetchGastos(); 
     } catch (e: any) { 
-      Alert.alert("Error", e.message); 
+      Aviso.alert("Error", e.message); 
     } finally { 
       setIsSaving(false); 
     }
@@ -358,7 +362,7 @@ export default function GastosMaquinariaScreen() {
    * Inserta o edita un reporte de uso de horas (bitácora) calculando el costo del día (horas * tarifa).
    */
   const handleGuardarUso = async () => {
-    if (!selectedMaquina || !horasOperacion.trim()) { Alert.alert("Faltan Horas", "Ingresa las horas de trabajo."); return; }
+    if (!selectedMaquina || !horasOperacion.trim()) { Aviso.alert("Faltan Horas", "Ingresa las horas de trabajo."); return; }
     setIsSaving(true);
     
     const horas = Number(horasOperacion);
@@ -389,9 +393,9 @@ export default function GastosMaquinariaScreen() {
         await supabase.from('gastos_maquinaria').insert([datosPayload]);
       }
       setModalHoras(false); limpiarFormsSecundarios(); fetchGastos();
-      Alert.alert("¡Éxito!", editingRecordId ? "Bitácora actualizada." : "Bitácora guardada.");
+      Aviso.alert("¡Éxito!", editingRecordId ? "Bitácora actualizada." : "Bitácora guardada.");
     } catch (e: any) { 
-      Alert.alert("Error", e.message); 
+      Aviso.alert("Error", e.message); 
     } finally { 
       setIsSaving(false); 
     }
@@ -402,7 +406,7 @@ export default function GastosMaquinariaScreen() {
    * Registra un pago o abono financiero al proveedor del equipo en 'gastos_maquinaria'.
    */
   const handleGuardarAnticipo = async () => {
-    if (!selectedMaquina || !montoAnticipo.trim()) { Alert.alert("Campos Vacíos", "Ingresa el monto."); return; }
+    if (!selectedMaquina || !montoAnticipo.trim()) { Aviso.alert("Campos Vacíos", "Ingresa el monto."); return; }
     setIsSaving(true);
     const datosPayload = {
       project_id: activeProject?.id,
@@ -422,9 +426,9 @@ export default function GastosMaquinariaScreen() {
         await supabase.from('gastos_maquinaria').insert([datosPayload]);
       }
       setModalAnticipo(false); limpiarFormsSecundarios(); fetchGastos();
-      Alert.alert("¡Éxito!", "Pago registrado.");
+      Aviso.alert("¡Éxito!", "Pago registrado.");
     } catch (e: any) { 
-      Alert.alert("Error", e.message); 
+      Aviso.alert("Error", e.message); 
     } finally { 
       setIsSaving(false); 
     }
@@ -468,7 +472,7 @@ export default function GastosMaquinariaScreen() {
    * Realiza un borrado físico permanente (.delete()) en Supabase para evitar registros huérfanos.
    */
   const handleEliminarRegistro = (id: string) => {
-    Alert.alert("Eliminar Registro", "¿Deseas borrar permanentemente este movimiento del sistema?", [
+    Aviso.alert("Eliminar Registro", "¿Deseas borrar permanentemente este movimiento del sistema?", [
       { text: "Cancelar", style: "cancel" },
       { 
         text: "Borrar", 
@@ -485,7 +489,7 @@ export default function GastosMaquinariaScreen() {
             
             fetchGastos();
           } catch (e: any) { 
-            Alert.alert("Error al eliminar", e.message); 
+            Aviso.alert("Error al eliminar", e.message); 
           }
         }
       }
@@ -529,7 +533,7 @@ export default function GastosMaquinariaScreen() {
       await FileSystem.writeAsStringAsync(fileUri, contenidoCSV, { encoding: 'utf8' });
       await Sharing.shareAsync(fileUri, { mimeType: 'text/csv' });
     } catch (error: any) { 
-      Alert.alert("Error Excel", error.message); 
+      Aviso.alert("Error Excel", error.message); 
     }
   };
 
@@ -545,7 +549,7 @@ export default function GastosMaquinariaScreen() {
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
       await Sharing.shareAsync(uri, { mimeType: 'application/pdf' });
     } catch (error: any) { 
-      Alert.alert("Error PDF", error.message); 
+      Aviso.alert("Error PDF", error.message); 
     } finally { 
       setIsExportingPDF(false); 
     }

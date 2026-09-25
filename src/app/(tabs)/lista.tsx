@@ -2,12 +2,15 @@
 
 import { Feather } from '@expo/vector-icons';
 import Almacen from '../../lib/almacen';
+import { BANDEJAS, leerBandeja, reemplazarBandeja } from '../../lib/bandeja';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import { useNavigation, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useRefrescar } from '../../lib/refrescar';
+import { Aviso } from '../../lib/aviso';
 import SummaryCard from '../../components/SummaryCard';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
@@ -83,7 +86,7 @@ export default function ListaScreen() {
       if (!hasChanges) return;
       e.preventDefault();
 
-      Alert.alert(
+      Aviso.alert(
         "Cambios pendientes",
         "Tienes modificaciones en la nómina o asistencias sin sincronizar. Es obligatorio presionar 'Guardar y Enviar a Oficina' antes de salir.",
         [
@@ -99,6 +102,8 @@ export default function ListaScreen() {
 
     return () => BloquearSalidaNativa();
   }, [navigation, hasChanges]);
+
+  useRefrescar(() => fetchWorkers());
 
   const fetchWorkers = async () => {
     setLoading(true);
@@ -179,7 +184,7 @@ export default function ListaScreen() {
       setIsModalVisible(false);
       setNewName(''); setNewRole(''); setNewSalary('');
     } catch (e: any) {
-      Alert.alert("Error", e.message);
+      Aviso.alert("Error", e.message);
     } finally {
       setIsSaving(false);
     }
@@ -213,14 +218,14 @@ export default function ListaScreen() {
       setIsEditModalOpen(false);
       setEditWorkerId(null);
     } catch (e: any) {
-      Alert.alert("Error al editar", e.message);
+      Aviso.alert("Error al editar", e.message);
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDeleteWorker = (worker: WorkerState) => {
-    Alert.alert(
+    Aviso.alert(
       "Eliminar Trabajador",
       `¿Estás seguro de que deseas dar de baja a ${worker.name_worker}? No aparecerá más en las listas activas de asistencia.`,
       [
@@ -239,9 +244,9 @@ export default function ListaScreen() {
 
               setHasChanges(true); 
               setAllWorkers(prev => prev.filter(w => w.id !== worker.id));
-              Alert.alert("¡Éxito!", "Trabajador dado de baja correctamente.");
+              Aviso.alert("¡Éxito!", "Trabajador dado de baja correctamente.");
             } catch (e: any) {
-              Alert.alert("Error", e.message);
+              Aviso.alert("Error", e.message);
             }
           }
         }
@@ -327,9 +332,21 @@ export default function ListaScreen() {
       }).filter(r => !r.worker_id.startsWith('temp_'));
 
       if (isOffline) {
+        // El caché es para poder VER la nómina sin internet.
         await Almacen.setItem(`@nomina_cache_${activeProject?.id}`, JSON.stringify(recordsToSave));
-        if (!isSilent) Alert.alert("Guardado Local", "Estás sin conexión. Se sincronizará al tener internet.");
-        setHasChanges(false); 
+
+        // La bandeja es para que SE SUBA al volver la señal. Son cosas distintas:
+        // antes solo se guardaba el caché y la asistencia nunca llegaba a la oficina.
+        // Se guarda la última versión de cada trabajador/semana, no una copia por guardado.
+        const pendientes = await leerBandeja(BANDEJAS.nomina);
+        const sigueVigente = (r: any) =>
+          !recordsToSave.some(
+            (nuevo: any) => nuevo.worker_id === r.worker_id && nuevo.week_start === r.week_start
+          );
+        await reemplazarBandeja(BANDEJAS.nomina, [...pendientes.filter(sigueVigente), ...recordsToSave]);
+
+        if (!isSilent) Aviso.alert("Guardado sin conexión", "La asistencia quedó guardada y se subirá sola cuando vuelva el internet.");
+        setHasChanges(false);
         return;
       }
       
@@ -338,11 +355,11 @@ export default function ListaScreen() {
 
       setHasChanges(false); 
       if (!isSilent) {
-        Alert.alert("¡Éxito!", "La lista de asistencia y nómina ha sido enviada a la oficina de forma segura.");
+        Aviso.alert("¡Éxito!", "La lista de asistencia y nómina ha sido enviada a la oficina de forma segura.");
       }
     } catch (e: any) {
       console.log(e);
-      if (!isSilent) Alert.alert("Error de sincronización", e.message);
+      if (!isSilent) Aviso.alert("Error de sincronización", e.message);
     } finally {
       if (!isSilent) setIsSaving(false);
     }
@@ -355,12 +372,12 @@ export default function ListaScreen() {
       const htmlContent = generarPlantillaNomina(displayedWorkers, weekLabel);
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
       await Sharing.shareAsync(uri, { mimeType: 'application/pdf' });
-    } catch (error: any) { Alert.alert("Error PDF", error.message); }
+    } catch (error: any) { Aviso.alert("Error PDF", error.message); }
   };
 
   const handleExportarExcel = async () => {
     if (displayedWorkers.length === 0) { 
-      Alert.alert("Sin datos", "No hay trabajadores en la lista activa."); 
+      Aviso.alert("Sin datos", "No hay trabajadores en la lista activa."); 
       return; 
     }
     try {
@@ -380,7 +397,7 @@ export default function ListaScreen() {
       await FileSystem.writeAsStringAsync(fileUri, contenidoCSV, { encoding: 'utf8' });
       await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Exportar Nómina' });
     } catch (error: any) {
-      Alert.alert("Error Excel", "No se pudo generar la hoja de cálculo: " + error.message);
+      Aviso.alert("Error Excel", "No se pudo generar la hoja de cálculo: " + error.message);
     }
   };
 

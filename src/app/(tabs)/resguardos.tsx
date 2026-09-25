@@ -5,6 +5,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useRefrescar } from '../../lib/refrescar';
+import { Aviso } from '../../lib/aviso';
 import SignatureScreen, { SignatureViewRef } from 'react-native-signature-canvas';
 
 import * as Print from 'expo-print';
@@ -112,6 +114,8 @@ export default function ResguardosScreen() {
     if (activeProject?.id) fetchInventarioAlmacen();
   }, [activeProject]);
 
+  useRefrescar(() => fetchInventarioAlmacen());
+
   const fetchInventarioAlmacen = async () => {
     setLoading(true);
     const pid = activeProject?.id;
@@ -136,7 +140,7 @@ export default function ResguardosScreen() {
   const handlePickIneImage = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert("Permiso Requerido", "Necesitamos acceso a la cámara para capturar la INE.");
+      Aviso.alert("Permiso Requerido", "Necesitamos acceso a la cámara para capturar la INE.");
       return;
     }
 
@@ -175,7 +179,7 @@ export default function ResguardosScreen() {
 
   const handleAgregarItemLista = () => {
     if (!nuevoItemNombre.trim()) {
-      Alert.alert("Campo vacío", "Escribe o selecciona el nombre del artículo adicional.");
+      Aviso.alert("Campo vacío", "Escribe o selecciona el nombre del artículo adicional.");
       return;
     }
     const idFinal = nuevoItemId || `manual_${Date.now()}`;
@@ -227,7 +231,7 @@ export default function ResguardosScreen() {
         dialogTitle: `Responsiva_${item.codigo}` 
       });
     } catch (error: any) {
-      Alert.alert("Error", "No se pudo generar el PDF: " + error.message);
+      Aviso.alert("Error", "No se pudo generar el PDF: " + error.message);
     }
   };
 
@@ -244,11 +248,11 @@ export default function ResguardosScreen() {
 
   const handleOK = async (signature: string) => {
     if (!nombreResponsableSign.trim()) {
-      Alert.alert("Nombre Requerido", "Por favor ingresa el nombre de quien recibe.");
+      Aviso.alert("Nombre Requerido", "Por favor ingresa el nombre de quien recibe.");
       return;
     }
     if (!ineLocalUri) {
-      Alert.alert("INE Requerida", "Es obligatorio capturar la foto de la INE.");
+      Aviso.alert("INE Requerida", "Es obligatorio capturar la foto de la INE.");
       return;
     }
     if (!selectedItemForSign) return;
@@ -333,11 +337,11 @@ export default function ResguardosScreen() {
       setPasoFirma('entrega');
       setSelectedItemForSign(null);
 
-      Alert.alert("🔒 Resguardo Múltiple Activado", "Todas las herramientas seleccionadas pasaron a Obra y se vincularon al mismo expediente.", [
+      Aviso.alert("🔒 Resguardo Múltiple Activado", "Todas las herramientas seleccionadas pasaron a Obra y se vincularon al mismo expediente.", [
         { text: "Generar PDF Responsiva", onPress: () => ejecutarExportacionPDF(itemActualizado) }
       ]);
     } catch (err: any) {
-      Alert.alert("Error", err.message);
+      Aviso.alert("Error", err.message);
     } finally {
       setIsUploading(false);
     }
@@ -345,7 +349,7 @@ export default function ResguardosScreen() {
 
   const handleGuardarHerramienta = async () => {
     if (!nombre.trim() || !codigo.trim()) {
-      Alert.alert("Campos Incompletos", "El código y el nombre son obligatorios.");
+      Aviso.alert("Campos Incompletos", "El código y el nombre son obligatorios.");
       return;
     }
     const payload = {
@@ -368,12 +372,12 @@ export default function ResguardosScreen() {
       setEditingTool(null);
       setCodigo(''); setNombre(''); setMarcaModelo(''); setAsignadoA(''); setNotas('');
     } catch (err: any) {
-      Alert.alert("Error", err.message);
+      Aviso.alert("Error", err.message);
     }
   };
 
   const ejecutarDevolucionABodega = (item: HerramientaAlmacen) => {
-    Alert.alert(
+    Aviso.alert(
       "📦 Regreso Físico a Bodega",
       `¿Confirmas que el equipo "${item.nombre}" ha sido devuelto al almacén central?`,
       [
@@ -409,9 +413,9 @@ export default function ResguardosScreen() {
                 firma_recibe_url: null,
                 fecha_devolucion: timestampActual 
               } : h));
-              Alert.alert("Éxito", "El equipo ha sido reingresado a la bodega.");
+              Aviso.alert("Éxito", "El equipo ha sido reingresado a la bodega.");
             } catch (err: any) {
-              Alert.alert("Error", err.message);
+              Aviso.alert("Error", err.message);
             }
           } 
         }

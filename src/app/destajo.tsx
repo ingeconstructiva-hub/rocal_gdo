@@ -23,6 +23,8 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { useRefrescar } from '../lib/refrescar';
+import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
@@ -131,6 +133,8 @@ export default function InventarioScreen() {
    * Obtiene los destajos de la tabla 'inventory' y unifica la lista de responsables 
    * (residentes desde 'profiles' y obreros desde 'workers'). Maneja persistencia en caché local (AsyncStorage).
    */
+  useRefrescar(() => fetchData());
+
   const fetchData = async () => {
     setLoading(true);
     const projectId = activeProject?.id;
@@ -285,7 +289,7 @@ export default function InventarioScreen() {
    */
   const openEditModal = (item: InventoryItem) => {
     if (isOffline) {
-      Alert.alert("Modo Lectura Activo", "No puedes editar registros antiguos sin conexión a internet.");
+      Aviso.alert("Modo Lectura Activo", "No puedes editar registros antiguos sin conexión a internet.");
       return;
     }
     setEditingId(item.id);
@@ -307,11 +311,11 @@ export default function InventarioScreen() {
    */
   const confirmDelete = (id: string, itemName: string) => {
     if (isOffline) {
-      Alert.alert("Modo Lectura Activo", "No puedes eliminar registros sin conexión a internet.");
+      Aviso.alert("Modo Lectura Activo", "No puedes eliminar registros sin conexión a internet.");
       return;
     }
 
-    Alert.alert(
+    Aviso.alert(
       "Eliminar Registro",
       `¿Estás seguro de que deseas eliminar permanentemente "${itemName}" del reporte?`,
       [
@@ -331,7 +335,7 @@ export default function InventarioScreen() {
               
               setItems(prev => prev.filter(i => i.id !== id));
             } catch (error: any) {
-              Alert.alert("Error al eliminar", error.message);
+              Aviso.alert("Error al eliminar", error.message);
             }
           } 
         }
@@ -346,13 +350,13 @@ export default function InventarioScreen() {
    */
   const handleSaveItem = async () => {
     if (!name.trim() || !unit.trim() || !quantity.trim() || !price.trim() || !weekLabelModal.trim()) {
-      Alert.alert("Campos incompletos", "Por favor llena los datos básicos (Semana, Concepto, Cantidad y Mano de Obra).");
+      Aviso.alert("Campos incompletos", "Por favor llena los datos básicos (Semana, Concepto, Cantidad y Mano de Obra).");
       return;
     }
 
     const projectId = activeProject?.id;
     if (!projectId) {
-      Alert.alert("Error", "No hay una obra seleccionada.");
+      Aviso.alert("Error", "No hay una obra seleccionada.");
       return;
     }
 
@@ -389,9 +393,9 @@ export default function InventarioScreen() {
 
         setItems(prev => [offlineItem as InventoryItem, ...prev]);
         setIsModalVisible(false);
-        Alert.alert("Guardado Offline", "El registro se guardó localmente y se sincronizará al recuperar conexión.");
+        Aviso.alert("Guardado Offline", "El registro se guardó localmente y se sincronizará al recuperar conexión.");
       } catch (error) {
-        Alert.alert("Error", "Hubo un problema guardando el registro offline.");
+        Aviso.alert("Error", "Hubo un problema guardando el registro offline.");
       } finally {
         setIsSaving(false);
       }
@@ -412,7 +416,7 @@ export default function InventarioScreen() {
       }
       setIsModalVisible(false);
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      Aviso.alert("Error", error.message);
     } finally {
       setIsSaving(false);
     }
@@ -434,7 +438,7 @@ export default function InventarioScreen() {
       });
     } catch (error: any) {
       console.error("Error al exportar inventario:", error);
-      Alert.alert("Error", "Ocurrió un problema al generar el documento.");
+      Aviso.alert("Error", "Ocurrió un problema al generar el documento.");
     } finally {
       setIsExporting(false);
     }
@@ -446,7 +450,7 @@ export default function InventarioScreen() {
    */
   const handleExportPDF = async () => {
     if (filteredItems.length === 0) {
-      Alert.alert("Sin datos", "No hay registros en esta vista para exportar.");
+      Aviso.alert("Sin datos", "No hay registros en esta vista para exportar.");
       return;
     }
     ejecutarGeneracionPDF();
@@ -458,7 +462,7 @@ export default function InventarioScreen() {
    */
   const handleExportarExcel = async () => {
     if (filteredItems.length === 0) {
-      Alert.alert("Sin datos", "No hay registros en esta vista para exportar.");
+      Aviso.alert("Sin datos", "No hay registros en esta vista para exportar.");
       return;
     }
 
@@ -483,7 +487,7 @@ export default function InventarioScreen() {
       await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Exportar a Excel' });
 
     } catch (error: any) {
-      Alert.alert("Error Excel", "No se pudo generar la hoja de cálculo: " + error.message);
+      Aviso.alert("Error Excel", "No se pudo generar la hoja de cálculo: " + error.message);
     }
   };
 

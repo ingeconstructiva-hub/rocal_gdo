@@ -3,6 +3,8 @@ import Almacen from '../lib/almacen';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useRefrescar } from '../lib/refrescar';
+import { Aviso } from '../lib/aviso';
 import { PieChart } from 'react-native-chart-kit';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext'; // 🧠 Importamos el motor de roles
@@ -46,6 +48,8 @@ export default function ResumenDiarioScreen() {
       cargarHistorialFinanciero();
     }
   }, [activeProject, isOffline]);
+
+  useRefrescar(() => cargarHistorialFinanciero());
 
   const cargarHistorialFinanciero = async () => {
     setLoading(true);
@@ -156,7 +160,7 @@ export default function ResumenDiarioScreen() {
       setAnalisisCostos(analisisArreglo);
 
     } catch (e: any) {
-      Alert.alert("Aviso", "Hubo un problema sincronizando algunos totales.");
+      Aviso.alert("Aviso", "Hubo un problema sincronizando algunos totales.");
       console.log(e);
     } finally {
       setLoading(false);

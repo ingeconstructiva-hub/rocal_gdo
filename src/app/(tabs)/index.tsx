@@ -5,6 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Aviso } from '../../lib/aviso';
 import QRCode from 'react-native-qrcode-svg';
 import { NotificationItem } from '../../components/NotificationItem';
 import { Colors } from '../../constants/theme';
@@ -54,7 +55,7 @@ export default function DashboardScreen() {
   const pickImage = async (type: 'perfil' | 'ine') => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert("Permiso Denegado", "Necesitamos acceso a tu galería para elegir la foto.");
+      Aviso.alert("Permiso Denegado", "Necesitamos acceso a tu galería para elegir la foto.");
       return;
     }
 
@@ -167,9 +168,9 @@ export default function DashboardScreen() {
   );
 
   const handleOpenInviteModal = async () => {
-    if (isOffline) { Alert.alert("Modo Offline", "Necesitas internet para generar invitaciones."); return; }
+    if (isOffline) { Aviso.alert("Modo Offline", "Necesitas internet para generar invitaciones."); return; }
     if (profile?.role !== 'admin' && profile?.role !== 'residente') {
-      Alert.alert("Acceso Restringido", "Solo administradores y residentes pueden invitar personal.");
+      Aviso.alert("Acceso Restringido", "Solo administradores y residentes pueden invitar personal.");
       return;
     }
 
@@ -182,7 +183,7 @@ export default function DashboardScreen() {
       const { error } = await supabase.from('projects').update({ invite_code: newCode }).eq('id', activeProject?.id);
       if (error) throw error;
       setProject({ ...project, invite_code: newCode });
-    } catch (error: any) { Alert.alert("Error", "No se pudo generar el código."); } 
+    } catch (error: any) { Aviso.alert("Error", "No se pudo generar el código."); } 
     finally { setIsGeneratingCode(false); }
   };
 
@@ -233,7 +234,7 @@ export default function DashboardScreen() {
 
       if (error) throw error;
       
-      Alert.alert("¡Éxito!", "Tu perfil ha sido actualizado correctamente.");
+      Aviso.alert("¡Éxito!", "Tu perfil ha sido actualizado correctamente.");
       setIsEditingProfile(false);
       setNewFotoPerfil(null);
       setNewFotoIne(null);
@@ -242,7 +243,7 @@ export default function DashboardScreen() {
         await refreshProfile();
       }
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      Aviso.alert("Error", error.message);
     } finally {
       setIsSavingProfile(false);
     }

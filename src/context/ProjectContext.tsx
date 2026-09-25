@@ -1,10 +1,13 @@
 import { Feather } from '@expo/vector-icons';
 import Almacen from '../lib/almacen';
+import { dispararRefresco, escucharSiHayQueRefrescar } from '../lib/refrescar';
+import { BANDEJAS, contarPendientes, leerBandeja, reemplazarBandeja, vaciarBandeja } from '../lib/bandeja';
 import NetInfo from '@react-native-community/netinfo';
 import { decode } from 'base64-arraybuffer'; // <-- NUEVA CAPACIDAD BINARIA
 import * as FileSystem from 'expo-file-system/legacy'; // <-- NUEVA CAPACIDAD BINARIA
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Alert, Platform, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Aviso } from '../lib/aviso';
 import { supabase } from '../lib/supabase';
 
 type ProjectContextType = {
@@ -16,10 +19,70 @@ type ProjectContextType = {
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
+const LLAVE_OBRA_ACTIVA = '@obra_activa';
+
 export function ProjectProvider({ children }: { children: React.ReactNode }) {
-  const [activeProject, setActiveProject] = useState<any>(null);
+  const [activeProject, setActiveProjectState] = useState<any>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [lastSync, setLastSync] = useState(0);
+  const [pendientes, setPendientes] = useState(0);
+  const [refrescando, setRefrescando] = useState(false);
+  const [hayQueRefrescar, setHayQueRefrescar] = useState(false);
+
+  // El botón solo aparece donde hay algo que recargar (en login, por ejemplo, no).
+  useEffect(() => escucharSiHayQueRefrescar(setHayQueRefrescar), []);
+
+  const refrescar = async () => {
+    setRefrescando(true);
+    try {
+      await dispararRefresco();
+    } finally {
+      setRefrescando(false);
+    }
+  };
+
+  /* Cuántos registros esperan subirse. Se revisa cada 3 segundos y después de
+   * cada intento de sincronización, para que el letrero diga la verdad en todo
+   * momento: si el número no baja al volver el internet, algo está fallando. */
+  useEffect(() => {
+    let vivo = true;
+    const revisar = () => {
+      contarPendientes()
+        .then((total) => {
+          if (vivo) setPendientes(total);
+        })
+        .catch(() => {});
+    };
+
+    revisar();
+    const intervalo = setInterval(revisar, 3000);
+
+    return () => {
+      vivo = false;
+      clearInterval(intervalo);
+    };
+  }, [isOffline, lastSync]);
+
+  /* La obra activa se guarda en el dispositivo.
+   * Antes vivía solo en memoria: al recargar la página (o al reabrir la app)
+   * se perdía y el tablero se quedaba en "Cargando proyecto..." para siempre,
+   * porque sin obra activa no hay nada que pedir. */
+  useEffect(() => {
+    Almacen.getItem(LLAVE_OBRA_ACTIVA)
+      .then((guardada) => {
+        if (guardada) setActiveProjectState(JSON.parse(guardada));
+      })
+      .catch(() => {});
+  }, []);
+
+  const setActiveProject = (project: any) => {
+    setActiveProjectState(project);
+    if (project) {
+      Almacen.setItem(LLAVE_OBRA_ACTIVA, JSON.stringify(project)).catch(() => {});
+    } else {
+      Almacen.removeItem(LLAVE_OBRA_ACTIVA).catch(() => {});
+    }
+  };
 
   // 1. EL VIGILANTE DE INTERNET CON DESPERTADOR AUTOMÁTICO
   useEffect(() => {
@@ -47,158 +110,184 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   }, [isOffline]);
 
 const sincronizarBandejasDeSalida = async () => {
-  let huboSincronizacion = false;
+  let subidos = 0;
+
+  /* Sube una bandeja completa de un jalón (para registros sin archivos).
+   * Regla de oro: si Supabase rechaza el lote, la bandeja NO se toca. Se queda
+   * para el siguiente intento. Antes se borraba aunque fallara, y eso perdía
+   * trabajo del día. */
+  const subirLote = async (
+    clave: string,
+    enviar: (registros: any[]) => PromiseLike<{ error: any }>,
+    prepara: (registros: any[]) => any[] = (r) => r
+  ) => {
+    const pendientes = await leerBandeja(clave);
+    if (pendientes.length === 0) return;
+
+    const listos = prepara(pendientes);
+    if (listos.length === 0) {
+      await vaciarBandeja(clave); // Nada válido que subir (por ejemplo, solo temporales)
+      return;
+    }
+
+    const { error } = await enviar(listos);
+    if (error) {
+      console.log(`No se pudo subir ${clave}, se queda en la bandeja:`, error.message);
+      return;
+    }
+
+    await vaciarBandeja(clave);
+    subidos += listos.length;
+  };
+
+  /* Sube uno por uno (para lo que lleva archivo). Los que fallan SE QUEDAN en
+   * la bandeja; solo se borran los que sí subieron. */
+  const subirUnoPorUno = async (clave: string, procesar: (registro: any) => Promise<void>) => {
+    const pendientes = await leerBandeja(clave);
+    if (pendientes.length === 0) return;
+
+    const fallidos: any[] = [];
+    for (const registro of pendientes) {
+      try {
+        await procesar(registro);
+        subidos += 1;
+      } catch (error) {
+        console.log(`Registro de ${clave} no subió, se queda en la bandeja:`, error);
+        fallidos.push(registro);
+      }
+    }
+
+    await reemplazarBandeja(clave, fallidos);
+  };
 
   try {
     // --- A. BITÁCORAS ---
-    const pendingLogsData = await Almacen.getItem('@bandeja_salida_logs');
-    if (pendingLogsData) {
-      const logsPendientes = JSON.parse(pendingLogsData);
-      if (logsPendientes.length > 0) {
-        const { error } = await supabase.from('logs').upsert(logsPendientes, { onConflict: 'local_uuid' });
-        if (!error) { await Almacen.removeItem('@bandeja_salida_logs'); huboSincronizacion = true; }
-      }
-    }
+    await subirLote(BANDEJAS.bitacora, (registros) =>
+      supabase.from('logs').upsert(registros, { onConflict: 'local_uuid' })
+    );
 
-    // --- B. GASTOS ---
-    const pendingInvData = await Almacen.getItem('@bandeja_salida_inventario');
-    if (pendingInvData) {
-      const invPendientes = JSON.parse(pendingInvData);
-      if (invPendientes.length > 0) {
-        const { error } = await supabase.from('inventory').upsert(invPendientes, { onConflict: 'local_uuid' });
-        if (!error) { await Almacen.removeItem('@bandeja_salida_inventario'); huboSincronizacion = true; }
-      }
-    }
+    // --- B. GASTOS (INVENTARIO / DESTAJO) ---
+    await subirLote(BANDEJAS.inventario, (registros) =>
+      supabase.from('inventory').upsert(registros, { onConflict: 'local_uuid' })
+    );
 
     // --- C. TRABAJADORES NUEVOS ---
-    const pendingWorkersData = await Almacen.getItem('@bandeja_salida_lista');
-    if (pendingWorkersData) {
-      const workersPendientes = JSON.parse(pendingWorkersData);
-      if (workersPendientes.length > 0) {
-        const { error } = await supabase.from('workers').upsert(workersPendientes, { onConflict: 'local_uuid' });
-        if (!error) { await Almacen.removeItem('@bandeja_salida_lista'); huboSincronizacion = true; }
+    await subirLote(BANDEJAS.trabajadores, (registros) =>
+      supabase.from('workers').upsert(registros, { onConflict: 'local_uuid' })
+    );
+
+    // --- D. ASISTENCIA Y NÓMINA ---
+    // Los trabajadores todavía sin id real (temp_) no se pueden subir aún.
+    await subirLote(
+      BANDEJAS.nomina,
+      (registros) => supabase.from('payroll_records').upsert(registros, { onConflict: 'worker_id,week_start' }),
+      (registros) => registros.filter((r: any) => !String(r.worker_id).startsWith('temp_'))
+    );
+
+    // --- E. INGRESOS DE OBRA (FONDEOS) ---
+    // Sin columna local_uuid en la tabla: por eso va uno por uno y solo se
+    // borra de la bandeja el que confirmó, para no duplicar depósitos.
+    await subirUnoPorUno(BANDEJAS.ingresos, async (ingreso) => {
+      const { local_uuid, ...datos } = ingreso;
+      const { error } = await supabase.from('ingresos_obra').insert([datos]);
+      if (error) throw error;
+    });
+
+    // --- F. PLANOS Y DOCUMENTOS PESADOS ---
+    await subirUnoPorUno(BANDEJAS.planos, async (doc) => {
+      const base64Pdf = await FileSystem.readAsStringAsync(doc.local_file_uri, { encoding: 'base64' });
+      const arrayBuffer = decode(base64Pdf);
+      const fileName = `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.pdf`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('planos_obras')
+        .upload(fileName, arrayBuffer, { contentType: 'application/pdf' });
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage.from('planos_obras').getPublicUrl(fileName);
+
+      const { error: dbError } = await supabase.from('planos').insert([
+        { title: doc.title, category: doc.category, version: doc.version, file_url: publicUrlData.publicUrl, project_id: doc.project_id }
+      ]);
+      if (dbError) throw dbError;
+
+      // Ya subió: liberamos el espacio del teléfono
+      await FileSystem.deleteAsync(doc.local_file_uri).catch(() => {});
+    });
+
+    // --- G. CAJA CHICA (EGRESOS) ---
+    await subirUnoPorUno(BANDEJAS.caja, async (gasto) => {
+      // Se conservan TODOS los campos del gasto (nota, encargado, desglose...).
+      // Solo quitamos lo que es puramente local.
+      const { foto_local_uri, ...datos } = gasto;
+      let fotoUrl = gasto.foto_ticket ?? null;
+
+      if (foto_local_uri) {
+        // Bucket 'tickets_caja_chica': es el que existe en Supabase.
+        // El guardado con internet apuntaba a 'tickets', que no existe, y por
+        // eso las fotos de ticket nunca se guardaban.
+        const fileName = `ticket_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
+        const formData = new FormData();
+        formData.append('file', { uri: foto_local_uri, name: fileName, type: 'image/jpeg' } as any);
+        const { error: upErr } = await supabase.storage.from('tickets_caja_chica').upload(fileName, formData as any);
+        if (upErr) throw upErr; // Si la foto falla, el gasto se queda para reintentar completo
+        fotoUrl = supabase.storage.from('tickets_caja_chica').getPublicUrl(fileName).data.publicUrl;
       }
+
+      const { error } = await supabase
+        .from('caja_chica')
+        .upsert([{ ...datos, foto_ticket: fotoUrl }], { onConflict: 'local_uuid' });
+      if (error) throw error;
+    });
+
+    if (subidos > 0) {
+      setLastSync(Date.now());
+      Aviso.alert(
+        'Sincronización exitosa',
+        `Se subieron ${subidos} ${subidos === 1 ? 'registro guardado' : 'registros guardados'} sin conexión.`
+      );
     }
-
-    // El resto queda igual desde D en adelante...
-      // --- D. ASISTENCIA Y NÓMINA ---
-      const pendingPayrollData = await Almacen.getItem('@bandeja_salida_nomina');
-      if (pendingPayrollData) {
-        const payrollPendientes = JSON.parse(pendingPayrollData);
-        if (payrollPendientes.length > 0) {
-          const validPayroll = payrollPendientes.filter((r: any) => !r.worker_id.startsWith('temp_'));
-          if (validPayroll.length > 0) {
-            const { error } = await supabase.from('payroll_records').upsert(validPayroll, { onConflict: 'worker_id,week_start' });
-            if (!error) { await Almacen.removeItem('@bandeja_salida_nomina'); huboSincronizacion = true; }
-          } else {
-            await Almacen.removeItem('@bandeja_salida_nomina');
-          }
-        }
-      }
-
-      // --- 🏗️ E. NUEVO: SUBIR DOCUMENTOS Y PLANOS PESADOS DESDE EL DISCO ---
-      const pendingPlanosData = await Almacen.getItem('@bandeja_salida_planos');
-      if (pendingPlanosData) {
-        const planosPendientes = JSON.parse(pendingPlanosData);
-        if (planosPendientes.length > 0) {
-          console.log(`📡 Sincronizando ${planosPendientes.length} documentos PDF...`);
-          
-          for (const doc of planosPendientes) {
-            try {
-              // 1. Buscamos el archivo físico guardado en el celular y lo leemos
-              const base64Pdf = await FileSystem.readAsStringAsync(doc.local_file_uri, { encoding: 'base64' });
-              const arrayBuffer = decode(base64Pdf);
-              const fileName = `doc_${Date.now()}.pdf`;
-
-              // 2. Lo subimos a Supabase Storage
-              const { error: uploadError } = await supabase.storage
-                .from('planos_obras')
-                .upload(fileName, arrayBuffer, { contentType: 'application/pdf' });
-
-              if (uploadError) throw uploadError;
-
-              // 3. Obtenemos su URL pública
-              const { data: publicUrlData } = supabase.storage.from('planos_obras').getPublicUrl(fileName);
-
-              // 4. Insertamos el renglón en la tabla planos
-              const { error: dbError } = await supabase.from('planos').insert([
-                { title: doc.title, category: doc.category, version: doc.version, file_url: publicUrlData.publicUrl, project_id: doc.project_id }
-              ]);
-
-              if (dbError) throw dbError;
-
-              // 5. Limpieza: Borramos el PDF del teléfono para liberar espacio
-              await FileSystem.deleteAsync(doc.local_file_uri, { immigrant: true } as any).catch(() => {});
-
-            } catch (docError) {
-              console.error("Fallo subiendo plano individual, se queda en cola:", docError);
-            }
-          }
-          
-          // Vaciamos la bandeja completa de planos
-          await Almacen.removeItem('@bandeja_salida_planos');
-          huboSincronizacion = true;
-        }
-        // --- F. CAJA CHICA (Gastos Menores) ---
-      const pendingCajaData = await Almacen.getItem('@bandeja_salida_caja');
-      if (pendingCajaData) {
-        const cajaPendientes = JSON.parse(pendingCajaData);
-        if (cajaPendientes.length > 0) {
-          console.log("📡 Sincronizando Caja Chica...");
-          for (const gasto of cajaPendientes) {
-            try {
-              let fotoUrl = null;
-              // Si hay foto local, la subimos primero
-              if (gasto.foto_local_uri) {
-                const fileName = `ticket_${Date.now()}.jpg`;
-                const formData = new FormData();
-                formData.append('file', { uri: gasto.foto_local_uri, name: fileName, type: 'image/jpeg' } as any);
-                const { error: upErr } = await supabase.storage.from('tickets_caja_chica').upload(fileName, formData);
-                if (!upErr) {
-                  fotoUrl = supabase.storage.from('tickets_caja_chica').getPublicUrl(fileName).data.publicUrl;
-                }
-              }
-
-              // Insertamos en la tabla
-              await supabase.from('caja_chica').upsert([{
-                project_id: gasto.project_id,
-                monto: gasto.monto,
-                concepto: gasto.concepto,
-                foto_ticket: fotoUrl,
-                fecha: gasto.fecha,
-                local_uuid: gasto.local_uuid,
-              }], { onConflict: 'local_uuid' });
-
-            } catch (err) { console.log("Gasto fallido:", err); }
-          }
-          await Almacen.removeItem('@bandeja_salida_caja');
-          huboSincronizacion = true;
-        }
-      }
-      }
-
-      // Si subió cosas de cualquier módulo, tocamos el timbre y avisamos
-      if (huboSincronizacion) {
-        setLastSync(Date.now()); 
-        Alert.alert(
-          "Sincronización Exitosa", 
-          "Todos tus planos, reportes, gastos y nóminas creadas offline se han sincronizado con éxito."
-        );
-      }
-
-    } catch (error) {
-      console.error("Fallo general al procesar la cola offline:", error);
-    }
-  };
+  } catch (error) {
+    console.error('Fallo general al procesar la cola offline:', error);
+  }
+};
 
   return (
     <ProjectContext.Provider value={{ activeProject, setActiveProject, isOffline, lastSync }}>
       {children}
       
+      {/* Botón de refrescar: en web la pantalla no se recarga sola al volver a
+          ella, así que hay que poder pedir datos frescos a mano. */}
+      {!isOffline && hayQueRefrescar && (
+        <Pressable
+          onPress={refrescar}
+          disabled={refrescando}
+          style={({ pressed }) => [styles.botonRefrescar, pressed && { opacity: 0.7 }]}
+          accessibilityLabel="Actualizar datos de esta pantalla"
+        >
+          <Feather name="refresh-cw" size={16} color="#1A56DB" style={refrescando ? { opacity: 0.4 } : undefined} />
+        </Pressable>
+      )}
+
       {isOffline && (
         <View style={styles.offlineBanner}>
           <Feather name="wifi-off" size={14} color="#FFF" style={{ marginRight: 8 }} />
-          <Text style={styles.offlineText}>Sin conexión - Guardando localmente</Text>
+          <Text style={styles.offlineText}>
+            {pendientes > 0
+              ? `Sin conexión - ${pendientes} ${pendientes === 1 ? 'registro guardado' : 'registros guardados'}`
+              : 'Sin conexión - Guardando localmente'}
+          </Text>
+        </View>
+      )}
+
+      {/* Con internet pero con cosas sin subir: hay que decirlo, no esconderlo.
+          Si esto se queda fijo, algo está fallando al subir. */}
+      {!isOffline && pendientes > 0 && (
+        <View style={[styles.offlineBanner, styles.pendingBanner]}>
+          <Feather name="upload-cloud" size={14} color="#FFF" style={{ marginRight: 8 }} />
+          <Text style={styles.offlineText}>
+            {pendientes} {pendientes === 1 ? 'registro pendiente' : 'registros pendientes'} por subir
+          </Text>
         </View>
       )}
     </ProjectContext.Provider>
@@ -215,5 +304,23 @@ export function useProject() {
 
 const styles = StyleSheet.create({
   offlineBanner: { position: 'absolute', top: Platform.OS === 'ios' ? 50 : 40, alignSelf: 'center', backgroundColor: '#D97706', paddingVertical: 8, paddingHorizontal: 20, borderRadius: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', zIndex: 9999, elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5 },
-  offlineText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' }
+  offlineText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
+  pendingBanner: { backgroundColor: '#1A56DB' },
+  botonRefrescar: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 52 : 42,
+    right: 14,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9998,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+  }
 });

@@ -9,6 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Stack, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { supabase } from '../lib/supabase';
 
@@ -34,7 +35,7 @@ export function LogForm() {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permiso requerido', 'Se requiere permiso para acceder a la cámara.');
+        Aviso.alert('Permiso requerido', 'Se requiere permiso para acceder a la cámara.');
         return;
       }
 
@@ -47,7 +48,7 @@ export function LogForm() {
         setImageUris(prev => [...prev, result.assets[0].uri]);
       }
     } catch (error) {
-      Alert.alert("Error", "No se pudo abrir la cámara.");
+      Aviso.alert("Error", "No se pudo abrir la cámara.");
     }
   };
 
@@ -56,7 +57,7 @@ export function LogForm() {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permiso requerido', 'Se requiere permiso para acceder a la galería.');
+        Aviso.alert('Permiso requerido', 'Se requiere permiso para acceder a la galería.');
         return;
       }
 
@@ -70,13 +71,13 @@ export function LogForm() {
         setImageUris(prev => [...prev, result.assets[0].uri]);
       }
     } catch (error) {
-      Alert.alert("Error", "No se pudo abrir la galería de imágenes.");
+      Aviso.alert("Error", "No se pudo abrir la galería de imágenes.");
     }
   };
 
   // 🟢 COMPORTAMIENTO MULTIMEDIA: SE DESPLIEGA MENÚ SELECCIONABLE HÍBRIDO
   const handleMediaMenuTrigger = () => {
-    Alert.alert(
+    Aviso.alert(
       "Adjuntar Evidencia",
       "Selecciona el origen de la fotografía para la bitácora:",
       [
@@ -112,7 +113,7 @@ export function LogForm() {
     if (!isFormValid) return;
 
     if (!projectId) {
-      Alert.alert('Error', 'No se detectó ninguna obra activa.');
+      Aviso.alert('Error', 'No se detectó ninguna obra activa.');
       return;
     }
 
@@ -145,10 +146,10 @@ export function LogForm() {
         outbox.push(offlineLog);
         await Almacen.setItem('@bandeja_salida_logs', JSON.stringify(outbox));
 
-        Alert.alert("📴 Guardado Offline", "Tu reporte se guardó en el celular. Se subirá automáticamente cuando vuelva el internet.");
+        Aviso.alert("📴 Guardado Offline", "Tu reporte se guardó en el celular. Se subirá automáticamente cuando vuelva el internet.");
         router.replace('/(tabs)/bitacora');
       } catch (error) {
-        Alert.alert("Error", "Error guardando offline");
+        Aviso.alert("Error", "Error guardando offline");
       } finally {
         setIsSavingInProgress(false);
       }
@@ -172,7 +173,7 @@ export function LogForm() {
         }
       } catch (error: any) {
         setIsSavingInProgress(false);
-        return Alert.alert('Error Storage', `Error al subir imagen: ${error.message}`);
+        return Aviso.alert('Error Storage', `Error al subir imagen: ${error.message}`);
       }
     }
 
@@ -189,10 +190,10 @@ export function LogForm() {
       
       if (error) throw error;
       
-      Alert.alert('¡Éxito!', 'Guardado con éxito en la nube'); 
+      Aviso.alert('¡Éxito!', 'Guardado con éxito en la nube'); 
       router.replace('/(tabs)/bitacora'); 
     } catch (error: any) {
-      Alert.alert('Error Database', `Error al guardar: ${error.message}`);
+      Aviso.alert('Error Database', `Error al guardar: ${error.message}`);
     } finally {
       setIsSavingInProgress(false);
     }

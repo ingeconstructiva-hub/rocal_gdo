@@ -8,6 +8,8 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useRefrescar } from '../../lib/refrescar';
+import { Aviso } from '../../lib/aviso';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
 import { supabase } from '../../lib/supabase';
@@ -87,6 +89,8 @@ export default function BitacoraScreen() {
       }
     }, [activeProject, isOffline])
   );
+
+  useRefrescar(() => fetchLogs());
 
   const fetchLogs = async () => {
     if (!activeProject?.id) return;
@@ -188,7 +192,7 @@ export default function BitacoraScreen() {
   const pickImageFromGallery = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
-      Alert.alert("Permiso requerido", "Necesitamos acceso a tu galería para subir evidencias.");
+      Aviso.alert("Permiso requerido", "Necesitamos acceso a tu galería para subir evidencias.");
       return;
     }
 
@@ -206,7 +210,7 @@ export default function BitacoraScreen() {
   const takePhotoWithCamera = async () => {
     const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
     if (!permissionResult.granted) {
-      Alert.alert("Permiso requerido", "Necesitamos acceso a la cámara para tomar evidencia.");
+      Aviso.alert("Permiso requerido", "Necesitamos acceso a la cámara para tomar evidencia.");
       return;
     }
 
@@ -222,7 +226,7 @@ export default function BitacoraScreen() {
 
   const uploadImageToSupabase = async (fileUri: string) => {
     if (isOffline) {
-      Alert.alert("Modo Offline", "Las fotos nuevas solo pueden cargarse con conexión a internet estable.");
+      Aviso.alert("Modo Offline", "Las fotos nuevas solo pueden cargarse con conexión a internet estable.");
       return;
     }
     setIsUploadingPhoto(true);
@@ -245,7 +249,7 @@ export default function BitacoraScreen() {
       setEditPhotosUrls(prev => [...prev, publicUrlData.publicUrl]);
 
     } catch (e: any) {
-      Alert.alert("Error de subida", e.message);
+      Aviso.alert("Error de subida", e.message);
     } finally {
       setIsUploadingPhoto(false);
     }
@@ -278,9 +282,9 @@ export default function BitacoraScreen() {
       setIsEditModalOpen(false);
       setEditLogId(null);
       setSelectedLog(null);
-      Alert.alert("¡Éxito!", "La entrada y toda su evidencia fotográfica han sido corregidas.");
+      Aviso.alert("¡Éxito!", "La entrada y toda su evidencia fotográfica han sido corregidas.");
     } catch (e: any) {
-      Alert.alert("Error al actualizar", e.message);
+      Aviso.alert("Error al actualizar", e.message);
     } fill_salary: {
       setIsSaving(false);
     }
@@ -288,7 +292,7 @@ export default function BitacoraScreen() {
 
   const handleDeleteLog = () => {
     if (!selectedLog) return;
-    Alert.alert(
+    Aviso.alert(
       "Eliminar Entrada",
       "¿Estás completamente seguro de borrar este reporte de la bitácora de obra permanentemente?",
       [
@@ -304,9 +308,9 @@ export default function BitacoraScreen() {
               setLogs(prev => prev.filter(l => l.id !== selectedLog.id));
               setIsDetailModalOpen(false);
               setSelectedLog(null);
-              Alert.alert("Eliminado", "La nota se removió de la base de datos.");
+              Aviso.alert("Eliminado", "La nota se removió de la base de datos.");
             } catch (e: any) {
-              Alert.alert("Error al eliminar", e.message);
+              Aviso.alert("Error al eliminar", e.message);
             }
           }
         }
@@ -326,7 +330,7 @@ export default function BitacoraScreen() {
       });
     } catch (error) {
       console.error("Error al exportar:", error);
-      Alert.alert("Error", "Ocurrió un problema al generar el documento.");
+      Aviso.alert("Error", "Ocurrió un problema al generar el documento.");
     } finally {
       setIsExporting(false);
     }
@@ -334,11 +338,11 @@ export default function BitacoraScreen() {
 
   const handleExportPDF = async () => {
     if (logs.length === 0) {
-      Alert.alert("Sin datos", "No hay entradas en la bitácora para exportar.");
+      Aviso.alert("Sin datos", "No hay entradas en la bitácora para exportar.");
       return;
     }
     if (isOffline) {
-      Alert.alert(
+      Aviso.alert(
         "Modo Lectura Activo",
         "El PDF se generará con tus textos y notas de campo sin imágenes.\n\n¿Deseas generarlo?",
         [

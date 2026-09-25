@@ -7,6 +7,8 @@ import * as Print from 'expo-print';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useRefrescar } from '../../lib/refrescar';
+import { Aviso } from '../../lib/aviso';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
 import { supabase } from '../../lib/supabase';
@@ -57,6 +59,8 @@ export default function DocumentosScreen() {
     await loadDocumentos();
     setRefreshing(false);
   }, [activeProject, isOffline]);
+
+  useRefrescar(() => loadDocumentos());
 
   const loadDocumentos = async () => {
     const projectId = activeProject?.id;
@@ -117,7 +121,7 @@ export default function DocumentosScreen() {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permiso denegado', 'Se requiere acceso a la cámara.');
+        Aviso.alert('Permiso denegado', 'Se requiere acceso a la cámara.');
         return;
       }
 
@@ -130,7 +134,7 @@ export default function DocumentosScreen() {
         setScannedImages(prev => [...prev, result.assets[0].uri]);
       }
     } catch (error) {
-      Alert.alert("Error", "No se pudo abrir la cámara.");
+      Aviso.alert("Error", "No se pudo abrir la cámara.");
     }
   };
 
@@ -141,7 +145,7 @@ export default function DocumentosScreen() {
   const handleSaveToDatabase = async () => {
     if (scannedImages.length === 0) return;
     if (!docTitle.trim()) {
-      Alert.alert("Falta título", "Por favor ingresa un nombre para identificar este documento.");
+      Aviso.alert("Falta título", "Por favor ingresa un nombre para identificar este documento.");
       return;
     }
     
@@ -194,7 +198,7 @@ export default function DocumentosScreen() {
         outbox.push(localDocData);
         await Almacen.setItem('@bandeja_salida_planos', JSON.stringify(outbox));
 
-        Alert.alert("Guardado Offline", "El documento PDF se guardó localmente. Se subirá automáticamente al recuperar internet.");
+        Aviso.alert("Guardado Offline", "El documento PDF se guardó localmente. Se subirá automáticamente al recuperar internet.");
         setScannedImages([]);
         setDocTitle('');
         setDocCategory('Plano');
@@ -222,7 +226,7 @@ export default function DocumentosScreen() {
 
       if (dbError) throw dbError;
 
-      Alert.alert("¡Éxito!", "Documento generado y guardado en la nube.");
+      Aviso.alert("¡Éxito!", "Documento generado y guardado en la nube.");
       setScannedImages([]);
       setDocTitle('');
       setDocCategory('Plano'); 
@@ -230,7 +234,7 @@ export default function DocumentosScreen() {
       loadDocumentos(); 
 
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      Aviso.alert("Error", error.message);
     } finally {
       setIsUploading(false);
     }
@@ -241,21 +245,21 @@ export default function DocumentosScreen() {
     try {
       await Linking.openURL(url);
     } catch (error) {
-      Alert.alert("Error", "No se pudo abrir el documento.");
+      Aviso.alert("Error", "No se pudo abrir el documento.");
     }
   };
 
   const handleDeleteDocument = (id: any, fileUrl: string) => {
     if (typeof id === 'string' && id.startsWith('temp_')) {
-      Alert.alert("Modo Offline", "No puedes eliminar documentos en espera de sincronización hasta volver a estar online.");
+      Aviso.alert("Modo Offline", "No puedes eliminar documentos en espera de sincronización hasta volver a estar online.");
       return;
     }
     if (isOffline) {
-      Alert.alert("Sin Conexión", "No puedes eliminar documentos mientras estés offline.");
+      Aviso.alert("Sin Conexión", "No puedes eliminar documentos mientras estés offline.");
       return;
     }
 
-    Alert.alert(
+    Aviso.alert(
       "Eliminar Documento",
       "¿Estás seguro de que quieres eliminar este archivo permanentemente?",
       [
@@ -276,7 +280,7 @@ export default function DocumentosScreen() {
               }
               loadDocumentos(); 
             } catch (error: any) {
-              Alert.alert("Error", error.message);
+              Aviso.alert("Error", error.message);
             }
           } 
         }

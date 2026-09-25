@@ -3,6 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Aviso } from '../lib/aviso';
 import { supabase } from '../lib/supabase';
 
 export interface UserProfile {
@@ -70,7 +71,7 @@ export default function AdminUsuariosScreen() {
   };
 
   const seleccionarImagen = (tipo: 'perfil' | 'ine') => {
-    Alert.alert(
+    Aviso.alert(
       "Subir Imagen",
       "Elige desde dónde quieres subir la foto",
       [
@@ -83,7 +84,7 @@ export default function AdminUsuariosScreen() {
 
   const abrirCamara = async (tipo: 'perfil' | 'ine') => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') { Alert.alert("Permiso Denegado", "Necesitamos acceso a la cámara."); return; }
+    if (status !== 'granted') { Aviso.alert("Permiso Denegado", "Necesitamos acceso a la cámara."); return; }
     
     const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.5 });
     if (!result.canceled) {
@@ -94,7 +95,7 @@ export default function AdminUsuariosScreen() {
 
   const abrirGaleria = async (tipo: 'perfil' | 'ine') => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { Alert.alert("Permiso Denegado", "Necesitamos acceso a la galería."); return; }
+    if (status !== 'granted') { Aviso.alert("Permiso Denegado", "Necesitamos acceso a la galería."); return; }
     
     const result = await ImagePicker.launchImageLibraryAsync({ 
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -109,7 +110,7 @@ export default function AdminUsuariosScreen() {
 
   const handleCrearUsuario = async () => {
     if (!fullName.trim() || !email.trim() || !password.trim()) {
-      Alert.alert("Campos incompletos", "Nombre, correo y contraseña son obligatorios.");
+      Aviso.alert("Campos incompletos", "Nombre, correo y contraseña son obligatorios.");
       return;
     }
     setIsSaving(true);
@@ -172,7 +173,7 @@ export default function AdminUsuariosScreen() {
         }
       }
 
-      Alert.alert(
+      Aviso.alert(
         "¡Usuario Creado!",
         `El perfil de ${fullName} se registró correctamente.${selectedProject ? ` Asignado a: ${nombreObra}.` : ''}`,
         [
@@ -182,7 +183,7 @@ export default function AdminUsuariosScreen() {
       );
 
     } catch (e: any) {
-      Alert.alert("Error", e.message);
+      Aviso.alert("Error", e.message);
     } finally {
       setIsSaving(false);
     }

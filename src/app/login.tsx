@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Aviso } from '../lib/aviso';
 import { supabase } from '../lib/supabase';
 
 export default function LoginScreen() {
@@ -13,7 +14,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert("Campos incompletos", "Por favor ingresa tu correo y contraseña.");
+      Aviso.alert("Campos incompletos", "Por favor ingresa tu correo y contraseña.");
       return;
     }
 
@@ -29,7 +30,7 @@ export default function LoginScreen() {
       router.replace('/proyectos');
 
     } catch (error: any) {
-      Alert.alert("Error de acceso", "Correo o contraseña incorrectos. Verifica tus datos.");
+      Aviso.alert("Error de acceso", "Correo o contraseña incorrectos. Verifica tus datos.");
     } finally {
       setLoading(false);
     }

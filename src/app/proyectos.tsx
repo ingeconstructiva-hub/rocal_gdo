@@ -11,6 +11,8 @@ import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useRefrescar } from '../lib/refrescar';
+import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
@@ -78,6 +80,8 @@ export default function ProyectosScreen() {
     if (data) setListaResidentes(data);
   };
 
+  useRefrescar(() => cargarProyectos());
+
   const cargarProyectos = async () => {
     try {
       setLoading(true);
@@ -139,7 +143,7 @@ export default function ProyectosScreen() {
       }
     } catch (error: any) {
       if (error.message !== 'Network request failed' && error.message !== 'Failed to fetch') {
-        Alert.alert("Error de Conexión", error.message);
+        Aviso.alert("Error de Conexión", error.message);
       }
     } finally {
       setLoading(false);
@@ -148,7 +152,7 @@ export default function ProyectosScreen() {
 
   const manejarRefreshManual = async () => {
     if (isOffline) {
-      Alert.alert("Modo Offline", "Conéctate a internet para sincronizar los cambios de la web.");
+      Aviso.alert("Modo Offline", "Conéctate a internet para sincronizar los cambios de la web.");
       return;
     }
     setIsRefreshing(true);
@@ -171,7 +175,7 @@ export default function ProyectosScreen() {
     try {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permiso denegado', 'No hay problema, puedes escribir la ubicación a mano.');
+        Aviso.alert('Permiso denegado', 'No hay problema, puedes escribir la ubicación a mano.');
         setIsGettingLocation(false);
         return;
       }
@@ -187,27 +191,27 @@ export default function ProyectosScreen() {
         const formattedAddress = `${address.street || ''} ${address.streetNumber || ''}, ${address.subregion || address.city || ''}, ${address.region || ''}`.trim();
         setNewProjectLocation(formattedAddress.replace(/^,|,$/g, '').trim());
       } else {
-        Alert.alert('Dirección no encontrada', 'Estamos en una zona sin registro.');
+        Aviso.alert('Dirección no encontrada', 'Estamos en una zona sin registro.');
       }
     } catch (error) {
-      Alert.alert('Error de GPS', 'No pudimos obtener tu ubicación actual.');
+      Aviso.alert('Error de GPS', 'No pudimos obtener tu ubicación actual.');
     } finally {
       setIsGettingLocation(false);
     }
   };
 
   const seleccionarFotoObra = () => {
-    Alert.alert("Foto de la Obra", "¿De dónde quieres subir la imagen?", [
+    Aviso.alert("Foto de la Obra", "¿De dónde quieres subir la imagen?", [
       { text: "Cancelar", style: "cancel" },
       { text: "Tomar Foto", onPress: async () => {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== 'granted') { Alert.alert("Permiso Denegado"); return; }
+        if (status !== 'granted') { Aviso.alert("Permiso Denegado"); return; }
         const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [16, 9], quality: 0.5 });
         if (!result.canceled) setFotoObra(result.assets[0].uri);
       }},
       { text: "Galería", onPress: async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') { Alert.alert("Permiso Denegado"); return; }
+        if (status !== 'granted') { Aviso.alert("Permiso Denegado"); return; }
         const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [16, 9], quality: 0.5 });
         if (!result.canceled) setFotoObra(result.assets[0].uri);
       }}
@@ -216,12 +220,12 @@ export default function ProyectosScreen() {
 
   const handleSaveProject = async () => {
     if (isOffline) {
-      Alert.alert("Modo Offline", "Necesitas conexión a internet para esta acción.");
+      Aviso.alert("Modo Offline", "Necesitas conexión a internet para esta acción.");
       return;
     }
 
     if (!newProjectName.trim() || !newProjectLocation.trim()) {
-      Alert.alert("Campos incompletos", "Por favor ingresa el nombre y la ubicación de la obra.");
+      Aviso.alert("Campos incompletos", "Por favor ingresa el nombre y la ubicación de la obra.");
       return;
     }
 
@@ -255,7 +259,7 @@ export default function ProyectosScreen() {
 
           finalFotoUrl = `https://ckvuwlcjlyzmxprwjyup.supabase.co/storage/v1/object/public/obras/${filename}`;
         } catch (error: any) {
-          Alert.alert("Error procesando imagen", error.message);
+          Aviso.alert("Error procesando imagen", error.message);
           finalFotoUrl = null;
         }
       }
@@ -273,7 +277,7 @@ export default function ProyectosScreen() {
       if (modalMode === 'edit' && editingProjectId) {
         const { error: updateError } = await supabase.from('projects').update(projectData).eq('id', editingProjectId);
         if (updateError) throw updateError;
-        Alert.alert("¡Éxito!", "La obra se ha actualizado correctamente.");
+        Aviso.alert("¡Éxito!", "La obra se ha actualizado correctamente.");
       } else {
         const { data: newProject, error: projectError } = await supabase.from('projects').insert([projectData]).select().single();
         if (projectError) throw projectError;
@@ -286,7 +290,7 @@ export default function ProyectosScreen() {
           if (residentAssignError) console.log("Error asignando residente:", residentAssignError);
         }
 
-        Alert.alert("¡Éxito!", "La obra se ha creado correctamente.");
+        Aviso.alert("¡Éxito!", "La obra se ha creado correctamente.");
       }
 
       limpiarFormulario();
@@ -294,7 +298,7 @@ export default function ProyectosScreen() {
       cargarProyectos();
 
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      Aviso.alert("Error", error.message);
     } finally {
       setIsSaving(false);
     }
@@ -353,7 +357,7 @@ export default function ProyectosScreen() {
   };
 
   const confirmarEliminar = (id: string) => {
-    Alert.alert("Confirmar Eliminación", "¿Estás seguro de eliminar esta obra? Todo su historial se borrará permanentemente.", [
+    Aviso.alert("Confirmar Eliminación", "¿Estás seguro de eliminar esta obra? Todo su historial se borrará permanentemente.", [
       { text: "Cancelar", style: "cancel" },
       { text: "Eliminar", style: "destructive", onPress: async () => {
         try {
@@ -361,14 +365,14 @@ export default function ProyectosScreen() {
           if (error) throw error;
           cargarProyectos();
         } catch (e: any) {
-          Alert.alert("Error al eliminar", e.message);
+          Aviso.alert("Error al eliminar", e.message);
         }
       }}
     ]);
   };
 
   const finalizarObra = async (proyecto: any) => {
-    Alert.alert("Cerrar Obra", "¿Generar reporte de cierre y marcar obra como Finalizada?", [
+    Aviso.alert("Cerrar Obra", "¿Generar reporte de cierre y marcar obra como Finalizada?", [
       { text: "Cancelar", style: "cancel" },
       { text: "Confirmar", onPress: async () => {
         try {
@@ -381,10 +385,10 @@ export default function ProyectosScreen() {
           if (backupError) throw backupError;
           const { error: updateError } = await supabase.from('projects').update({ status: 'finalizada' }).eq('id', proyecto.id);
           if (updateError) throw updateError;
-          Alert.alert("¡Obra Finalizada!", "Reporte generado y archivado con éxito.");
+          Aviso.alert("¡Obra Finalizada!", "Reporte generado y archivado con éxito.");
           cargarProyectos();
         } catch(e:any) {
-          Alert.alert("Error", e.message);
+          Aviso.alert("Error", e.message);
         }
       }}
     ]);
@@ -392,12 +396,12 @@ export default function ProyectosScreen() {
 
   const handleUnirseObra = async (codeToUse: string) => {
     if (isOffline) {
-      Alert.alert("Modo Offline", "Necesitas conexión a internet para unirte a un proyecto.");
+      Aviso.alert("Modo Offline", "Necesitas conexión a internet para unirte a un proyecto.");
       return;
     }
     const finalCode = codeToUse.trim().toUpperCase();
     if (!finalCode) {
-      Alert.alert("Código vacío", "Por favor ingresa un código válido.");
+      Aviso.alert("Código vacío", "Por favor ingresa un código válido.");
       return;
     }
     setIsJoining(true);
@@ -408,7 +412,7 @@ export default function ProyectosScreen() {
         .eq('invite_code', finalCode)
         .single();
       if (fetchErr || !proj) {
-        Alert.alert("Código inválido", "No se encontró ninguna obra con este código. Verifica que esté bien escrito.");
+        Aviso.alert("Código inválido", "No se encontró ninguna obra con este código. Verifica que esté bien escrito.");
         setIsJoining(false);
         return;
       }
@@ -420,19 +424,19 @@ export default function ProyectosScreen() {
         .insert([{ user_id: userId, project_id: proj.id, role: roleToAssign }]);
       if (joinErr) {
         if (joinErr.code === '23505') {
-          Alert.alert("Aviso", "Ya eres parte de esta obra.");
+          Aviso.alert("Aviso", "Ya eres parte de esta obra.");
         } else {
           throw joinErr;
         }
       } else {
-        Alert.alert("¡Éxito!", `Te has unido a la obra: ${proj.name}`);
+        Aviso.alert("¡Éxito!", `Te has unido a la obra: ${proj.name}`);
         setInviteCode('');
         setIsJoinModalVisible(false);
         setIsScanning(false);
         cargarProyectos();
       }
     } catch (err: any) {
-      Alert.alert("Error", err.message);
+      Aviso.alert("Error", err.message);
     } finally {
       setIsJoining(false);
     }
@@ -442,7 +446,7 @@ export default function ProyectosScreen() {
     if (!permission?.granted) {
       const response = await requestPermission();
       if (!response.granted) {
-        Alert.alert("Permiso denegado", "Necesitamos acceso a la cámara para escanear el QR.");
+        Aviso.alert("Permiso denegado", "Necesitamos acceso a la cámara para escanear el QR.");
         return;
       }
     }
@@ -571,14 +575,14 @@ export default function ProyectosScreen() {
       <View style={styles.fabContainer}>
         <TouchableOpacity
           style={[styles.fab, { backgroundColor: isOffline ? '#9CA3AF' : '#059669', marginBottom: profile?.role === 'admin' ? 15 : 0 }]}
-          onPress={() => isOffline ? Alert.alert("Modo Offline", "Conéctate a internet para unirte a una obra.") : setIsJoinModalVisible(true)}
+          onPress={() => isOffline ? Aviso.alert("Modo Offline", "Conéctate a internet para unirte a una obra.") : setIsJoinModalVisible(true)}
         >
           <Feather name="camera" size={24} color="#FFF" />
         </TouchableOpacity>
         {profile?.role === 'admin' && (
           <TouchableOpacity
             style={[styles.fab, { backgroundColor: isOffline ? '#9CA3AF' : '#2563EB' }]}
-            onPress={() => isOffline ? Alert.alert("Modo Offline", "Conéctate a internet para crear obras.") : iniciarCreacion()}
+            onPress={() => isOffline ? Aviso.alert("Modo Offline", "Conéctate a internet para crear obras.") : iniciarCreacion()}
           >
             <Feather name="plus" size={28} color="#FFF" />
           </TouchableOpacity>
