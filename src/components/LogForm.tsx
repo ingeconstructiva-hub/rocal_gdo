@@ -9,6 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Stack, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { guardarArchivoLocal, leerComoBase64 } from '../lib/archivos';
 import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { supabase } from '../lib/supabase';
@@ -122,21 +123,22 @@ export function LogForm() {
     // 🔴 SI NO HAY INTERNET: MODO BANDEJA DE SALIDA (GUARDA LOCAL)
     if (isOffline) {
       try {
-        let localBase64Photos: string[] = [];
-        
+        // Las fotos se guardan aparte, como archivos. Antes se metían como
+        // texto base64 dentro del propio registro, y así terminaban guardadas
+        // dentro de la columna photo_url de la base de datos en vez de subirse
+        // al almacén de archivos.
+        const fotosLocales: string[] = [];
         for (const imageUri of imageUris) {
-          const base64 = await FileSystem.readAsStringAsync(imageUri, { encoding: 'base64' });
-          localBase64Photos.push(`data:image/jpeg;base64,${base64}`);
+          fotosLocales.push(await guardarArchivoLocal(imageUri));
         }
-        
-        const photoPayload = localBase64Photos.length === 0 ? null : JSON.stringify(localBase64Photos);
 
         const offlineLog = {
           project_id: projectId,
           description: note,
           category,
           sector,
-          photo_url: photoPayload,
+          photo_url: null,
+          fotos_locales: fotosLocales,
           created_at: new Date().toISOString(),
           local_uuid: Crypto.randomUUID()
         };
@@ -161,7 +163,8 @@ export function LogForm() {
     if (imageUris.length > 0) {
       try {
         for (const imageUri of imageUris) {
-          const base64 = await FileSystem.readAsStringAsync(imageUri, { encoding: 'base64' });
+          // leerComoBase64 funciona igual en celular y en navegador.
+          const base64 = await leerComoBase64(imageUri);
           const arrayBuffer = decode(base64);
           const fileName = `foto_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
           

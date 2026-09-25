@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SkeletonLista } from '../components/Skeleton';
+import { subirArchivo } from '../lib/subidas';
 import { Aviso } from '../lib/aviso';
 import { supabase } from '../lib/supabase';
 
@@ -121,19 +122,11 @@ export default function AdminUsuariosScreen() {
       let fotoPerfilUrl = null;
 
       if (fotoIne) {
-        const filename = `ine_${Date.now()}.jpg`;
-        const formData = new FormData();
-        formData.append('file', { uri: fotoIne, name: filename, type: 'image/jpeg' } as any);
-        const { error: err } = await supabase.storage.from('identificaciones').upload(`ines/${filename}`, formData as any);
-        if (!err) fotoIneUrl = supabase.storage.from('identificaciones').getPublicUrl(`ines/${filename}`).data.publicUrl;
+        fotoIneUrl = await subirArchivo(fotoIne, 'identificaciones', { carpeta: 'ines', prefijo: 'ine' });
       }
 
       if (fotoPerfil) {
-        const filename = `perfil_${Date.now()}.jpg`;
-        const formData = new FormData();
-        formData.append('file', { uri: fotoPerfil, name: filename, type: 'image/jpeg' } as any);
-        const { error: err } = await supabase.storage.from('identificaciones').upload(`perfiles/${filename}`, formData as any);
-        if (!err) fotoPerfilUrl = supabase.storage.from('identificaciones').getPublicUrl(`perfiles/${filename}`).data.publicUrl;
+        fotoPerfilUrl = await subirArchivo(fotoPerfil, 'identificaciones', { carpeta: 'perfiles', prefijo: 'perfil' });
       }
 
       const { data: newUserId, error: rpcError } = await supabase.rpc('crear_usuario_desde_admin', {

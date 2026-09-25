@@ -30,6 +30,8 @@ import {
 } from 'react-native';
 import { useRefrescar } from '../lib/refrescar';
 import { SkeletonLista } from '../components/Skeleton';
+import { guardarArchivoLocal } from '../lib/archivos';
+import { subirArchivo } from '../lib/subidas';
 import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
@@ -402,14 +404,7 @@ export default function CajaChicaScreen() {
           // Bucket 'tickets_caja_chica'. Antes decía 'tickets', que no existe en
           // Supabase, y como el error se ignoraba, el gasto se guardaba sin foto
           // sin avisarle a nadie.
-          const filename = `ticket_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
-          const formData = new FormData();
-          formData.append('file', { uri: fotoTicket, name: filename, type: 'image/jpeg' } as any);
-          const { error: uploadError } = await supabase.storage.from('tickets_caja_chica').upload(filename, formData as any);
-          if (uploadError) throw new Error(`No se pudo subir la foto del ticket: ${uploadError.message}`);
-
-          const { data: urlData } = supabase.storage.from('tickets_caja_chica').getPublicUrl(filename);
-          fotoUrl = urlData.publicUrl;
+          fotoUrl = await subirArchivo(fotoTicket, 'tickets_caja_chica', { prefijo: 'ticket' });
         }
 
         const nuevoGasto = { ...baseEgreso, project_id: pid, foto_ticket: fotoUrl, fecha: new Date().toISOString() };
@@ -417,9 +412,13 @@ export default function CajaChicaScreen() {
         if (isOffline) {
           // Sin internet va a la bandeja de salida. La foto se queda apuntada
           // como archivo local y se sube junto con el gasto al volver la señal.
+          // Guardamos los bytes de la foto, no su dirección temporal: en el
+          // navegador esa dirección deja de servir al recargar la página.
+          const fotoGuardada = fotoTicket ? await guardarArchivoLocal(fotoTicket) : null;
+
           await guardarEnBandeja('@bandeja_salida_caja', {
             ...nuevoGasto,
-            foto_local_uri: fotoTicket || null,
+            foto_local_uri: fotoGuardada,
             local_uuid: Crypto.randomUUID(),
           });
         } else {

@@ -1,10 +1,10 @@
 import { Feather } from '@expo/vector-icons';
 import Almacen from '../lib/almacen';
+import { borrarArchivoLocal } from '../lib/archivos';
+import { subirArchivo } from '../lib/subidas';
 import { dispararRefresco, escucharSiHayQueRefrescar } from '../lib/refrescar';
 import { BANDEJAS, contarPendientes, leerBandeja, reemplazarBandeja, vaciarBandeja } from '../lib/bandeja';
 import NetInfo from '@react-native-community/netinfo';
-import { decode } from 'base64-arraybuffer'; // <-- NUEVA CAPACIDAD BINARIA
-import * as FileSystem from 'expo-file-system/legacy'; // <-- NUEVA CAPACIDAD BINARIA
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Aviso } from '../lib/aviso';
@@ -109,6 +109,24 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isOffline]);
 
+/* Sube una foto al almacén de archivos y devuelve su dirección pública.
+ * Recibe una referencia local (archivo del celular o guardado del navegador)
+ * o un texto base64 ya listo. */
+const subirFoto = (referencia: string, bucket: string): Promise<string> =>
+  subirArchivo(referencia, bucket, { prefijo: 'foto' });
+
+/* Registros viejos guardaban las fotos como texto base64 dentro de photo_url.
+ * Las sacamos para poder subirlas como archivos. */
+const leerFotosEmbebidas = (photoUrl: any): string[] => {
+  if (typeof photoUrl !== 'string' || !photoUrl.startsWith('[')) return [];
+  try {
+    const lista = JSON.parse(photoUrl);
+    return Array.isArray(lista) ? lista.filter((u: any) => typeof u === 'string' && u.startsWith('data:')) : [];
+  } catch {
+    return [];
+  }
+};
+
 const sincronizarBandejasDeSalida = async () => {
   let subidos = 0;
 
@@ -162,9 +180,36 @@ const sincronizarBandejasDeSalida = async () => {
 
   try {
     // --- A. BITÁCORAS ---
-    await subirLote(BANDEJAS.bitacora, (registros) =>
-      supabase.from('logs').upsert(registros, { onConflict: 'local_uuid' })
-    );
+    // Van una por una porque pueden traer fotos que hay que subir primero al
+    // almacén de archivos. Si una falla, se queda en la bandeja.
+    await subirUnoPorUno(BANDEJAS.bitacora, async (log) => {
+      const { fotos_locales, ...datos } = log;
+      const urls: string[] = [];
+
+      // Fotos guardadas como archivo (lo normal desde ahora).
+      for (const referencia of fotos_locales ?? []) {
+        urls.push(await subirFoto(referencia, 'foto_bitacora'));
+      }
+
+      // Registros viejos que traen la foto como texto base64 dentro del propio
+      // registro: se suben igual, para no dejar a nadie con su reporte atorado.
+      const fotosViejas = leerFotosEmbebidas(datos.photo_url);
+      for (const base64 of fotosViejas) {
+        urls.push(await subirFoto(base64, 'foto_bitacora'));
+      }
+
+      const { error } = await supabase
+        .from('logs')
+        .upsert([{ ...datos, photo_url: urls.length > 0 ? JSON.stringify(urls) : null }], {
+          onConflict: 'local_uuid',
+        });
+      if (error) throw error;
+
+      // Ya subió: liberamos el espacio de las fotos guardadas
+      for (const referencia of fotos_locales ?? []) {
+        await borrarArchivoLocal(referencia);
+      }
+    });
 
     // --- B. GASTOS (INVENTARIO / DESTAJO) ---
     await subirLote(BANDEJAS.inventario, (registros) =>
@@ -195,24 +240,19 @@ const sincronizarBandejasDeSalida = async () => {
 
     // --- F. PLANOS Y DOCUMENTOS PESADOS ---
     await subirUnoPorUno(BANDEJAS.planos, async (doc) => {
-      const base64Pdf = await FileSystem.readAsStringAsync(doc.local_file_uri, { encoding: 'base64' });
-      const arrayBuffer = decode(base64Pdf);
-      const fileName = `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.pdf`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('planos_obras')
-        .upload(fileName, arrayBuffer, { contentType: 'application/pdf' });
-      if (uploadError) throw uploadError;
-
-      const { data: publicUrlData } = supabase.storage.from('planos_obras').getPublicUrl(fileName);
+      const url = await subirArchivo(doc.local_file_uri, 'planos_obras', {
+        prefijo: 'doc',
+        extension: 'pdf',
+        contentType: 'application/pdf',
+      });
 
       const { error: dbError } = await supabase.from('planos').insert([
-        { title: doc.title, category: doc.category, version: doc.version, file_url: publicUrlData.publicUrl, project_id: doc.project_id }
+        { title: doc.title, category: doc.category, version: doc.version, file_url: url, project_id: doc.project_id }
       ]);
       if (dbError) throw dbError;
 
-      // Ya subió: liberamos el espacio del teléfono
-      await FileSystem.deleteAsync(doc.local_file_uri).catch(() => {});
+      // Ya subió: liberamos el espacio guardado
+      await borrarArchivoLocal(doc.local_file_uri);
     });
 
     // --- G. CAJA CHICA (EGRESOS) ---
@@ -224,20 +264,16 @@ const sincronizarBandejasDeSalida = async () => {
 
       if (foto_local_uri) {
         // Bucket 'tickets_caja_chica': es el que existe en Supabase.
-        // El guardado con internet apuntaba a 'tickets', que no existe, y por
-        // eso las fotos de ticket nunca se guardaban.
-        const fileName = `ticket_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
-        const formData = new FormData();
-        formData.append('file', { uri: foto_local_uri, name: fileName, type: 'image/jpeg' } as any);
-        const { error: upErr } = await supabase.storage.from('tickets_caja_chica').upload(fileName, formData as any);
-        if (upErr) throw upErr; // Si la foto falla, el gasto se queda para reintentar completo
-        fotoUrl = supabase.storage.from('tickets_caja_chica').getPublicUrl(fileName).data.publicUrl;
+        // Si la foto falla, el gasto entero se queda para reintentar.
+        fotoUrl = await subirFoto(foto_local_uri, 'tickets_caja_chica');
       }
 
       const { error } = await supabase
         .from('caja_chica')
         .upsert([{ ...datos, foto_ticket: fotoUrl }], { onConflict: 'local_uuid' });
       if (error) throw error;
+
+      if (foto_local_uri) await borrarArchivoLocal(foto_local_uri);
     });
 
     if (subidos > 0) {

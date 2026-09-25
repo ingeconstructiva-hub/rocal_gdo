@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SkeletonTarjetas } from '../components/Skeleton';
+import { subirArchivo } from '../lib/subidas';
 import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
@@ -239,24 +240,8 @@ export default function ProyectosScreen() {
 
       if (fotoObra && !fotoObra.startsWith('http')) {
         try {
-          const filename = `obra_${Date.now()}.jpg`;
 
-          const base64 = await FileSystem.readAsStringAsync(fotoObra, {
-            encoding: 'base64',
-          });
-
-          const { error: uploadErr } = await supabase.storage
-            .from('obras')
-            .upload(filename, decode(base64), {
-              contentType: 'image/jpeg',
-              upsert: false,
-            });
-
-          if (uploadErr) {
-            throw new Error(`Error subiendo imagen: ${uploadErr.message}`);
-          }
-
-          finalFotoUrl = `https://ckvuwlcjlyzmxprwjyup.supabase.co/storage/v1/object/public/obras/${filename}`;
+          finalFotoUrl = await subirArchivo(fotoObra, 'obras', { prefijo: 'obra' });
         } catch (error: any) {
           Aviso.alert("Error procesando imagen", error.message);
           finalFotoUrl = null;

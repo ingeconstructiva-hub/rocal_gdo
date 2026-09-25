@@ -26,6 +26,7 @@ import {
 } from 'react-native';
 import { useRefrescar } from '../lib/refrescar';
 import { SkeletonLista } from '../components/Skeleton';
+import { subirArchivo } from '../lib/subidas';
 import { Aviso } from '../lib/aviso';
 
 import SummaryCard from '../components/SummaryCard';
@@ -239,19 +240,7 @@ export default function GastosGeneralesScreen() {
 
       // Subida de imagen codificada en base64 al Storage
       if (fotoComprobante && !fotoComprobante.startsWith('http')) {
-        const filename = `comprobante_${Date.now()}.jpg`;
-        const base64 = await FileSystem.readAsStringAsync(fotoComprobante, { encoding: 'base64' });
-        
-        const { error: uploadErr } = await supabase.storage
-          .from('comprobantes')
-          .upload(filename, decode(base64), { contentType: 'image/jpeg', upsert: false });
-        
-        if (uploadErr) {
-          throw new Error(`Error subiendo foto: ${uploadErr.message}`);
-        } else {
-          const { data: urlData } = supabase.storage.from('comprobantes').getPublicUrl(filename);
-          finalFotoUrl = urlData?.publicUrl || null;
-        }
+        finalFotoUrl = await subirArchivo(fotoComprobante, 'comprobantes', { prefijo: 'comprobante' });
       }
 
       let finalMontoPagado = 0;

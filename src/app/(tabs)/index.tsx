@@ -6,6 +6,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SkeletonTarjeta } from '../../components/Skeleton';
+import { subirArchivo } from '../../lib/subidas';
 import { Aviso } from '../../lib/aviso';
 import QRCode from 'react-native-qrcode-svg';
 import { NotificationItem } from '../../components/NotificationItem';
@@ -205,20 +206,18 @@ export default function DashboardScreen() {
 
       // 1. Subir nueva foto de perfil si se seleccionó una
       if (newFotoPerfil) {
-        const filename = `perfil_${profile.id}_${Date.now()}.jpg`;
-        const formData = new FormData();
-        formData.append('file', { uri: newFotoPerfil, name: filename, type: 'image/jpeg' } as any);
-        const { error: uploadErr } = await supabase.storage.from('identificaciones').upload(`perfiles/${filename}`, formData as any);
-        if (!uploadErr) fotoPerfilUrl = supabase.storage.from('identificaciones').getPublicUrl(`perfiles/${filename}`).data.publicUrl;
+        fotoPerfilUrl = await subirArchivo(newFotoPerfil, 'identificaciones', {
+          carpeta: 'perfiles',
+          prefijo: `perfil_${profile.id}`,
+        });
       }
 
       // 2. Subir nuevo INE si se seleccionó uno
       if (newFotoIne) {
-        const filename = `ine_${profile.id}_${Date.now()}.jpg`;
-        const formData = new FormData();
-        formData.append('file', { uri: newFotoIne, name: filename, type: 'image/jpeg' } as any);
-        const { error: uploadErr } = await supabase.storage.from('identificaciones').upload(`ines/${filename}`, formData as any);
-        if (!uploadErr) fotoIneUrl = supabase.storage.from('identificaciones').getPublicUrl(`ines/${filename}`).data.publicUrl;
+        fotoIneUrl = await subirArchivo(newFotoIne, 'identificaciones', {
+          carpeta: 'ines',
+          prefijo: `ine_${profile.id}`,
+        });
       }
 
       // 3. Actualizar la base de datos con los textos y las (nuevas) URLs
