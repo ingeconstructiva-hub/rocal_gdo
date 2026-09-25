@@ -23,6 +23,7 @@ import {
   View
 } from 'react-native';
 import { useRefrescar } from '../lib/refrescar';
+import { SkeletonLista } from '../components/Skeleton';
 import { Aviso } from '../lib/aviso';
 
 import SummaryCard from '../components/SummaryCard';
@@ -602,7 +603,7 @@ export default function GastosMaquinariaScreen() {
         )}
 
         {loading ? ( 
-          <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 50 }} /> 
+          <SkeletonLista filas={5} />
         ) : (
           maquinasMap.length === 0 ? (
             <Text style={styles.emptyText}>Da de alta tu primera máquina tocando el botón "+".</Text>

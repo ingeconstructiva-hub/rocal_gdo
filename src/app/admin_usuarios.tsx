@@ -3,6 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SkeletonLista } from '../components/Skeleton';
 import { Aviso } from '../lib/aviso';
 import { supabase } from '../lib/supabase';
 
@@ -353,7 +354,7 @@ export default function AdminUsuariosScreen() {
         </View>
 
         <Text style={[styles.sectionTitle, {marginTop: 25}]}>Expedientes Activos ({usuarios.length})</Text>
-        {loading ? <ActivityIndicator color="#2563EB" /> : (
+        {loading ? <SkeletonLista filas={5} /> : (
           usuarios.map(u => (
             <TouchableOpacity key={u.id} style={styles.userCard} activeOpacity={0.7} onPress={() => { setSelectedUser(u); setModalDetalle(true); }}>
               <View style={{flex: 1}}>

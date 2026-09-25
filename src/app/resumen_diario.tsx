@@ -3,7 +3,7 @@ import Almacen from '../lib/almacen';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useRefrescar } from '../lib/refrescar';
+import { SkeletonLista, SkeletonTarjeta } from '../components/Skeleton';
 import { Aviso } from '../lib/aviso';
 import { PieChart } from 'react-native-chart-kit';
 import { useProject } from '../context/ProjectContext';
@@ -49,7 +49,6 @@ export default function ResumenDiarioScreen() {
     }
   }, [activeProject, isOffline]);
 
-  useRefrescar(() => cargarHistorialFinanciero());
 
   const cargarHistorialFinanciero = async () => {
     setLoading(true);
@@ -339,9 +338,9 @@ export default function ResumenDiarioScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color="#2563EB" />
-          <Text style={styles.loadingText}>Procesando estados financieros macro...</Text>
+        <View style={styles.body}>
+          <SkeletonTarjeta />
+          <SkeletonLista filas={4} />
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>

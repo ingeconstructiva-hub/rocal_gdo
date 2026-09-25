@@ -9,6 +9,7 @@ import * as Sharing from 'expo-sharing';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRefrescar } from '../../lib/refrescar';
+import { SkeletonLista } from '../../components/Skeleton';
 import { Aviso } from '../../lib/aviso';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
@@ -21,6 +22,7 @@ export default function BitacoraScreen() {
   const { profile } = useUser(); 
 
   const [logs, setLogs] = useState<any[]>([]);
+  const [cargando, setCargando] = useState(true);
   const [categoryStats, setCategoryStats] = useState<any[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -93,7 +95,11 @@ export default function BitacoraScreen() {
   useRefrescar(() => fetchLogs());
 
   const fetchLogs = async () => {
-    if (!activeProject?.id) return;
+    if (!activeProject?.id) {
+      setCargando(false);
+      return;
+    }
+    setCargando(true);
     const storageKey = `@bitacora_cache_${activeProject.id}`;
 
     const getOutboxLogs = async () => {
@@ -123,6 +129,7 @@ export default function BitacoraScreen() {
       } catch (error) {
         console.error("Error leyendo caché:", error);
       }
+      setCargando(false);
     } else {
       try {
         const { data, error } = await supabase
@@ -147,6 +154,8 @@ export default function BitacoraScreen() {
         }
       }
     }
+
+    setCargando(false);
   };
 
   const formatTime = (dateString: string) => {
@@ -413,7 +422,9 @@ export default function BitacoraScreen() {
           )}
         </View>
 
-        {logs.length === 0 ? (
+        {cargando ? (
+          <SkeletonLista filas={4} />
+        ) : logs.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateText}>No hay entradas en la bitácora aún.</Text>
           </View>

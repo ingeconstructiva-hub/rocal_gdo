@@ -25,6 +25,7 @@ import {
   View
 } from 'react-native';
 import { useRefrescar } from '../lib/refrescar';
+import { SkeletonLista } from '../components/Skeleton';
 import { Aviso } from '../lib/aviso';
 
 import SummaryCard from '../components/SummaryCard';
@@ -632,7 +633,7 @@ export default function GastosGeneralesScreen() {
         </View>
 
         {loading ? (
-          <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 50 }} />
+          <SkeletonLista filas={5} />
         ) : gastosFiltrados.length === 0 ? (
           <Text style={styles.emptyText}>No hay gastos registrados con los filtros seleccionados.</Text>
         ) : (

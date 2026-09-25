@@ -9,7 +9,7 @@ import { useNavigation, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { useRefrescar } from '../../lib/refrescar';
+import { SkeletonLista } from '../../components/Skeleton';
 import { Aviso } from '../../lib/aviso';
 import SummaryCard from '../../components/SummaryCard';
 import { useProject } from '../../context/ProjectContext';
@@ -103,7 +103,6 @@ export default function ListaScreen() {
     return () => BloquearSalidaNativa();
   }, [navigation, hasChanges]);
 
-  useRefrescar(() => fetchWorkers());
 
   const fetchWorkers = async () => {
     setLoading(true);
@@ -455,7 +454,7 @@ export default function ListaScreen() {
             )}
           </View>
 
-          {loading ? <ActivityIndicator size="large" color="#2563EB" style={{marginTop: 50}} /> : displayedWorkers.length === 0 ? (
+          {loading ? <SkeletonLista filas={6} /> : displayedWorkers.length === 0 ? (
             <Text style={{textAlign: 'center', color: '#64748B', marginTop: 40}}>No hay {activeCategory === 'obrero' ? 'obreros' : 'técnicos'} registrados.</Text>
           ) : displayedWorkers.map((worker) => (
             <View key={worker.id} style={styles.workerCard}>

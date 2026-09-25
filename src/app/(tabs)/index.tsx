@@ -5,6 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SkeletonTarjeta } from '../../components/Skeleton';
 import { Aviso } from '../../lib/aviso';
 import QRCode from 'react-native-qrcode-svg';
 import { NotificationItem } from '../../components/NotificationItem';
@@ -298,6 +299,9 @@ export default function DashboardScreen() {
           </TouchableOpacity>
           
           {/* TARJETA DEL PROYECTO */}
+          {!project ? (
+            <SkeletonTarjeta />
+          ) : (
           <View style={styles.projectCard}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <View style={{ flex: 1, paddingRight: 10 }}>
@@ -323,6 +327,7 @@ export default function DashboardScreen() {
               <View style={styles.dateBadge}><Feather name="flag" size={12} color="#DC2626" /><Text style={[styles.dateText, { color: '#DC2626' }]}>Entrega: {project?.end_date || "--/--/--"}</Text></View>
             </View>
           </View>
+          )}
         </View>
 
         <View style={styles.body}>

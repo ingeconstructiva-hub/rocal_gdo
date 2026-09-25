@@ -11,7 +11,7 @@ import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { useRefrescar } from '../lib/refrescar';
+import { SkeletonTarjetas } from '../components/Skeleton';
 import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
@@ -80,7 +80,6 @@ export default function ProyectosScreen() {
     if (data) setListaResidentes(data);
   };
 
-  useRefrescar(() => cargarProyectos());
 
   const cargarProyectos = async () => {
     try {
@@ -514,7 +513,7 @@ export default function ProyectosScreen() {
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         {loading && !isRefreshing ? (
-          <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 50 }} />
+          <SkeletonTarjetas cantidad={3} />
         ) : proyectos.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Feather name="folder-minus" size={48} color="#9CA3AF" />

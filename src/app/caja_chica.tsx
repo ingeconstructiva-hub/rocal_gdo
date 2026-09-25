@@ -29,6 +29,7 @@ import {
   View
 } from 'react-native';
 import { useRefrescar } from '../lib/refrescar';
+import { SkeletonLista } from '../components/Skeleton';
 import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
@@ -608,7 +609,7 @@ export default function CajaChicaScreen() {
         </View> 
 
         {loading ? (
-          <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 30 }} />
+          <SkeletonLista filas={5} />
         ) : movimientosFiltrados.length === 0 ? (
           <Text style={styles.emptyText}>No hay registros.</Text>
         ) : (

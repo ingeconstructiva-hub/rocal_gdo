@@ -24,6 +24,7 @@ import {
   View
 } from 'react-native';
 import { useRefrescar } from '../lib/refrescar';
+import { SkeletonLista } from '../components/Skeleton';
 import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
@@ -591,7 +592,7 @@ export default function InventarioScreen() {
           }
         >
           {loading ? (
-            <Text style={styles.emptyText}>Cargando datos...</Text>
+            <SkeletonLista filas={5} />
           ) : Object.keys(groupedItems).length === 0 ? (
             <Text style={styles.emptyText}>No se encontraron registros en esta obra.</Text>
           ) : (

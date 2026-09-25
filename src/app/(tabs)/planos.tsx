@@ -8,6 +8,7 @@ import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRefrescar } from '../../lib/refrescar';
+import { SkeletonLista } from '../../components/Skeleton';
 import { Aviso } from '../../lib/aviso';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
@@ -27,6 +28,7 @@ export default function DocumentosScreen() {
 
   const [isUploading, setIsUploading] = useState(false);
   const [documentosList, setDocumentosList] = useState<any[]>([]);
+  const [cargando, setCargando] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const [activeFilter, setActiveFilter] = useState('Todos');
@@ -64,7 +66,11 @@ export default function DocumentosScreen() {
 
   const loadDocumentos = async () => {
     const projectId = activeProject?.id;
-    if (!projectId) return;
+    if (!projectId) {
+      setCargando(false);
+      return;
+    }
+    setCargando(true);
 
     const storageKeyDocs = `@planos_cache_${projectId}`;
 
@@ -115,6 +121,8 @@ export default function DocumentosScreen() {
         }
       }
     }
+
+    setCargando(false);
   };
 
   const handleScanDocument = async () => {
@@ -455,7 +463,9 @@ export default function DocumentosScreen() {
             </View>
           </View>
           
-          {documentosFiltrados.length === 0 ? (
+          {cargando ? (
+            <SkeletonLista filas={4} />
+          ) : documentosFiltrados.length === 0 ? (
             <View style={styles.emptyState}>
               <Feather name="folder" size={40} color="#CBD5E1" />
               <Text style={styles.emptyStateText}>

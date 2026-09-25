@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRefrescar } from '../../lib/refrescar';
+import { SkeletonLista } from '../../components/Skeleton';
 import { Aviso } from '../../lib/aviso';
 import SignatureScreen, { SignatureViewRef } from 'react-native-signature-canvas';
 
@@ -473,7 +474,8 @@ export default function ResguardosScreen() {
 
       {/* CARDS */}
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-        {filteredHerramientas.map((item: HerramientaAlmacen) => (
+        {loading && <SkeletonLista filas={5} />}
+        {!loading && filteredHerramientas.map((item: HerramientaAlmacen) => (
           <View key={item.id} style={styles.toolCard}>
             <View style={styles.metaLabelRow}>
               <Text style={styles.codeText}>{item.codigo}</Text>
