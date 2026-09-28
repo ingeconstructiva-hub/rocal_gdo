@@ -54,6 +54,36 @@
           });
         });
       }
+
+      // Pide que el navegador NO borre lo guardado cuando le falte espacio.
+      // Sin esto, iPhone puede tirar la cola de registros pendientes de una app
+      // que no se ha abierto en semanas, y se pierde el trabajo de obra.
+      if (navigator.storage && navigator.storage.persist) {
+        window.addEventListener('load', function () {
+          navigator.storage.persisted().then(function (yaEsPermanente) {
+            if (!yaEsPermanente) navigator.storage.persist();
+          });
+        });
+      }
+
+      // Guarda en el caché los archivos que ya se descargaron en esta visita.
+      // Hace falta porque las fuentes de los iconos se piden ANTES de que el
+      // service worker tome el control: sin esto, la app abre sin iconos la
+      // primera vez que se usa sin internet.
+      window.addEventListener('load', function () {
+        navigator.serviceWorker && navigator.serviceWorker.ready.then(function () {
+          setTimeout(function () {
+            try {
+              var recursos = performance.getEntriesByType('resource')
+                .map(function (r) { return r.name; })
+                .filter(function (url) {
+                  return url.indexOf(location.origin) === 0 && /\.(ttf|otf|woff2?|js|css|png|svg)(\?|$)/.test(url);
+                });
+              recursos.forEach(function (url) { fetch(url).catch(function () {}); });
+            } catch (e) {}
+          }, 2000);
+        });
+      });
     </script>
   </body>
 </html>

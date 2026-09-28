@@ -10,7 +10,7 @@
  * internet para que la app las mande a su bandeja de salida.
  */
 
-const CACHE = 'rocal-pwa-v4';
+const CACHE = 'rocal-pwa-v5';
 
 // Lo mínimo para que la app abra sin internet desde cero.
 const ARCHIVOS_BASE = ['/', '/manifest.json', '/icon-192.png', '/icon-512.png'];

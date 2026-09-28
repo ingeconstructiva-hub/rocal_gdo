@@ -11,6 +11,8 @@ import { useRefrescar } from '../../lib/refrescar';
 import { SkeletonLista } from '../../components/Skeleton';
 import { regresar } from '../../lib/navegar';
 import { firmarCampos } from '../../lib/urlsFirmadas';
+import { crearPdfDesdeImagenes, guardarPdfParaDespues } from '../../lib/pdfDesdeImagenes';
+import { subirArchivo } from '../../lib/subidas';
 import { Aviso } from '../../lib/aviso';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
@@ -167,33 +169,11 @@ export default function DocumentosScreen() {
 
     setIsUploading(true);
     try {
-      let htmlImages = '';
-      for (const imgUri of scannedImages) {
-        const base64Img = await FileSystem.readAsStringAsync(imgUri, { encoding: 'base64' });
-        htmlImages += `<div class="page"><img src="data:image/jpeg;base64,${base64Img}" /></div>`;
-      }
-
-      const htmlContent = `
-        <html>
-          <head>
-            <style>
-              @page { margin: 0px; }
-              body { margin: 0; padding: 0; background-color: #f0f0f0; }
-              .page { width: 100vw; height: 100vh; page-break-after: always; display: flex; justify-content: center; align-items: center; background-color: white; }
-              img { max-width: 100%; max-height: 100%; object-fit: contain; }
-            </style>
-          </head>
-          <body>${htmlImages}</body>
-        </html>
-      `;
-
-      const { uri: tempPdfUri } = await Print.printToFileAsync({ html: htmlContent });
+      // Arma el PDF: en celular con expo-print, en navegador con jsPDF.
+      const pdf = await crearPdfDesdeImagenes(scannedImages);
 
       if (isOffline) {
-        const permanentFileName = `offline_doc_${Date.now()}.pdf`;
-        const permanentPdfUri = FileSystem.documentDirectory + permanentFileName;
-        
-        await FileSystem.moveAsync({ from: tempPdfUri, to: permanentPdfUri });
+        const permanentPdfUri = await guardarPdfParaDespues(pdf);
 
         const localDocData = {
           title: docTitle.trim(),
@@ -218,20 +198,14 @@ export default function DocumentosScreen() {
         return;
       }
 
-      const base64Pdf = await FileSystem.readAsStringAsync(tempPdfUri, { encoding: 'base64' });
-      const arrayBuffer = decode(base64Pdf);
-      const fileName = `doc_${Date.now()}.pdf`; 
+      const urlPdf = await subirArchivo(pdf, 'planos_obras', {
+        prefijo: 'doc',
+        extension: 'pdf',
+        contentType: 'application/pdf',
+      });
 
-      const { error: uploadError } = await supabase.storage
-        .from('planos_obras') 
-        .upload(fileName, arrayBuffer, { contentType: 'application/pdf' }); 
-
-      if (uploadError) throw uploadError;
-
-      const { data: publicUrlData } = supabase.storage.from('planos_obras').getPublicUrl(fileName);
-      
       const { error: dbError } = await supabase.from('planos').insert([
-        { title: docTitle.trim(), category: finalCategory, version: 'v1.0', file_url: publicUrlData.publicUrl, project_id: projectId }
+        { title: docTitle.trim(), category: finalCategory, version: 'v1.0', file_url: urlPdf, project_id: projectId }
       ]);
 
       if (dbError) throw dbError;

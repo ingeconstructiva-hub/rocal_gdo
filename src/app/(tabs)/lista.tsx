@@ -109,7 +109,27 @@ export default function ListaScreen() {
   const fetchWorkers = async () => {
     setLoading(true);
     const pid = activeProject?.id;
-    if (!pid) return;
+    if (!pid) {
+      setLoading(false);
+      return;
+    }
+
+    const llaveCache = `@trabajadores_cache_${pid}`;
+
+    // Sin internet se muestra la última lista guardada: si no, el residente
+    // abre la pantalla vacía y no puede pasar lista.
+    if (isOffline) {
+      try {
+        const guardado = await Almacen.getItem(llaveCache);
+        if (guardado) setAllWorkers(JSON.parse(guardado));
+        setHasChanges(false);
+      } catch (e) {
+        console.log(e);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     try {
       const { data, error } = await supabase
@@ -135,8 +155,12 @@ export default function ListaScreen() {
 
       setAllWorkers(initialUI);
       setHasChanges(false); 
+      await Almacen.setItem(llaveCache, JSON.stringify(initialUI));
     } catch (e) {
       console.log(e);
+      // Si falló la red, mostramos la última lista guardada.
+      const guardado = await Almacen.getItem(llaveCache);
+      if (guardado) setAllWorkers(JSON.parse(guardado));
     } finally {
       setLoading(false);
     }

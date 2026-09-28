@@ -365,6 +365,9 @@ export default function ProyectosScreen() {
         nombre: proyecto.name,
         ubicacion: proyecto.location ?? null,
         motivo: 'eliminada',
+        // El project_id de la columna se vuelve nulo al borrar la obra
+        // (on delete set null), así que lo guardamos también aquí dentro.
+        project_id_original: proyecto.id,
         fecha_cierre: new Date(),
         gastos: gastos.data, bitacora: bitacora.data, caja_chica: caja.data,
         nomina: nomina.data, trabajadores: trabajadores.data,
@@ -414,7 +417,13 @@ export default function ProyectosScreen() {
           const { data: bitacora } = await supabase.from('logs').select('*').eq('project_id', proyecto.id);
           const { error: backupError } = await supabase.from('project_backups').insert([{
             project_id: proyecto.id,
-            report_data: { gastos, bitacora, nombre: proyecto.name, fecha_cierre: new Date() }
+            report_data: {
+              gastos, bitacora,
+              nombre: proyecto.name,
+              motivo: 'finalizada',
+              project_id_original: proyecto.id,
+              fecha_cierre: new Date(),
+            }
           }]);
           if (backupError) throw backupError;
           const { error: updateError } = await supabase.from('projects').update({ status: 'finalizada' }).eq('id', proyecto.id);

@@ -11,6 +11,7 @@ import { exportarPDF } from '../../lib/exportar';
 import { regresar } from '../../lib/navegar';
 import { subirArchivo } from '../../lib/subidas';
 import { firmarCampos } from '../../lib/urlsFirmadas';
+import Almacen from '../../lib/almacen';
 import { Aviso } from '../../lib/aviso';
 import { Firma, FirmaRef } from '../../components/Firma';
 
@@ -48,7 +49,7 @@ interface ItemAdicional {
 
 export default function ResguardosScreen() {
   const router = useRouter();
-  const { activeProject } = useProject();
+  const { activeProject, isOffline } = useProject();
   const { profile } = useUser();
   const signatureRef = useRef<FirmaRef>(null);
   const isAdminOrOficina = profile?.role === 'admin' || profile?.role === 'oficina';
@@ -126,7 +127,27 @@ export default function ResguardosScreen() {
   const fetchInventarioAlmacen = async () => {
     setLoading(true);
     const pid = activeProject?.id;
-    if (!pid) return;
+    if (!pid) {
+      setLoading(false);
+      return;
+    }
+
+    const llaveCache = `@almacen_cache_${pid}`;
+
+    // Sin internet: se muestra la última copia guardada. Esta pantalla se usa
+    // parado en el almacén, que es justo donde suele no haber señal.
+    if (isOffline) {
+      try {
+        const guardado = await Almacen.getItem(llaveCache);
+        if (guardado) setHerramientas(JSON.parse(guardado));
+      } catch (error) {
+        console.log('Error leyendo el almacén guardado:', error);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from('almacen_herramientas')
@@ -136,11 +157,19 @@ export default function ResguardosScreen() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      // Las direcciones guardadas se firman al cargar: así el bucket puede ser
-      // privado sin que las pantallas ni los PDFs tengan que cambiar.
-      if (data) setHerramientas(await firmarCampos(data, ['ine_url', 'ine_reverso_url', 'firma_entrega_url', 'firma_recibe_url']));
+
+      if (data) {
+        // Las direcciones guardadas se firman al cargar: así el bucket puede ser
+        // privado sin que las pantallas ni los PDFs tengan que cambiar.
+        const conUrls = await firmarCampos(data, ['ine_url', 'ine_reverso_url', 'firma_entrega_url', 'firma_recibe_url']);
+        setHerramientas(conUrls);
+        await Almacen.setItem(llaveCache, JSON.stringify(conUrls));
+      }
     } catch (error) {
       console.log("Error loading warehouse inventory:", error);
+      // Si falló la red, al menos mostramos lo último que se guardó.
+      const guardado = await Almacen.getItem(llaveCache);
+      if (guardado) setHerramientas(JSON.parse(guardado));
     } finally {
       setLoading(false);
     }
