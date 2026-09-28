@@ -10,7 +10,7 @@
  * internet para que la app las mande a su bandeja de salida.
  */
 
-const CACHE = 'rocal-pwa-v6';
+const CACHE = 'rocal-pwa-v7';
 
 /* Caché aparte para las fotos de Supabase (tickets, INE, evidencia).
  * Va separada porque las imágenes pesan y conviene poder limitarlas sin tocar
@@ -61,15 +61,18 @@ self.addEventListener('fetch', (event) => {
    * Solo aplica a archivos. Las consultas de datos NO se guardan: deben fallar
    * cuando no hay internet para que la app use sus bandejas y sus copias. */
   if (url.pathname.startsWith('/storage/v1/object/')) {
+    const llave = llaveDeImagen(url);
+
     event.respondWith(
       fetch(request)
         .then((respuesta) => {
-          if (respuesta.ok) guardarImagen(request, respuesta.clone());
+          if (respuesta.ok && llave) guardarImagen(llave, respuesta.clone());
           return respuesta;
         })
         .catch(async () => {
+          if (!llave) return Response.error();
           const cache = await caches.open(CACHE_IMAGENES);
-          const guardada = await cache.match(request, { ignoreSearch: true });
+          const guardada = await cache.match(llave);
           return guardada || Response.error();
         })
     );
@@ -118,10 +121,26 @@ function sinConexion() {
   });
 }
 
-async function guardarImagen(request, respuesta) {
+/* Nombre único de cada foto, sin importar cómo se pidió.
+ *
+ * Supabase entrega la misma imagen por varias rutas:
+ *   /storage/v1/object/public/bucket/foto.jpg          (bucket abierto)
+ *   /storage/v1/object/sign/bucket/foto.jpg?token=...  (bucket cerrado)
+ *
+ * Con internet la app usa la firmada; sin internet no puede firmar y cae a la
+ * pública. Si guardáramos cada una por su ruta, la foto guardada nunca se
+ * encontraría al quedarse sin señal. Por eso todas se guardan bajo el mismo
+ * nombre: bucket + archivo. */
+function llaveDeImagen(url) {
+  const partes = url.pathname.split('/').filter(Boolean); // storage, v1, object, modo, bucket, archivo...
+  if (partes.length < 6) return null;
+  return `${url.origin}/__foto__/${partes.slice(4).join('/')}`;
+}
+
+async function guardarImagen(llave, respuesta) {
   try {
     const cache = await caches.open(CACHE_IMAGENES);
-    await cache.put(request, respuesta);
+    await cache.put(llave, respuesta);
 
     // Se conservan las más recientes; las viejas se van para no llenar el disco.
     const claves = await cache.keys();

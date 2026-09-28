@@ -42,6 +42,10 @@ export async function firmar(url: string | null | undefined): Promise<string | n
   const partes = partirUrlPublica(url);
   if (!partes) return url; // No es de nuestro almacén: se deja como está
 
+  // Sin internet no se puede firmar. Devolvemos la dirección tal cual: el
+  // service worker reconoce la foto por su nombre y entrega la copia guardada.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return url;
+
   const llave = `${partes.bucket}/${partes.ruta}`;
   const guardada = cache.get(llave);
   if (guardada && guardada.expira > Date.now()) return guardada.url;
