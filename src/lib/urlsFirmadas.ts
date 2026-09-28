@@ -9,6 +9,7 @@
  * para que las pantallas y las plantillas de PDF no tengan que cambiar.
  */
 
+import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
 /** Cuánto vive una dirección firmada. Ocho horas cubre una jornada completa. */
@@ -61,7 +62,21 @@ export async function firmar(url: string | null | undefined): Promise<string | n
 
   // Se guarda con un margen de 5 minutos antes de que caduque de verdad.
   cache.set(llave, { url: data.signedUrl, expira: Date.now() + (DURACION_SEGUNDOS - 300) * 1000 });
+
+  pedirParaGuardar(data.signedUrl);
   return data.signedUrl;
+}
+
+/* Pide la foto en segundo plano para que quede guardada y se pueda ver sin internet.
+ *
+ * Hace falta porque las fotos que ya están en el caché del navegador se
+ * muestran SIN pasar por el service worker, y entonces él nunca las guarda.
+ * Esta petición sí pasa por él. No se espera su resultado: si falla, no importa. */
+function pedirParaGuardar(url: string) {
+  if (Platform.OS !== 'web') return; // En celular no hay service worker
+  if (typeof fetch !== 'function') return;
+
+  fetch(url, { mode: 'cors', credentials: 'omit' }).catch(() => {});
 }
 
 /** Firma varias de un jalón (por ejemplo, las fotos de un reporte). */
