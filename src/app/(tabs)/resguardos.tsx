@@ -538,18 +538,20 @@ export default function ResguardosScreen() {
               {/* 📋 CONTENEDOR SUPERIOR DINÁMICO */}
               <View style={{ flex: 1, justifyContent: 'flex-start' }}>
                 <Text style={styles.signatureModalTitle}>
-                  {pasoFirma === 'entrega' ? '✍️ PASO 1: Firma de quien ENTREGA Material' : '✍️ PASO 2: Firma de quien RECIBE Material'}
+                  {pasoFirma === 'entrega'
+                    ? '✍️ PASO 1: Datos del resguardo y TU firma'
+                    : '✍️ PASO 2: Firma del trabajador que RECIBE'}
                 </Text>
                 <Text style={styles.signatureModalSubtitle}>
-                  {pasoFirma === 'entrega' 
-                    ? 'Como supervisor a cargo, valida los datos del resguardo antes de avanzar.' 
-                    : 'Solicita al trabajador que plasme su firma de conformidad.'}
+                  {pasoFirma === 'entrega'
+                    ? 'Anota a quién le entregas el equipo y firma tú, como responsable de la entrega.'
+                    : `Pásale el teléfono a ${nombreResponsableSign || 'el trabajador'} para que firme de conformidad.`}
                 </Text>
                 
                 {/* 🟢 PASO 1: Campos de Texto e Inventario Adicional */}
                 {pasoFirma === 'entrega' && (
                   <View style={{ marginTop: 8 }}>
-                    <Text style={styles.label}>Nombre de quien Recibe el Equipo</Text>
+                    <Text style={styles.label}>Nombre del trabajador que RECIBE el equipo</Text>
                     {/* 🟢 SE AGREGÓ placeholderTextColor EXCLUSIVO MODO OSCURO */}
                     <TextInput 
                       style={styles.input} 
@@ -640,12 +642,14 @@ export default function ResguardosScreen() {
               <View style={{ width: '100%', marginTop: 5, paddingBottom: Platform.OS === 'ios' ? 20 : 0 }}>
                 <View style={[styles.canvasContainer, { height: pasoFirma === 'entrega' ? 160 : 260 }]}>
                   <Text style={styles.canvasLabel}>
-                    {pasoFirma === 'entrega' ? "Firma de Residente (Entrega)" : "Firma de Trabajador (Recepción)"}
+                    {pasoFirma === 'entrega'
+                      ? 'Tu firma — quien ENTREGA (residente)'
+                      : `Firma de ${nombreResponsableSign || 'el trabajador'} — quien RECIBE`}
                   </Text>
                   <Firma
                     ref={signatureRef}
                     onOK={handleOK}
-                    descriptionText={pasoFirma === 'entrega' ? "Firma de Residente" : "Firma de Trabajador"}
+                    descriptionText={pasoFirma === 'entrega' ? 'Firma de quien entrega' : 'Firma de quien recibe'}
                     webStyle={`.m-signature-pad--footer { display: none; } body,html { width: 100%; height: 100%; }`}
                     autoClear={false}
                   />
