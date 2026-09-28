@@ -10,7 +10,7 @@ import { SkeletonLista } from '../../components/Skeleton';
 import { exportarPDF } from '../../lib/exportar';
 import { regresar } from '../../lib/navegar';
 import { Aviso } from '../../lib/aviso';
-import SignatureScreen, { SignatureViewRef } from 'react-native-signature-canvas';
+import { Firma, FirmaRef } from '../../components/Firma';
 
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -47,7 +47,7 @@ export default function ResguardosScreen() {
   const router = useRouter();
   const { activeProject } = useProject();
   const { profile } = useUser();
-  const signatureRef = useRef<SignatureViewRef>(null);
+  const signatureRef = useRef<FirmaRef>(null);
   const isAdminOrOficina = profile?.role === 'admin' || profile?.role === 'oficina';
 
   const [herramientas, setHerramientas] = useState<HerramientaAlmacen[]>([]);
@@ -642,7 +642,7 @@ export default function ResguardosScreen() {
                   <Text style={styles.canvasLabel}>
                     {pasoFirma === 'entrega' ? "Firma de Residente (Entrega)" : "Firma de Trabajador (Recepción)"}
                   </Text>
-                  <SignatureScreen
+                  <Firma
                     ref={signatureRef}
                     onOK={handleOK}
                     descriptionText={pasoFirma === 'entrega' ? "Firma de Residente" : "Firma de Trabajador"}
