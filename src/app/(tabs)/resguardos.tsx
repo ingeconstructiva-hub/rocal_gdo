@@ -224,7 +224,8 @@ export default function ResguardosScreen() {
         token_firma: item.token_firma, 
         fecha_firma: item.fecha_firma,
         firma_entrega_url: item.firma_entrega_url || null,
-        firma_recibe_url: item.firma_recibe_url || null
+        firma_recibe_url: item.firma_recibe_url || null,
+        ine_url: item.ine_url || null
       };
 
       const htmlContent = generarPlantillaResponsiva(valePayload);

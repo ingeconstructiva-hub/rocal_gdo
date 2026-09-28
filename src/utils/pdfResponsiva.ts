@@ -13,6 +13,10 @@ export function generarPlantillaResponsiva(vale: any) {
         .footer-signatures { margin-top: 60px; display: flex; justify-content: space-between; page-break-inside: avoid; }
         .signature-col { width: 45%; text-align: center; font-size: 12px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
         .img-firma { height: 65px; max-width: 180px; object-fit: contain; margin-bottom: 4px; }
+        .anexo-ine { margin-top: 26px; padding-top: 16px; border-top: 1px dashed #94a3b8; text-align: center; page-break-inside: avoid; }
+        .anexo-titulo { font-size: 11px; font-weight: bold; letter-spacing: 0.5px; color: #334155; margin: 0 0 10px 0; }
+        .img-ine { max-width: 320px; width: 100%; max-height: 220px; object-fit: contain; border: 1px solid #cbd5e1; border-radius: 6px; }
+        .anexo-pie { font-size: 9px; color: #64748b; margin-top: 6px; }
         .signature-placeholder { height: 65px; } 
         .digital-seal { margin-top: 40px; padding: 10px; border: 1px dashed #cbd5e1; background-color: #f1f5f9; border-radius: 6px; font-size: 10px; color: #64748B; font-family: monospace; }
         .verse { text-align: center; margin-top: 50px; font-size: 11px; font-style: italic; color: #64748b; }
@@ -67,6 +71,15 @@ export function generarPlantillaResponsiva(vale: any) {
         </div>
         
       </div>
+
+      ${vale.ine_url
+        ? `<div class="anexo-ine">
+             <p class="anexo-titulo">ANEXO: IDENTIFICACIÓN OFICIAL DE QUIEN RECIBE</p>
+             <img src="${vale.ine_url}" class="img-ine" />
+             <p class="anexo-pie">Documento cotejado al momento de la entrega. ${vale.nombre_recibe}</p>
+           </div>`
+        : ''
+      }
 
       <div class="digital-seal">
         <strong>🔒 SELLO DE CERTIFICACIÓN DIGITAL CRIPTOGRÁFICA MUTUA</strong><br>
