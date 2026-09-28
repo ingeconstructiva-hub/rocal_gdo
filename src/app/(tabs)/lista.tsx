@@ -2,7 +2,8 @@
 
 import { Feather } from '@expo/vector-icons';
 import Almacen from '../../lib/almacen';
-import { BANDEJAS, leerBandeja, reemplazarBandeja } from '../../lib/bandeja';
+import * as Crypto from 'expo-crypto';
+import { BANDEJAS, guardarEnBandeja, leerBandeja, reemplazarBandeja } from '../../lib/bandeja';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import { useNavigation, useRouter } from 'expo-router';
@@ -181,6 +182,54 @@ export default function ListaScreen() {
   const handleAddWorker = async () => {
     if (!newName || !newSalary) return;
     setIsSaving(true);
+
+    // Sin internet el alta iba directo a Supabase y tronaba con "Load failed".
+    // Ahora se guarda en la bandeja y el trabajador aparece de inmediato en la
+    // lista, con un id temporal hasta que suba.
+    if (isOffline) {
+      try {
+        const localUuid = Crypto.randomUUID();
+        await guardarEnBandeja(BANDEJAS.trabajadores, {
+          name_worker: newName,
+          role: newRole,
+          weekly_salary: Number(newSalary),
+          project_id: activeProject?.id,
+          categoria: activeCategory,
+          is_active: true,
+          local_uuid: localUuid,
+        });
+
+        const nuevoEnPantalla = {
+          id: `temp_${localUuid}`,
+          name_worker: newName,
+          role: newRole,
+          weekly_salary: Number(newSalary),
+          attendance: [true, true, true, true, true, true],
+          extraHours: '0',
+          discount: '0',
+          reason: '',
+          categoria: activeCategory,
+        };
+
+        const listaActualizada = [...allWorkers, nuevoEnPantalla];
+        setAllWorkers(listaActualizada);
+        // También a la copia local, para que siga ahí al recargar la app.
+        await Almacen.setItem(`@trabajadores_cache_${activeProject?.id}`, JSON.stringify(listaActualizada));
+
+        setIsModalVisible(false);
+        setNewName(''); setNewRole(''); setNewSalary('');
+        Aviso.alert(
+          'Guardado sin conexión',
+          'El trabajador quedó guardado en este dispositivo y se dará de alta solo cuando vuelva el internet.'
+        );
+      } catch (e: any) {
+        Aviso.alert('Error', e.message);
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
+
     try {
       const { data, error } = await supabase.from('workers').insert([{
         name_worker: newName,
