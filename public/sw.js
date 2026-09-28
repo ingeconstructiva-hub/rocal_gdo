@@ -10,7 +10,13 @@
  * internet para que la app las mande a su bandeja de salida.
  */
 
-const CACHE = 'rocal-pwa-v5';
+const CACHE = 'rocal-pwa-v6';
+
+/* Caché aparte para las fotos de Supabase (tickets, INE, evidencia).
+ * Va separada porque las imágenes pesan y conviene poder limitarlas sin tocar
+ * los archivos de la app. */
+const CACHE_IMAGENES = 'rocal-imagenes-v1';
+const MAX_IMAGENES = 80;
 
 // Lo mínimo para que la app abra sin internet desde cero.
 const ARCHIVOS_BASE = ['/', '/manifest.json', '/icon-192.png', '/icon-512.png'];
@@ -30,7 +36,9 @@ self.addEventListener('activate', (event) => {
     caches
       .keys()
       .then((nombres) =>
-        Promise.all(nombres.filter((n) => n !== CACHE).map((n) => caches.delete(n)))
+        Promise.all(
+          nombres.filter((n) => n !== CACHE && n !== CACHE_IMAGENES).map((n) => caches.delete(n))
+        )
       )
       .then(() => self.clients.claim())
   );
@@ -42,8 +50,33 @@ self.addEventListener('fetch', (event) => {
   // Solo GET: un POST no se puede guardar en caché.
   if (request.method !== 'GET') return;
 
-  // Solo lo de nuestro propio dominio. Supabase y demás pasan de largo.
   const url = new URL(request.url);
+
+  /* Fotos guardadas en Supabase: se guardan para poder verlas sin internet.
+   *
+   * El detalle importante: cada vez que la app pide una foto, su dirección trae
+   * un token nuevo. Por eso al buscarla en el caché se ignora la parte del
+   * token (ignoreSearch) y así se reconoce la misma foto aunque la firma cambie.
+   *
+   * Solo aplica a archivos. Las consultas de datos NO se guardan: deben fallar
+   * cuando no hay internet para que la app use sus bandejas y sus copias. */
+  if (url.pathname.startsWith('/storage/v1/object/')) {
+    event.respondWith(
+      fetch(request)
+        .then((respuesta) => {
+          if (respuesta.ok) guardarImagen(request, respuesta.clone());
+          return respuesta;
+        })
+        .catch(async () => {
+          const cache = await caches.open(CACHE_IMAGENES);
+          const guardada = await cache.match(request, { ignoreSearch: true });
+          return guardada || Response.error();
+        })
+    );
+    return;
+  }
+
+  // Del resto, solo lo de nuestro propio dominio.
   if (url.origin !== self.location.origin) return;
 
   // Al navegar (abrir o recargar la app): red primero, si falla la portada guardada.
@@ -83,6 +116,23 @@ function sinConexion() {
     statusText: 'Sin conexión',
     headers: { 'Content-Type': 'text/plain; charset=utf-8' },
   });
+}
+
+async function guardarImagen(request, respuesta) {
+  try {
+    const cache = await caches.open(CACHE_IMAGENES);
+    await cache.put(request, respuesta);
+
+    // Se conservan las más recientes; las viejas se van para no llenar el disco.
+    const claves = await cache.keys();
+    if (claves.length > MAX_IMAGENES) {
+      for (const vieja of claves.slice(0, claves.length - MAX_IMAGENES)) {
+        await cache.delete(vieja);
+      }
+    }
+  } catch {
+    // Sin espacio o sin permiso: no pasa nada, simplemente no se guarda.
+  }
 }
 
 function guardarCopia(request, respuesta) {
