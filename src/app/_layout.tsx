@@ -2,6 +2,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ProjectProvider } from '../context/ProjectContext'; // <-- Ajusta la ruta si tus context están en /src/context
 import { UserProvider } from '../context/UserContext';
+import { VistaPreviaPDF } from '../components/VistaPreviaPDF';
 import { ContenedorDeAvisos } from '../lib/aviso';
 import { supabase } from '../lib/supabase';
 
@@ -50,6 +51,9 @@ export default function RootLayout() {
 
         {/* Dibuja los avisos en web. En nativo no pinta nada: usa el cuadro del sistema. */}
         <ContenedorDeAvisos />
+
+        {/* Vista previa de reportes en web. En nativo no dibuja nada. */}
+        <VistaPreviaPDF />
       </ProjectProvider>
     </UserProvider>
   );

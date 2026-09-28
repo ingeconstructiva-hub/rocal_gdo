@@ -9,6 +9,7 @@ import { useRefrescar } from '../../lib/refrescar';
 import { SkeletonLista } from '../../components/Skeleton';
 import { exportarPDF } from '../../lib/exportar';
 import { regresar } from '../../lib/navegar';
+import { subirArchivo } from '../../lib/subidas';
 import { Aviso } from '../../lib/aviso';
 import { Firma, FirmaRef } from '../../components/Firma';
 
@@ -269,22 +270,28 @@ export default function ResguardosScreen() {
     const timestampId = Date.now();
 
     try {
-      const nameFirmaEntrega = `firma_entrega_${selectedItemForSign.id}_${timestampId}.png`;
-      const dataEntrega = formDataFromBase64(firmaEntregaBase64, nameFirmaEntrega);
-      await supabase.storage.from('identificaciones').upload(`ines/${nameFirmaEntrega}`, dataEntrega as any);
+      // Las tres subidas van por subirArchivo: antes usaban FormData con la ruta
+      // del archivo, que solo funciona en celular. En navegador no subían nada y
+      // además el error se ignoraba, así que la responsiva salía con las firmas
+      // y la INE rotas.
+      const urlEntrega = await subirArchivo(firmaEntregaBase64, 'identificaciones', {
+        carpeta: 'firmas',
+        prefijo: `firma_entrega_${selectedItemForSign.id}`,
+        extension: 'png',
+        contentType: 'image/png',
+      });
 
-      const nameFirmaRecibe = `firma_recibe_${selectedItemForSign.id}_${timestampId}.png`;
-      const dataRecibe = formDataFromBase64(signature, nameFirmaRecibe);
-      await supabase.storage.from('identificaciones').upload(`ines/${nameFirmaRecibe}`, dataRecibe as any);
+      const urlRecibe = await subirArchivo(signature, 'identificaciones', {
+        carpeta: 'firmas',
+        prefijo: `firma_recibe_${selectedItemForSign.id}`,
+        extension: 'png',
+        contentType: 'image/png',
+      });
 
-      const filenameIne = `ine_resguardo_${selectedItemForSign.id}_${timestampId}.jpg`;
-      const formDataIne = new FormData();
-      formDataIne.append('file', { uri: ineLocalUri, name: filenameIne, type: 'image/jpeg' } as any);
-      await supabase.storage.from('identificaciones').upload(`ines/${filenameIne}`, formDataIne as any);
-
-      const urlEntrega = supabase.storage.from('identificaciones').getPublicUrl(`ines/${nameFirmaEntrega}`).data.publicUrl;
-      const urlRecibe = supabase.storage.from('identificaciones').getPublicUrl(`ines/${nameFirmaRecibe}`).data.publicUrl;
-      const finalIneUrl = supabase.storage.from('identificaciones').getPublicUrl(`ines/${filenameIne}`).data.publicUrl;
+      const finalIneUrl = await subirArchivo(ineLocalUri, 'identificaciones', {
+        carpeta: 'ines',
+        prefijo: `ine_resguardo_${selectedItemForSign.id}`,
+      });
 
       const tokenGenerado = `TS-${timestampId}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
       const timestampActual = new Date().toLocaleString('es-MX');
