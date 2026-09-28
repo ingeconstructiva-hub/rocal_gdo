@@ -32,6 +32,7 @@ interface HerramientaAlmacen {
   token_firma?: string | null;  
   fecha_firma?: string | null;  
   ine_url?: string | null; 
+  ine_reverso_url?: string | null;
   firma_entrega_url?: string | null;
   firma_recibe_url?: string | null;
   fecha_entrega?: string | null;   
@@ -70,6 +71,7 @@ export default function ResguardosScreen() {
   const [selectedItemForSign, setSelectedItemForSign] = useState<HerramientaAlmacen | null>(null);
   const [nombreResponsableSign, setNombreResponsableSign] = useState('');
   const [ineLocalUri, setIneLocalUri] = useState<string | null>(null); 
+  const [ineReversoLocalUri, setIneReversoLocalUri] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [editingTool, setEditingTool] = useState<HerramientaAlmacen | null>(null);
 
@@ -103,7 +105,7 @@ export default function ResguardosScreen() {
 
   const abrirModalFirma = (item: HerramientaAlmacen) => {
     setSelectedItemForSign(item);
-    setIneLocalUri(null); 
+    setIneLocalUri(null); setIneReversoLocalUri(null); 
     setFirmaEntregaBase64(null);
     setItemsAdicionales([]); 
     setNuevoItemNombre('');
@@ -141,7 +143,7 @@ export default function ResguardosScreen() {
     }
   };
 
-  const handlePickIneImage = async () => {
+  const handlePickIneImage = async (lado: 'frente' | 'reverso' = 'frente') => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
       Aviso.alert("Permiso Requerido", "Necesitamos acceso a la cámara para capturar la INE.");
@@ -155,7 +157,8 @@ export default function ResguardosScreen() {
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
-      setIneLocalUri(result.assets[0].uri);
+      if (lado === 'reverso') setIneReversoLocalUri(result.assets[0].uri);
+      else setIneLocalUri(result.assets[0].uri);
     }
   };
 
@@ -225,7 +228,8 @@ export default function ResguardosScreen() {
         fecha_firma: item.fecha_firma,
         firma_entrega_url: item.firma_entrega_url || null,
         firma_recibe_url: item.firma_recibe_url || null,
-        ine_url: item.ine_url || null
+        ine_url: item.ine_url || null,
+        ine_reverso_url: item.ine_reverso_url || null
       };
 
       const htmlContent = generarPlantillaResponsiva(valePayload);
@@ -251,8 +255,8 @@ export default function ResguardosScreen() {
       Aviso.alert("Nombre Requerido", "Por favor ingresa el nombre de quien recibe.");
       return;
     }
-    if (!ineLocalUri) {
-      Aviso.alert("INE Requerida", "Es obligatorio capturar la foto de la INE.");
+    if (!ineLocalUri || !ineReversoLocalUri) {
+      Aviso.alert("INE Requerida", "Captura los dos lados de la INE: frente y reverso.");
       return;
     }
     if (!selectedItemForSign) return;
@@ -291,7 +295,12 @@ export default function ResguardosScreen() {
 
       const finalIneUrl = await subirArchivo(ineLocalUri, 'identificaciones', {
         carpeta: 'ines',
-        prefijo: `ine_resguardo_${selectedItemForSign.id}`,
+        prefijo: `ine_frente_${selectedItemForSign.id}`,
+      });
+
+      const finalIneReversoUrl = await subirArchivo(ineReversoLocalUri, 'identificaciones', {
+        carpeta: 'ines',
+        prefijo: `ine_reverso_${selectedItemForSign.id}`,
       });
 
       const tokenGenerado = `TS-${timestampId}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
@@ -309,6 +318,7 @@ export default function ResguardosScreen() {
         token_firma: tokenGenerado,
         fecha_firma: timestampActual,
         ine_url: finalIneUrl,
+        ine_reverso_url: finalIneReversoUrl,
         firma_entrega_url: urlEntrega,
         firma_recibe_url: urlRecibe,
         fecha_entrega: timestampActual, 
@@ -336,7 +346,7 @@ export default function ResguardosScreen() {
 
       setModalFirmaVisible(false);
       setNombreResponsableSign('');
-      setIneLocalUri(null);
+      setIneLocalUri(null); setIneReversoLocalUri(null);
       setFirmaEntregaBase64(null);
       setItemsAdicionales([]);
       setSugerenciasFiltradas([]);
@@ -570,13 +580,24 @@ export default function ResguardosScreen() {
                     />
 
                     <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, alignItems: 'center' }}>
-                      <TouchableOpacity style={[styles.ineCapturePlaceholder, { flex: 1, height: 55, marginVertical: 0 }]} onPress={handlePickIneImage}>
+                      <TouchableOpacity style={[styles.ineCapturePlaceholder, { flex: 1, height: 55, marginVertical: 0 }]} onPress={() => handlePickIneImage('frente')}>
                         {ineLocalUri ? (
-                          <Text style={{ color: '#16A34A', fontSize: 11, fontWeight: 'bold' }}>✓ INE Capturada</Text>
+                          <Text style={{ color: '#16A34A', fontSize: 11, fontWeight: 'bold' }}>✓ INE frente</Text>
                         ) : (
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                             <Feather name="camera" size={14} color="#2563EB" />
-                            <Text style={{ color: '#2563EB', fontSize: 11, fontWeight: 'bold' }}>Capturar INE</Text>
+                            <Text style={{ color: '#2563EB', fontSize: 11, fontWeight: 'bold' }}>INE frente</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+
+                      <TouchableOpacity style={[styles.ineCapturePlaceholder, { flex: 1, height: 55, marginVertical: 0 }]} onPress={() => handlePickIneImage('reverso')}>
+                        {ineReversoLocalUri ? (
+                          <Text style={{ color: '#16A34A', fontSize: 11, fontWeight: 'bold' }}>✓ INE reverso</Text>
+                        ) : (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Feather name="camera" size={14} color="#2563EB" />
+                            <Text style={{ color: '#2563EB', fontSize: 11, fontWeight: 'bold' }}>INE reverso</Text>
                           </View>
                         )}
                       </TouchableOpacity>

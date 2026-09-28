@@ -15,7 +15,10 @@ export function generarPlantillaResponsiva(vale: any) {
         .img-firma { height: 65px; max-width: 180px; object-fit: contain; margin-bottom: 4px; }
         .anexo-ine { margin-top: 26px; padding-top: 16px; border-top: 1px dashed #94a3b8; text-align: center; page-break-inside: avoid; }
         .anexo-titulo { font-size: 11px; font-weight: bold; letter-spacing: 0.5px; color: #334155; margin: 0 0 10px 0; }
-        .img-ine { max-width: 320px; width: 100%; max-height: 220px; object-fit: contain; border: 1px solid #cbd5e1; border-radius: 6px; }
+        .ine-caras { display: flex; gap: 14px; justify-content: center; align-items: flex-start; }
+        .ine-cara { flex: 1; max-width: 260px; }
+        .img-ine { width: 100%; max-height: 180px; object-fit: contain; border: 1px solid #cbd5e1; border-radius: 6px; }
+        .ine-lado { display: block; font-size: 8px; color: #64748b; letter-spacing: 1px; margin-top: 4px; }
         .anexo-pie { font-size: 9px; color: #64748b; margin-top: 6px; }
         .signature-placeholder { height: 65px; } 
         .digital-seal { margin-top: 40px; padding: 10px; border: 1px dashed #cbd5e1; background-color: #f1f5f9; border-radius: 6px; font-size: 10px; color: #64748B; font-family: monospace; }
@@ -72,10 +75,13 @@ export function generarPlantillaResponsiva(vale: any) {
         
       </div>
 
-      ${vale.ine_url
+      ${vale.ine_url || vale.ine_reverso_url
         ? `<div class="anexo-ine">
              <p class="anexo-titulo">ANEXO: IDENTIFICACIÓN OFICIAL DE QUIEN RECIBE</p>
-             <img src="${vale.ine_url}" class="img-ine" />
+             <div class="ine-caras">
+               ${vale.ine_url ? `<div class="ine-cara"><img src="${vale.ine_url}" class="img-ine" /><span class="ine-lado">FRENTE</span></div>` : ''}
+               ${vale.ine_reverso_url ? `<div class="ine-cara"><img src="${vale.ine_reverso_url}" class="img-ine" /><span class="ine-lado">REVERSO</span></div>` : ''}
+             </div>
              <p class="anexo-pie">Documento cotejado al momento de la entrega. ${vale.nombre_recibe}</p>
            </div>`
         : ''
