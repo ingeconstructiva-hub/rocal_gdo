@@ -34,6 +34,7 @@ import { guardarArchivoLocal } from '../lib/archivos';
 import { subirArchivo } from '../lib/subidas';
 import { exportarPDF, exportarTexto } from '../lib/exportar';
 import { regresar } from '../lib/navegar';
+import { firmarCampos } from '../lib/urlsFirmadas';
 import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
@@ -248,7 +249,7 @@ export default function CajaChicaScreen() {
       }));
 
       const historialUnificado = [...ingresosFormateados, ...egresosFormateados].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
-      setMovimientos(historialUnificado);
+      setMovimientos(await firmarCampos(historialUnificado, ['foto_ticket']));
     } catch (e) { console.log(e); } finally { setLoading(false); }
   };
 

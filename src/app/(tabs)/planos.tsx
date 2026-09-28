@@ -10,6 +10,7 @@ import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Platfor
 import { useRefrescar } from '../../lib/refrescar';
 import { SkeletonLista } from '../../components/Skeleton';
 import { regresar } from '../../lib/navegar';
+import { firmarCampos } from '../../lib/urlsFirmadas';
 import { Aviso } from '../../lib/aviso';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
@@ -111,7 +112,7 @@ export default function DocumentosScreen() {
         
         if (data) {
           await Almacen.setItem(storageKeyDocs, JSON.stringify(data));
-          setDocumentosList([...uiPending, ...data]);
+          setDocumentosList([...uiPending, ...(await firmarCampos(data, ['file_url']))]);
         }
       } catch (error: any) {
         if (error.message !== 'Network request failed' && error.message !== 'Failed to fetch') {

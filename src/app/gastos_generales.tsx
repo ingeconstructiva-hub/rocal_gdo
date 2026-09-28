@@ -29,6 +29,7 @@ import { SkeletonLista } from '../components/Skeleton';
 import { subirArchivo } from '../lib/subidas';
 import { exportarPDF, exportarTexto } from '../lib/exportar';
 import { regresar } from '../lib/navegar';
+import { firmarCampos } from '../lib/urlsFirmadas';
 import { Aviso } from '../lib/aviso';
 
 import SummaryCard from '../components/SummaryCard';
@@ -150,7 +151,7 @@ export default function GastosGeneralesScreen() {
 
       if (error) throw error;
       if (data) {
-        setGastos(data);
+        setGastos(await firmarCampos(data, ['foto_url']));
         await Almacen.setItem(storageKey, JSON.stringify(data));
       }
     } catch (error) {

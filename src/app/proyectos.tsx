@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SkeletonTarjetas } from '../components/Skeleton';
 import { subirArchivo } from '../lib/subidas';
+import { firmarCampos } from '../lib/urlsFirmadas';
 import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
@@ -114,7 +115,7 @@ export default function ProyectosScreen() {
             ...proj,
             userRole: 'Administrador'
           }));
-          setProyectos(proyectosFormateados);
+          setProyectos(await firmarCampos(proyectosFormateados, ['foto_url']));
           await Almacen.setItem(storageKey, JSON.stringify(proyectosFormateados));
         }
       }

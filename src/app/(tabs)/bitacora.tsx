@@ -12,6 +12,7 @@ import { useRefrescar } from '../../lib/refrescar';
 import { SkeletonLista } from '../../components/Skeleton';
 import { exportarPDF } from '../../lib/exportar';
 import { regresar } from '../../lib/navegar';
+import { firmarVarias } from '../../lib/urlsFirmadas';
 import { Aviso } from '../../lib/aviso';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
@@ -69,8 +70,26 @@ export default function BitacoraScreen() {
     }
   };
 
-  const processData = (data: any[]) => {
-    setLogs(data);
+  const processData = async (data: any[]) => {
+    // Las fotos de bitácora viven como una lista dentro de photo_url, así que
+    // se firma cada una y se vuelve a guardar en el mismo formato: el resto de
+    // la pantalla y las plantillas de PDF no cambian.
+    const conFotosFirmadas = await Promise.all(
+      data.map(async (log) => {
+        if (typeof log.photo_url !== 'string' || !log.photo_url.startsWith('[')) return log;
+        try {
+          const urls = JSON.parse(log.photo_url);
+          if (!Array.isArray(urls)) return log;
+          const firmadas = await firmarVarias(urls);
+          return { ...log, photo_url: JSON.stringify(firmadas) };
+        } catch {
+          return log;
+        }
+      })
+    );
+
+    setLogs(conFotosFirmadas);
+    data = conFotosFirmadas;
     const counts: Record<string, number> = {};
     data.forEach(log => {
       const cat = log.category || 'General';

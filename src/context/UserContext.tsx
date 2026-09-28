@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { firmar } from '../lib/urlsFirmadas';
 
 export interface UserProfile {
   id: string;
@@ -76,6 +77,10 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
         else if (dbRole === 'oficina') display = "Personal de Oficina";
 
         // 🟢 CORRECCIÓN 2: Asegurarnos de guardar TODOS los datos en el estado, no solo el nombre
+        // Las fotos del perfil también viven en un bucket privado.
+        const fotoIne = await firmar(data.foto_ine_url);
+        const fotoPerfil = await firmar(data.foto_perfil_url);
+
         setProfile({
           id: userId,
           name: dbName,
@@ -86,8 +91,8 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
           edad: data.edad,
           direccion: data.direccion,
           telefono: data.telefono,
-          foto_ine_url: data.foto_ine_url,
-          foto_perfil_url: data.foto_perfil_url
+          foto_ine_url: fotoIne,
+          foto_perfil_url: fotoPerfil
         });
       }
     } catch (error) {

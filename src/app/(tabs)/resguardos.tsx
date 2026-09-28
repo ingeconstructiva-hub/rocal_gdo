@@ -10,6 +10,7 @@ import { SkeletonLista } from '../../components/Skeleton';
 import { exportarPDF } from '../../lib/exportar';
 import { regresar } from '../../lib/navegar';
 import { subirArchivo } from '../../lib/subidas';
+import { firmarCampos } from '../../lib/urlsFirmadas';
 import { Aviso } from '../../lib/aviso';
 import { Firma, FirmaRef } from '../../components/Firma';
 
@@ -135,7 +136,9 @@ export default function ResguardosScreen() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      if (data) setHerramientas(data);
+      // Las direcciones guardadas se firman al cargar: así el bucket puede ser
+      // privado sin que las pantallas ni los PDFs tengan que cambiar.
+      if (data) setHerramientas(await firmarCampos(data, ['ine_url', 'ine_reverso_url', 'firma_entrega_url', 'firma_recibe_url']));
     } catch (error) {
       console.log("Error loading warehouse inventory:", error);
     } finally {
