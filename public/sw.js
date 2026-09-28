@@ -10,7 +10,7 @@
  * internet para que la app las mande a su bandeja de salida.
  */
 
-const CACHE = 'rocal-pwa-v7';
+const CACHE = 'rocal-pwa-v8';
 
 /* Caché aparte para las fotos de Supabase (tickets, INE, evidencia).
  * Va separada porque las imágenes pesan y conviene poder limitarlas sin tocar
@@ -63,19 +63,7 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/storage/v1/object/')) {
     const llave = llaveDeImagen(url);
 
-    event.respondWith(
-      fetch(request)
-        .then((respuesta) => {
-          if (respuesta.ok && llave) guardarImagen(llave, respuesta.clone());
-          return respuesta;
-        })
-        .catch(async () => {
-          if (!llave) return Response.error();
-          const cache = await caches.open(CACHE_IMAGENES);
-          const guardada = await cache.match(llave);
-          return guardada || Response.error();
-        })
-    );
+    event.respondWith(traerFoto(request, llave));
     return;
   }
 
@@ -119,6 +107,40 @@ function sinConexion() {
     statusText: 'Sin conexión',
     headers: { 'Content-Type': 'text/plain; charset=utf-8' },
   });
+}
+
+/* Trae la foto y la guarda para poder verla sin internet.
+ *
+ * El detalle que costó encontrar: las fotos se piden desde etiquetas <img>, que
+ * el navegador manda en modo "no-cors". La respuesta llega OPACA: sirve para
+ * mostrarla, pero `cache.put` la rechaza y no se puede guardar. Por eso el
+ * caché de imágenes nunca se creaba.
+ *
+ * Solución: pedirla explícitamente en modo cors (Supabase lo permite). Esa
+ * respuesta sí se puede guardar, y se muestra igual. */
+async function traerFoto(request, llave) {
+  const cache = llave ? await caches.open(CACHE_IMAGENES) : null;
+
+  try {
+    const respuesta = await fetch(new Request(request.url, { mode: 'cors', credentials: 'omit' }));
+    if (respuesta.ok && cache) guardarImagen(llave, respuesta.clone());
+    return respuesta;
+  } catch {
+    // Puede fallar por falta de internet o porque el servidor no permita cors.
+  }
+
+  // Sin red: la copia guardada.
+  if (cache) {
+    const guardada = await cache.match(llave);
+    if (guardada) return guardada;
+  }
+
+  // Último intento: tal como lo pidió la página (no se podrá guardar, pero se ve).
+  try {
+    return await fetch(request);
+  } catch {
+    return Response.error();
+  }
 }
 
 /* Nombre único de cada foto, sin importar cómo se pidió.
