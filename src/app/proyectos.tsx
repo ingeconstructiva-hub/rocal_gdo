@@ -10,7 +10,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SkeletonTarjetas } from '../components/Skeleton';
 import { subirArchivo } from '../lib/subidas';
 import { firmarCampos } from '../lib/urlsFirmadas';
@@ -57,6 +57,9 @@ export default function ProyectosScreen() {
 
   // 🟢 ESTADOS PARA EL MODAL DE DETALLES
   const [isDetalleVisible, setIsDetalleVisible] = useState(false);
+  const [obraAEliminar, setObraAEliminar] = useState<any>(null);
+  const [textoConfirmacion, setTextoConfirmacion] = useState('');
+  const [eliminando, setEliminando] = useState(false);
   const [obraSeleccionada, setObraSeleccionada] = useState<any>(null);
 
   // ESTADOS PARA UNIRSE A OBRA
@@ -341,19 +344,65 @@ export default function ProyectosScreen() {
     setIsDetalleVisible(true);
   };
 
-  const confirmarEliminar = (id: string) => {
-    Aviso.alert("Confirmar Eliminación", "¿Estás seguro de eliminar esta obra? Todo su historial se borrará permanentemente.", [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Eliminar", style: "destructive", onPress: async () => {
-        try {
-          const { error } = await supabase.from('projects').delete().eq('id', id);
-          if (error) throw error;
-          cargarProyectos();
-        } catch (e: any) {
-          Aviso.alert("Error al eliminar", e.message);
-        }
-      }}
+  /* Antes de borrar una obra guardamos su expediente.
+   * Borrar arrastra en cascada bitácora, nóminas, trabajadores, planos,
+   * herramientas e ingresos, y los gastos quedaban sueltos. Si nadie finalizó
+   * la obra primero, no quedaba ningún rastro de que existió. */
+  const guardarExpediente = async (proyecto: any) => {
+    const [gastos, bitacora, caja, nomina, trabajadores, inventario, maquinaria] = await Promise.all([
+      supabase.from('gastos_generales').select('*').eq('project_id', proyecto.id),
+      supabase.from('logs').select('*').eq('project_id', proyecto.id),
+      supabase.from('caja_chica').select('*').eq('project_id', proyecto.id),
+      supabase.from('payroll_records').select('*').eq('project_id', proyecto.id),
+      supabase.from('workers').select('*').eq('project_id', proyecto.id),
+      supabase.from('inventory').select('*').eq('project_id', proyecto.id),
+      supabase.from('gastos_maquinaria').select('*').eq('project_id', proyecto.id),
     ]);
+
+    const { error } = await supabase.from('project_backups').insert([{
+      project_id: proyecto.id,
+      report_data: {
+        nombre: proyecto.name,
+        ubicacion: proyecto.location ?? null,
+        motivo: 'eliminada',
+        fecha_cierre: new Date(),
+        gastos: gastos.data, bitacora: bitacora.data, caja_chica: caja.data,
+        nomina: nomina.data, trabajadores: trabajadores.data,
+        inventario: inventario.data, maquinaria: maquinaria.data,
+      }
+    }]);
+    if (error) throw error;
+  };
+
+  const confirmarEliminar = (proyecto: any) => {
+    setTextoConfirmacion('');
+    setObraAEliminar(proyecto);
+  };
+
+  /* Eliminar una obra es irreversible y se lleva nueve tablas de historial.
+   * Por eso se pide escribir su nombre, como hace GitHub al borrar un repo:
+   * obliga a leer QUÉ se está borrando, no solo a tocar "confirmar". */
+  const nombreCoincide =
+    !!obraAEliminar &&
+    textoConfirmacion.trim().toUpperCase() === String(obraAEliminar.name || '').trim().toUpperCase();
+
+  const ejecutarEliminacion = async () => {
+    if (!obraAEliminar || !nombreCoincide) return;
+    setEliminando(true);
+    try {
+      await guardarExpediente(obraAEliminar);
+
+      const { error } = await supabase.from('projects').delete().eq('id', obraAEliminar.id);
+      if (error) throw error;
+
+      setObraAEliminar(null);
+      Aviso.alert('Obra eliminada', 'Se guardó su expediente antes de borrarla.');
+      cargarProyectos();
+    } catch (e: any) {
+      Aviso.alert('Error al eliminar', e.message);
+    } finally {
+      setEliminando(false);
+    }
   };
 
   const finalizarObra = async (proyecto: any) => {
@@ -847,7 +896,7 @@ export default function ProyectosScreen() {
 
                     <TouchableOpacity 
                       style={styles.btnEliminarAdmin} 
-                      onPress={() => { setIsDetalleVisible(false); confirmarEliminar(obraSeleccionada.id); }}
+                      onPress={() => { setIsDetalleVisible(false); confirmarEliminar(obraSeleccionada); }}
                     >
                       <Feather name="trash-2" size={18} color="#EF4444" />
                     </TouchableOpacity>
@@ -864,6 +913,68 @@ export default function ProyectosScreen() {
                   )}
                 </View>
               )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+
+      {/* CONFIRMACIÓN DE BORRADO: hay que escribir el nombre de la obra */}
+      <Modal visible={!!obraAEliminar} transparent animationType="fade" onRequestClose={() => setObraAEliminar(null)}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setObraAEliminar(null)} />
+          <View style={[styles.modalContent, { padding: 22, maxHeight: '85%' }]}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: '#B91C1C' }}>Eliminar obra</Text>
+
+              <Text style={{ fontSize: 13, color: '#334155', marginTop: 10, lineHeight: 19 }}>
+                Se borrarán la bitácora, la nómina, los trabajadores, los planos, las herramientas,
+                los ingresos y los gastos de esta obra. Antes de borrar se guarda un expediente con
+                toda esa información, pero la obra no se puede recuperar.
+              </Text>
+
+              <Text style={{ fontSize: 13, color: '#334155', marginTop: 14 }}>
+                Para confirmar, escribe el nombre de la obra:
+              </Text>
+              <Text selectable style={{ fontSize: 14, fontWeight: '800', color: '#0F172A', marginTop: 4 }}>
+                {obraAEliminar?.name}
+              </Text>
+
+              <TextInput
+                style={[styles.modalInput, { marginTop: 10, borderColor: nombreCoincide ? '#16A34A' : '#CBD5E1' }]}
+                value={textoConfirmacion}
+                onChangeText={setTextoConfirmacion}
+                placeholder="Escribe el nombre aquí"
+                placeholderTextColor="#94A3B8"
+                autoCapitalize="characters"
+              />
+
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+                <TouchableOpacity
+                  style={{ flex: 1, backgroundColor: '#F1F5F9', padding: 14, borderRadius: 12, alignItems: 'center' }}
+                  onPress={() => setObraAEliminar(null)}
+                >
+                  <Text style={{ color: '#334155', fontWeight: 'bold' }}>Cancelar</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  disabled={!nombreCoincide || eliminando}
+                  onPress={ejecutarEliminacion}
+                  style={{
+                    flex: 1,
+                    backgroundColor: nombreCoincide ? '#DC2626' : '#FCA5A5',
+                    padding: 14,
+                    borderRadius: 12,
+                    alignItems: 'center',
+                  }}
+                >
+                  {eliminando ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : (
+                    <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Eliminar obra</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </ScrollView>
           </View>
         </View>
