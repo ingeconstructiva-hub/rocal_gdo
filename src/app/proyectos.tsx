@@ -30,6 +30,8 @@ export default function ProyectosScreen() {
   const [userId, setUserId] = useState<string | null>(null);
 
   const [listaResidentes, setListaResidentes] = useState<any[]>([]);
+  const [residentesAsignados, setResidentesAsignados] = useState<any[]>([]);
+  const [guardandoResidente, setGuardandoResidente] = useState(false);
   const [selectedResidentId, setSelectedResidentId] = useState<string | null>(null);
   const [isResidentDropdownOpen, setIsResidentDropdownOpen] = useState(false);
 
@@ -298,9 +300,74 @@ export default function ProyectosScreen() {
     setIsModalVisible(true);
   };
 
+  /* Residentes de una obra. Viven en project_members con rol 'residente'.
+   * Se administran aquí para poder tener varios por obra: al crearla solo se
+   * podía asignar uno, y no había forma de agregar más después. */
+  const cargarResidentesDeObra = async (projectId: string) => {
+    const { data } = await supabase
+      .from('project_members')
+      .select('user_id')
+      .eq('project_id', projectId)
+      .eq('role', 'residente');
+
+    const ids = (data || []).map((m: any) => m.user_id);
+    if (ids.length === 0) {
+      setResidentesAsignados([]);
+      return;
+    }
+
+    const { data: perfiles } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .in('id', ids);
+
+    setResidentesAsignados(perfiles || []);
+  };
+
+  const agregarResidente = async (userId: string) => {
+    if (!editingProjectId || !userId) return;
+    setGuardandoResidente(true);
+    try {
+      const { error } = await supabase
+        .from('project_members')
+        .insert([{ user_id: userId, project_id: editingProjectId, role: 'residente' }]);
+      if (error) throw error;
+
+      await cargarResidentesDeObra(editingProjectId);
+      setSelectedResidentId(null);
+      setIsResidentDropdownOpen(false);
+    } catch (e: any) {
+      Aviso.alert('No se pudo agregar', e.message);
+    } finally {
+      setGuardandoResidente(false);
+    }
+  };
+
+  const quitarResidente = (residente: any) => {
+    if (!editingProjectId) return;
+    Aviso.alert('Quitar residente', `¿Quitar a ${residente.full_name} de esta obra?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Quitar', style: 'destructive', onPress: async () => {
+        try {
+          const { error } = await supabase
+            .from('project_members')
+            .delete()
+            .eq('project_id', editingProjectId)
+            .eq('user_id', residente.id)
+            .eq('role', 'residente');
+          if (error) throw error;
+          await cargarResidentesDeObra(editingProjectId);
+        } catch (e: any) {
+          Aviso.alert('No se pudo quitar', e.message);
+        }
+      }},
+    ]);
+  };
+
   const iniciarEdicion = (proyecto: any) => {
     setModalMode('edit');
     setEditingProjectId(proyecto.id);
+    cargarResidentesDeObra(proyecto.id);
     setNewProjectName(proyecto.name || '');
     setNewProjectLocation(proyecto.location || '');
     setClientName(proyecto.client_name || '');
@@ -675,6 +742,64 @@ export default function ProyectosScreen() {
 
               <Text style={styles.modalLabel}>Número de Contrato</Text>
               <TextInput style={styles.modalInput} placeholder="Ej. CTR-2026-001" placeholderTextColor="#94A3B8" value={contractNumber} onChangeText={setContractNumber} />
+
+              {modalMode === 'edit' && (
+                <View style={{ marginTop: 6, marginBottom: 10 }}>
+                  <Text style={styles.modalLabel}>Residentes de la obra</Text>
+
+                  {residentesAsignados.length === 0 ? (
+                    <Text style={{ fontSize: 12, color: '#94A3B8', marginBottom: 8 }}>
+                      Esta obra todavía no tiene residentes asignados.
+                    </Text>
+                  ) : (
+                    residentesAsignados.map((res) => (
+                      <View key={res.id} style={estilosResidentes.renglon}>
+                        <Feather name="user" size={16} color="#2563EB" />
+                        <Text style={estilosResidentes.nombre} numberOfLines={1}>{res.full_name}</Text>
+                        <TouchableOpacity onPress={() => quitarResidente(res)} style={estilosResidentes.quitar}>
+                          <Feather name="x" size={16} color="#DC2626" />
+                        </TouchableOpacity>
+                      </View>
+                    ))
+                  )}
+
+                  {/* Solo se ofrecen los que todavía no están en la obra */}
+                  {listaResidentes.filter((r) => !residentesAsignados.some((a) => a.id === r.id)).length > 0 && (
+                    <View style={{ zIndex: 60 }}>
+                      <TouchableOpacity
+                        style={estilosResidentes.botonAgregar}
+                        onPress={() => setIsResidentDropdownOpen(!isResidentDropdownOpen)}
+                        disabled={guardandoResidente}
+                      >
+                        {guardandoResidente ? (
+                          <ActivityIndicator size="small" color="#2563EB" />
+                        ) : (
+                          <>
+                            <Feather name="plus-circle" size={16} color="#2563EB" />
+                            <Text style={estilosResidentes.textoAgregar}>Añadir otro residente</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+
+                      {isResidentDropdownOpen && (
+                        <View style={styles.dropdownMenu}>
+                          {listaResidentes
+                            .filter((r) => !residentesAsignados.some((a) => a.id === r.id))
+                            .map((res) => (
+                              <TouchableOpacity
+                                key={res.id}
+                                style={styles.dropdownItem}
+                                onPress={() => agregarResidente(res.id)}
+                              >
+                                <Text style={{ color: '#111827', fontSize: 15 }}>{res.full_name}</Text>
+                              </TouchableOpacity>
+                            ))}
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
+              )}
 
               {modalMode === 'create' && (
                 <>
@@ -1078,4 +1203,34 @@ const styles = StyleSheet.create({
   btnEditarAdmin: { flex: 1, flexDirection: 'row', backgroundColor: '#EFF6FF', padding: 14, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   btnEliminarAdmin: { backgroundColor: '#FEF2F2', padding: 14, borderRadius: 12, justifyContent: 'center', alignItems: 'center', width: 55 },
   btnFinalizarAdmin: { flexDirection: 'row', backgroundColor: '#059669', padding: 16, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 5 },
+});
+
+const estilosResidentes = StyleSheet.create({
+  renglon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 6,
+  },
+  nombre: { flex: 1, fontSize: 14, color: '#1E293B', fontWeight: '600' },
+  quitar: { padding: 4 },
+  botonAgregar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderStyle: 'dashed',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
+    paddingVertical: 12,
+  },
+  textoAgregar: { color: '#2563EB', fontWeight: '700', fontSize: 13 },
 });
