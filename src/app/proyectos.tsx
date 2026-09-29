@@ -297,6 +297,7 @@ export default function ProyectosScreen() {
   const iniciarCreacion = () => {
     limpiarFormulario();
     setModalMode('create');
+    cargarResidentesDisponibles(); // Al crear tampoco se cargaba: el desplegable salía vacío
     setIsModalVisible(true);
   };
 
@@ -367,6 +368,7 @@ export default function ProyectosScreen() {
   const iniciarEdicion = (proyecto: any) => {
     setModalMode('edit');
     setEditingProjectId(proyecto.id);
+    cargarResidentesDisponibles(); // Nunca se llamaba: la lista salía vacía
     cargarResidentesDeObra(proyecto.id);
     setNewProjectName(proyecto.name || '');
     setNewProjectLocation(proyecto.location || '');
@@ -764,7 +766,13 @@ export default function ProyectosScreen() {
                   )}
 
                   {/* Solo se ofrecen los que todavía no están en la obra */}
-                  {listaResidentes.filter((r) => !residentesAsignados.some((a) => a.id === r.id)).length > 0 && (
+                  {listaResidentes.filter((r) => !residentesAsignados.some((a) => a.id === r.id)).length === 0 ? (
+                    <Text style={{ fontSize: 12, color: '#94A3B8' }}>
+                      {listaResidentes.length === 0
+                        ? 'No hay residentes dados de alta. Créalos en Control de Personal.'
+                        : 'Todos los residentes ya están asignados a esta obra.'}
+                    </Text>
+                  ) : (
                     <View style={{ zIndex: 60 }}>
                       <TouchableOpacity
                         style={estilosResidentes.botonAgregar}
