@@ -1,23 +1,21 @@
 'use client';
 
 import { Feather } from '@expo/vector-icons';
-import Almacen from '../lib/almacen';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { decode } from 'base64-arraybuffer';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SkeletonTarjetas } from '../components/Skeleton';
-import { subirArchivo } from '../lib/subidas';
-import { firmarCampos } from '../lib/urlsFirmadas';
-import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
+import Almacen from '../lib/almacen';
+import { Aviso } from '../lib/aviso';
+import { subirArchivo } from '../lib/subidas';
 import { supabase } from '../lib/supabase';
+import { firmarCampos } from '../lib/urlsFirmadas';
 
 export default function ProyectosScreen() {
   const router = useRouter();
@@ -746,7 +744,7 @@ export default function ProyectosScreen() {
               <TextInput style={styles.modalInput} placeholder="Ej. CTR-2026-001" placeholderTextColor="#94A3B8" value={contractNumber} onChangeText={setContractNumber} />
 
               {modalMode === 'edit' && (
-                <View style={{ marginTop: 6, marginBottom: 10 }}>
+                <View style={{ marginTop: 6, marginBottom: 10, zIndex: isResidentDropdownOpen ? 1000 : 1, elevation: isResidentDropdownOpen ? 20 : 0 }}>
                   <Text style={styles.modalLabel}>Residentes de la obra</Text>
 
                   {residentesAsignados.length === 0 ? (
@@ -773,7 +771,7 @@ export default function ProyectosScreen() {
                         : 'Todos los residentes ya están asignados a esta obra.'}
                     </Text>
                   ) : (
-                    <View style={{ zIndex: 60 }}>
+                    <View style={{ zIndex: isResidentDropdownOpen ? 1000 : 1, elevation: isResidentDropdownOpen ? 20 : 0 }}>
                       <TouchableOpacity
                         style={estilosResidentes.botonAgregar}
                         onPress={() => setIsResidentDropdownOpen(!isResidentDropdownOpen)}
@@ -814,7 +812,7 @@ export default function ProyectosScreen() {
               {modalMode === 'create' && (
                 <>
                   <Text style={styles.modalLabel}>Asignar Residente Encargado</Text>
-                  <View style={{ zIndex: 50, marginBottom: 5 }}>
+                  <View style={{ zIndex: isResidentDropdownOpen ? 1000 : 1, elevation: isResidentDropdownOpen ? 20 : 0, marginBottom: 5 }}>
                     <TouchableOpacity
                       style={[styles.modalInput, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
                       onPress={() => setIsResidentDropdownOpen(!isResidentDropdownOpen)}
@@ -1196,7 +1194,7 @@ const styles = StyleSheet.create({
   adminIconContainer: { backgroundColor: '#EFF6FF', padding: 10, borderRadius: 12 },
   adminBtnTitle: { fontSize: 14, fontWeight: 'bold', color: '#0F172A' },
   adminBtnSubtitle: { fontSize: 11, color: '#64748B', marginTop: 2 },
-  dropdownMenu: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, marginTop: 4, position: 'absolute', top: 52, left: 0, right: 0, zIndex: 999, elevation: 5, boxShadow: '0px 4px 6px rgba(0, 0, 0, 0.1)', maxHeight: 180, overflow: 'hidden' },
+  dropdownMenu: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, marginTop: 4, position: 'absolute', top: 52, left: 0, right: 0, zIndex: 1001, elevation: 21, boxShadow: '0px 4px 6px rgba(0, 0, 0, 0.1)', maxHeight: 180, overflow: 'hidden' },
   dropdownItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 15, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   dropdownItemActive: { backgroundColor: '#EFF6FF' },
   dropdownIconWrapper: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
