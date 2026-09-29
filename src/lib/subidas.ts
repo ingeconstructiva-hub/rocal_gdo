@@ -11,6 +11,7 @@
 
 import { decode } from 'base64-arraybuffer';
 import { leerComoBase64 } from './archivos';
+import { comprimirImagen } from './comprimir';
 import { supabase } from './supabase';
 
 type Opciones = {
@@ -30,7 +31,11 @@ export async function subirArchivo(
   bucket: string,
   { extension = 'jpg', contentType = 'image/jpeg', prefijo = 'archivo', carpeta }: Opciones = {}
 ): Promise<string> {
-  const base64 = await leerComoBase64(referencia);
+  // Las imágenes se comprimen antes de subir: bajan de ~1.8 MB a ~300 KB sin
+  // que se note en un ticket o una credencial. Los PDF pasan intactos.
+  const origen = contentType.startsWith('image/') ? await comprimirImagen(referencia) : referencia;
+
+  const base64 = await leerComoBase64(origen);
   const contenido = decode(base64);
 
   // Nombre con azar además de la hora: dos personas pueden guardar en el mismo

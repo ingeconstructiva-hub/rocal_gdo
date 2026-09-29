@@ -10,6 +10,8 @@
  * la de los registros, para poder borrar fotos sin tocar lo demás.
  */
 
+import { comprimirImagen } from './comprimir';
+
 const NOMBRE_DB = 'rocal-archivos';
 const ALMACEN = 'blobs';
 
@@ -61,7 +63,10 @@ function blobABase64(blob: Blob): Promise<string> {
 
 /** Copia los bytes de la foto a IndexedDB. Devuelve una referencia que sobrevive recargas. */
 export async function guardarArchivoLocal(uri: string): Promise<string> {
-  const blob = await fetch(uri).then((r) => r.blob());
+  // Se comprime antes de guardarla: la cola sin internet ocupa mucho menos y
+  // caben más fotos pendientes en el espacio que da el navegador.
+  const comprimida = await comprimirImagen(uri);
+  const blob = await fetch(comprimida).then((r) => r.blob());
 
   const db = await abrirDB();
   if (!db) {
