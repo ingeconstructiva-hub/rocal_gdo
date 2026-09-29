@@ -35,6 +35,7 @@ import { subirArchivo } from '../lib/subidas';
 import { exportarPDF, exportarTexto } from '../lib/exportar';
 import { regresar } from '../lib/navegar';
 import { firmarCampos } from '../lib/urlsFirmadas';
+import { FotoSinConexion } from '../components/FotoSinConexion';
 import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
@@ -699,7 +700,7 @@ export default function CajaChicaScreen() {
                     <View style={{ marginTop: 20 }}>
                       <Text style={styles.detailLabel}>Evidencia Fotográfica</Text>
                       <TouchableOpacity onPress={() => Linking.openURL(movimientoSeleccionado.foto_ticket!)}>
-                        <Image source={{ uri: movimientoSeleccionado.foto_ticket }} style={styles.detailTicketImage} resizeMode="cover" />
+                        {isOffline ? <FotoSinConexion alto={180} /> : <Image source={{ uri: movimientoSeleccionado.foto_ticket }} style={styles.detailTicketImage} resizeMode="cover" />}
                       </TouchableOpacity>
                     </View>
                   ) : null}

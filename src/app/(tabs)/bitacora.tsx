@@ -13,6 +13,8 @@ import { SkeletonLista } from '../../components/Skeleton';
 import { exportarPDF } from '../../lib/exportar';
 import { regresar } from '../../lib/navegar';
 import { firmarVarias } from '../../lib/urlsFirmadas';
+import { subirArchivo } from '../../lib/subidas';
+import { FotoSinConexion } from '../../components/FotoSinConexion';
 import { Aviso } from '../../lib/aviso';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
@@ -261,22 +263,13 @@ export default function BitacoraScreen() {
     }
     setIsUploadingPhoto(true);
     try {
-      const response = await fetch(fileUri);
-      const blob = await response.blob();
-      const fileExt = fileUri.split('.').pop() || 'jpg';
-      const fileName = `log_edit_${Date.now()}.${fileExt}`;
-      const filePath = `evidencias_bitacora/${fileName}`;
+      // Bucket 'foto_bitacora': el mismo donde se guardan las fotos al crear el
+      // reporte. Antes apuntaba a 'imagenes_logs', que NO EXISTE en Supabase, así
+      // que las fotos agregadas al editar una bitácora se perdían en silencio.
+      const url = await subirArchivo(fileUri, 'foto_bitacora', { prefijo: 'log_edit' });
 
-      const { error: uploadError } = await supabase.storage
-        .from('imagenes_logs')
-        .upload(filePath, blob, { contentType: `image/${fileExt}` });
-
-      if (uploadError) throw uploadError;
-
-      const { data: publicUrlData } = supabase.storage.from('imagenes_logs').getPublicUrl(filePath);
-      
-      // 🟢 SE AGREGA AL ARREGLO EN LUGAR DE REEMPLAZARLO COMPLETAMENTE
-      setEditPhotosUrls(prev => [...prev, publicUrlData.publicUrl]);
+      // Se agrega al arreglo en lugar de reemplazarlo completamente
+      setEditPhotosUrls(prev => [...prev, url]);
 
     } catch (e: any) {
       Aviso.alert("Error de subida", e.message);
@@ -495,7 +488,9 @@ export default function BitacoraScreen() {
               {selectedLog && parsePhotos(selectedLog.photo_url).length > 0 ? (
                 <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={true} style={{ maxHeight: 210, marginBottom: 15 }}>
                   {parsePhotos(selectedLog.photo_url).map((url, index) => (
-                    <Image key={index} source={{ uri: url }} style={styles.detailImageCarouselItem} resizeMode="cover" />
+                    isOffline
+                      ? <View key={index} style={styles.detailImageCarouselItem}><FotoSinConexion alto={200} /></View>
+                      : <Image key={index} source={{ uri: url }} style={styles.detailImageCarouselItem} resizeMode="cover" />
                   ))}
                 </ScrollView>
               ) : (

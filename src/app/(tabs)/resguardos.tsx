@@ -12,6 +12,7 @@ import { regresar } from '../../lib/navegar';
 import { subirArchivo } from '../../lib/subidas';
 import { firmarCampos } from '../../lib/urlsFirmadas';
 import Almacen from '../../lib/almacen';
+import { FotoSinConexion } from '../../components/FotoSinConexion';
 import { Aviso } from '../../lib/aviso';
 import { Firma, FirmaRef } from '../../components/Firma';
 
@@ -748,7 +749,9 @@ export default function ResguardosScreen() {
               <Text style={styles.ineViewerTitle}>🪪 Expediente Digital: INE</Text>
               <TouchableOpacity onPress={() => setSelectedIneUrl(null)}><Feather name="x-circle" size={22} color="#EF4444" /></TouchableOpacity>
             </View>
-            {selectedIneUrl ? <Image source={{ uri: selectedIneUrl }} style={styles.ineFullImage} /> : null}
+            {selectedIneUrl ? (
+              isOffline ? <FotoSinConexion alto={220} /> : <Image source={{ uri: selectedIneUrl }} style={styles.ineFullImage} />
+            ) : null}
             <TouchableOpacity style={styles.closeIneBtn} onPress={() => setSelectedIneUrl(null)}><Text style={{color: '#FFF', fontWeight: 'bold'}}>Cerrar Visor</Text></TouchableOpacity>
           </View>
         </View>

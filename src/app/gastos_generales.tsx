@@ -30,6 +30,7 @@ import { subirArchivo } from '../lib/subidas';
 import { exportarPDF, exportarTexto } from '../lib/exportar';
 import { regresar } from '../lib/navegar';
 import { firmarCampos } from '../lib/urlsFirmadas';
+import { FotoSinConexion } from '../components/FotoSinConexion';
 import { Aviso } from '../lib/aviso';
 
 import SummaryCard from '../components/SummaryCard';
@@ -717,7 +718,7 @@ export default function GastosGeneralesScreen() {
                   
                   {gastoSeleccionado.foto_url ? (
                     <View style={styles.detailFotoContainer}>
-                      <Image source={{ uri: gastoSeleccionado.foto_url }} style={styles.detailFoto} resizeMode="cover" />
+                      {isOffline ? <FotoSinConexion alto={180} /> : <Image source={{ uri: gastoSeleccionado.foto_url }} style={styles.detailFoto} resizeMode="cover" />}
                     </View>
                   ) : null}
 
