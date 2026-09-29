@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import Almacen from '../lib/almacen';
 import { borrarArchivoLocal } from '../lib/archivos';
 import { subirArchivo } from '../lib/subidas';
-import { dispararRefresco, escucharSiHayQueRefrescar } from '../lib/refrescar';
+import { dispararRefresco, escucharSiHayBoton } from '../lib/refrescar';
 import { BANDEJAS, contarPendientes, leerBandeja, reemplazarBandeja, vaciarBandeja } from '../lib/bandeja';
 import NetInfo from '@react-native-community/netinfo';
 import React, { createContext, useContext, useEffect, useState } from 'react';
@@ -30,7 +30,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const [hayQueRefrescar, setHayQueRefrescar] = useState(false);
 
   // El botón solo aparece donde hay algo que recargar (en login, por ejemplo, no).
-  useEffect(() => escucharSiHayQueRefrescar(setHayQueRefrescar), []);
+  useEffect(() => escucharSiHayBoton(setHayQueRefrescar), []);
 
   const refrescar = async () => {
     setRefrescando(true);

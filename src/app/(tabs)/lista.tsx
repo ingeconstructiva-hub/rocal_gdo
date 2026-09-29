@@ -13,6 +13,7 @@ import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressa
 import { SkeletonLista } from '../../components/Skeleton';
 import { exportarPDF, exportarTexto } from '../../lib/exportar';
 import { regresar } from '../../lib/navegar';
+import { useRefrescar } from '../../lib/refrescar';
 import { Aviso } from '../../lib/aviso';
 import SummaryCard from '../../components/SummaryCard';
 import { useProject } from '../../context/ProjectContext';
@@ -106,6 +107,8 @@ export default function ListaScreen() {
     return () => BloquearSalidaNativa();
   }, [navigation, hasChanges]);
 
+
+  useRefrescar(() => fetchWorkers(), { boton: false });
 
   const fetchWorkers = async () => {
     setLoading(true);

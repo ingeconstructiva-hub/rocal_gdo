@@ -14,19 +14,32 @@ import { useCallback, useRef } from 'react';
 type Recarga = () => void | Promise<void>;
 
 const registradas = new Set<Recarga>();
+const conBoton = new Set<Recarga>();
 const oyentes = new Set<(hay: boolean) => void>();
+const oyentesBoton = new Set<(hay: boolean) => void>();
 
 function avisarCambio() {
   oyentes.forEach((oyente) => oyente(registradas.size > 0));
+  oyentesBoton.forEach((oyente) => oyente(conBoton.size > 0));
 }
 
-/** Avisa cuando la pantalla actual tiene (o deja de tener) algo que recargar,
- *  para poder esconder el botón donde no sirve, como en el login. */
+/** Avisa si la pantalla actual tiene algo que recargar. Lo usa el gesto de
+ *  deslizar hacia abajo, que aplica en todas las pantallas con datos. */
 export function escucharSiHayQueRefrescar(oyente: (hay: boolean) => void) {
   oyentes.add(oyente);
   oyente(registradas.size > 0);
   return () => {
     oyentes.delete(oyente);
+  };
+}
+
+/** Avisa si además hay que mostrar el botón flotante. Se excluyen las pantallas
+ *  que ya tienen su propio botón de refrescar en el encabezado. */
+export function escucharSiHayBoton(oyente: (hay: boolean) => void) {
+  oyentesBoton.add(oyente);
+  oyente(conBoton.size > 0);
+  return () => {
+    oyentesBoton.delete(oyente);
   };
 }
 
@@ -40,7 +53,8 @@ export function escucharSiHayQueRefrescar(oyente: (hay: boolean) => void) {
  * cargadas en memoria aunque no se estén viendo. Con useEffect, el botón seguía
  * registrado desde otra pantalla y aparecía encima de pantallas que ya tienen
  * su propio botón de refrescar. */
-export function useRefrescar(recarga: Recarga) {
+export function useRefrescar(recarga: Recarga, opciones?: { boton?: boolean }) {
+  const quiereBoton = opciones?.boton !== false;
   const ultima = useRef(recarga);
   ultima.current = recarga;
 
@@ -48,12 +62,14 @@ export function useRefrescar(recarga: Recarga) {
     useCallback(() => {
       const envoltorio = () => ultima.current();
       registradas.add(envoltorio);
+      if (quiereBoton) conBoton.add(envoltorio);
       avisarCambio();
       return () => {
         registradas.delete(envoltorio);
+        conBoton.delete(envoltorio);
         avisarCambio();
       };
-    }, [])
+    }, [quiereBoton])
   );
 }
 

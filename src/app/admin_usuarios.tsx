@@ -6,6 +6,7 @@ import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, 
 import { SkeletonLista } from '../components/Skeleton';
 import { subirArchivo } from '../lib/subidas';
 import { regresar } from '../lib/navegar';
+import { useRefrescar } from '../lib/refrescar';
 import { Aviso } from '../lib/aviso';
 import { supabase } from '../lib/supabase';
 
@@ -60,6 +61,8 @@ export default function AdminUsuariosScreen() {
     cargarUsuarios();
     cargarProyectosActivos(); 
   }, []);
+
+  useRefrescar(() => cargarUsuarios());
 
   const cargarUsuarios = async () => {
     setLoading(true);

@@ -12,6 +12,7 @@ import { SkeletonTarjetas } from '../components/Skeleton';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import Almacen from '../lib/almacen';
+import { useRefrescar } from '../lib/refrescar';
 import { Aviso } from '../lib/aviso';
 import { subirArchivo } from '../lib/subidas';
 import { supabase } from '../lib/supabase';
@@ -85,6 +86,8 @@ export default function ProyectosScreen() {
     if (data) setListaResidentes(data);
   };
 
+
+  useRefrescar(() => cargarProyectos(), { boton: false });
 
   const cargarProyectos = async () => {
     try {

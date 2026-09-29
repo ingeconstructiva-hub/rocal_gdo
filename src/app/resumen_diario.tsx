@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SkeletonLista, SkeletonTarjeta } from '../components/Skeleton';
 import { regresar } from '../lib/navegar';
+import { useRefrescar } from '../lib/refrescar';
 import { Aviso } from '../lib/aviso';
 import { PieChart } from 'react-native-chart-kit';
 import { useProject } from '../context/ProjectContext';
@@ -50,6 +51,8 @@ export default function ResumenDiarioScreen() {
     }
   }, [activeProject, isOffline]);
 
+
+  useRefrescar(() => cargarHistorialFinanciero(), { boton: false });
 
   const cargarHistorialFinanciero = async () => {
     setLoading(true);

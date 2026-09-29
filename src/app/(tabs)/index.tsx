@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SkeletonTarjeta } from '../../components/Skeleton';
 import { subirArchivo } from '../../lib/subidas';
+import { useRefrescar } from '../../lib/refrescar';
 import { Aviso } from '../../lib/aviso';
 import QRCode from 'react-native-qrcode-svg';
 import { NotificationItem } from '../../components/NotificationItem';
@@ -22,6 +23,7 @@ export default function DashboardScreen() {
   const { profile, refreshProfile } = useUser();
 
   const [hasPendingItems, setHasPendingItems] = useState(false);
+  const [recargaTablero, setRecargaTablero] = useState(0);
   const [project, setProject] = useState<any>(null);
   const [notifications, setNotifications] = useState<any[]>([]);
   
@@ -110,6 +112,10 @@ export default function DashboardScreen() {
 };
 
   const modules = getAccessibleModules();
+
+  // El tablero recarga cambiando este contador: su carga vive dentro del
+  // useFocusEffect y no hay una función suelta que registrar.
+  useRefrescar(() => setRecargaTablero((n) => n + 1), { boton: false });
   
   useFocusEffect(
     useCallback(() => {
@@ -166,7 +172,7 @@ export default function DashboardScreen() {
         }
       }
       loadData();
-    }, [activeProject, isOffline]) 
+    }, [activeProject, isOffline, recargaTablero]) 
   );
 
   const handleOpenInviteModal = async () => {
