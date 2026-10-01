@@ -33,6 +33,8 @@ export default function ProyectosScreen() {
   const [residentesAsignados, setResidentesAsignados] = useState<any[]>([]);
   const [guardandoResidente, setGuardandoResidente] = useState(false);
   const [selectedResidentId, setSelectedResidentId] = useState<string | null>(null);
+  // Al crear una obra se pueden elegir varios residentes de una vez.
+  const [residentesNuevos, setResidentesNuevos] = useState<string[]>([]);
   const [isResidentDropdownOpen, setIsResidentDropdownOpen] = useState(false);
 
   // 🟢 ESTADOS PARA CREAR / EDITAR OBRA
@@ -145,7 +147,9 @@ export default function ProyectosScreen() {
               ...item.projects,
               userRole: item.role
             }));
-          setProyectos(proyectosFormateados);
+          // Este es el camino de los residentes. También necesita firmar las
+          // direcciones: sin esto, ellos no ven la foto de la obra.
+          setProyectos(await firmarCampos(proyectosFormateados, ['foto_url']));
           await Almacen.setItem(storageKey, JSON.stringify(proyectosFormateados));
         }
       }
@@ -277,9 +281,14 @@ export default function ProyectosScreen() {
         const { error: assignmentError } = await supabase.from('project_members').insert([{ user_id: userId, project_id: newProject.id, role: 'admin' }]);
         if (assignmentError) throw assignmentError;
 
-        if (selectedResidentId) {
-          const { error: residentAssignError } = await supabase.from('project_members').insert([{ user_id: selectedResidentId, project_id: newProject.id, role: 'residente' }]);
-          if (residentAssignError) console.log("Error asignando residente:", residentAssignError);
+        if (residentesNuevos.length > 0) {
+          const asignaciones = residentesNuevos.map((userId) => ({
+            user_id: userId,
+            project_id: newProject.id,
+            role: 'residente',
+          }));
+          const { error: residentAssignError } = await supabase.from('project_members').insert(asignaciones);
+          if (residentAssignError) console.log("Error asignando residentes:", residentAssignError);
         }
 
         Aviso.alert("¡Éxito!", "La obra se ha creado correctamente.");
@@ -337,7 +346,7 @@ export default function ProyectosScreen() {
       if (error) throw error;
 
       await cargarResidentesDeObra(editingProjectId);
-      setSelectedResidentId(null);
+      setSelectedResidentId(null); setResidentesNuevos([]);
       setIsResidentDropdownOpen(false);
     } catch (e: any) {
       Aviso.alert('No se pudo agregar', e.message);
@@ -818,7 +827,7 @@ export default function ProyectosScreen() {
 
               {modalMode === 'create' && (
                 <>
-                  <Text style={styles.modalLabel}>Asignar Residente Encargado</Text>
+                  <Text style={styles.modalLabel}>Asignar residentes (puedes elegir varios)</Text>
                   <View style={{ zIndex: isResidentDropdownOpen ? 1000 : 1, elevation: isResidentDropdownOpen ? 20 : 0, marginBottom: 5 }}>
                     <TouchableOpacity
                       style={[styles.modalInput, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
@@ -827,8 +836,12 @@ export default function ProyectosScreen() {
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                         <Feather name="user" size={18} color="#2563EB" style={{ marginRight: 10 }} />
-                        <Text style={{ color: selectedResidentId ? '#111827' : '#9CA3AF', fontSize: 15, flex: 1 }} numberOfLines={1}>
-                          {selectedResidentId ? listaResidentes.find(r => r.id === selectedResidentId)?.full_name : "Seleccionar un residente de la lista..."}
+                        <Text style={{ color: residentesNuevos.length > 0 ? '#111827' : '#9CA3AF', fontSize: 15, flex: 1 }} numberOfLines={1}>
+                          {residentesNuevos.length === 0
+                            ? 'Seleccionar residentes de la lista...'
+                            : residentesNuevos.length === 1
+                              ? listaResidentes.find((r) => r.id === residentesNuevos[0])?.full_name
+                              : `${residentesNuevos.length} residentes seleccionados`}
                         </Text>
                       </View>
                       <Feather name={isResidentDropdownOpen ? "chevron-up" : "chevron-down"} size={20} color="#6B7280" />
@@ -838,21 +851,28 @@ export default function ProyectosScreen() {
                       <View style={styles.dropdownMenu}>
                         <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
                         <TouchableOpacity
-                          style={[styles.dropdownItem, !selectedResidentId && styles.dropdownItemActive]}
-                          onPress={() => { setSelectedResidentId(null); setIsResidentDropdownOpen(false); }}
+                          style={[styles.dropdownItem, residentesNuevos.length === 0 && styles.dropdownItemActive]}
+                          onPress={() => { setResidentesNuevos([]); setIsResidentDropdownOpen(false); }}
                         >
                           <View style={styles.dropdownIconWrapper}><Feather name="slash" size={16} color="#6B7280" /></View>
-                          <Text style={[styles.dropdownItemText, !selectedResidentId && { color: '#2563EB', fontWeight: 'bold' }]}>Sin asignar (Por ahora)</Text>
+                          <Text style={[styles.dropdownItemText, residentesNuevos.length === 0 && { color: '#2563EB', fontWeight: 'bold' }]}>Sin asignar (Por ahora)</Text>
                         </TouchableOpacity>
 
                         {listaResidentes.map((res) => (
                           <TouchableOpacity
                             key={res.id}
-                            style={[styles.dropdownItem, selectedResidentId === res.id && styles.dropdownItemActive]}
-                            onPress={() => { setSelectedResidentId(res.id); setIsResidentDropdownOpen(false); }}
+                            style={[styles.dropdownItem, residentesNuevos.includes(res.id) && styles.dropdownItemActive]}
+                            onPress={() =>
+                              // No se cierra la lista: así se pueden marcar varios seguidos.
+                              setResidentesNuevos((previos) =>
+                                previos.includes(res.id) ? previos.filter((id) => id !== res.id) : [...previos, res.id]
+                              )
+                            }
                           >
-                            <View style={styles.dropdownIconWrapper}><Feather name="briefcase" size={16} color="#2563EB" /></View>
-                            <Text style={[styles.dropdownItemText, selectedResidentId === res.id && { color: '#2563EB', fontWeight: 'bold' }]}>{res.full_name}</Text>
+                            <View style={styles.dropdownIconWrapper}>
+                              <Feather name={residentesNuevos.includes(res.id) ? 'check-square' : 'square'} size={16} color="#2563EB" />
+                            </View>
+                            <Text style={[styles.dropdownItemText, residentesNuevos.includes(res.id) && { color: '#2563EB', fontWeight: 'bold' }]}>{res.full_name}</Text>
                           </TouchableOpacity>
                         ))}
                         </ScrollView>
