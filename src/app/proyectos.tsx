@@ -13,6 +13,7 @@ import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import Almacen from '../lib/almacen';
 import { useRefrescar } from '../lib/refrescar';
+import { VERSION_APP } from '../lib/version';
 import { Aviso } from '../lib/aviso';
 import { subirArchivo } from '../lib/subidas';
 import { supabase } from '../lib/supabase';
@@ -583,6 +584,9 @@ export default function ProyectosScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>Mis Obras</Text>
             <Text style={styles.headerSmall}>{profile?.name || 'Cargando...'}</Text>
+            {/* Sello de versión: permite saber de un vistazo si un dispositivo
+                quedó con una versión vieja guardada en caché. */}
+            <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 10, marginTop: 2 }}>v{VERSION_APP}</Text>
           </View>
           
           <View style={{ flexDirection: 'row', gap: 10 }}>

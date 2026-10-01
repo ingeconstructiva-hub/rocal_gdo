@@ -1,5 +1,5 @@
 {
-  "buildCommand": "expo export -p web",
+  "buildCommand": "node scripts/sello-version.js && expo export -p web",
   "outputDirectory": "dist",
   "devCommand": "expo",
   "cleanUrls": true,
