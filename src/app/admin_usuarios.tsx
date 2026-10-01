@@ -7,6 +7,7 @@ import { SkeletonLista } from '../components/Skeleton';
 import { subirArchivo } from '../lib/subidas';
 import { regresar } from '../lib/navegar';
 import { useRefrescar } from '../lib/refrescar';
+import { firmarCampos } from '../lib/urlsFirmadas';
 import { Aviso } from '../lib/aviso';
 import { supabase } from '../lib/supabase';
 
@@ -67,7 +68,9 @@ export default function AdminUsuariosScreen() {
   const cargarUsuarios = async () => {
     setLoading(true);
     const { data } = await supabase.from('profiles').select('*').order('full_name', { ascending: true });
-    if (data) setUsuarios(data);
+    // Las fotos de INE y de perfil viven en un bucket privado: hay que firmarlas
+    // al cargar, o salen en blanco.
+    if (data) setUsuarios(await firmarCampos(data, ['foto_ine_url', 'foto_perfil_url']));
     setLoading(false);
   };
 
