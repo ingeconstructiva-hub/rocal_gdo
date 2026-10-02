@@ -24,6 +24,8 @@ export default function DocumentosScreen() {
   const { profile } = useUser();
   
   const [scannedImages, setScannedImages] = useState<string[]>([]);
+  // Un PDF que el usuario ya tenía hecho (no se arma a partir de fotos).
+  const [archivoPdf, setArchivoPdf] = useState<{ uri: string; nombre: string } | null>(null);
   const [docTitle, setDocTitle] = useState('');
   
   // 🟢 ESTADOS PARA CATEGORÍAS
@@ -129,6 +131,48 @@ export default function DocumentosScreen() {
     setCargando(false);
   };
 
+  /* Elegir imágenes que ya están en el teléfono, en lugar de tomarlas ahora.
+   * Se pueden seleccionar varias de un jalón: cada una será una página. */
+  const handleElegirDeGaleria = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Aviso.alert('Permiso denegado', 'Se requiere acceso a tus fotos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets?.length) {
+        setArchivoPdf(null);
+        setScannedImages((prev) => [...prev, ...result.assets.map((a: any) => a.uri)]);
+      }
+    } catch (error) {
+      Aviso.alert('Error', 'No se pudo abrir la galería.');
+    }
+  };
+
+  /* Subir un PDF que ya existe, sin pasar por fotos. Usa el selector propio del
+   * navegador, así no hace falta ninguna librería extra. */
+  const handleElegirPdf = () => {
+    const entrada = document.createElement('input');
+    entrada.type = 'file';
+    entrada.accept = 'application/pdf';
+    entrada.onchange = () => {
+      const archivo = entrada.files && entrada.files[0];
+      if (!archivo) return;
+      setArchivoPdf({ uri: URL.createObjectURL(archivo), nombre: archivo.name });
+      setScannedImages([]);
+      setArchivoPdf(null); // Un PDF ya armado reemplaza a las páginas escaneadas
+      if (!docTitle) setDocTitle(archivo.name.replace(/\.pdf$/i, ''));
+    };
+    entrada.click();
+  };
+
   const handleScanDocument = async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -155,7 +199,7 @@ export default function DocumentosScreen() {
   };
 
   const handleSaveToDatabase = async () => {
-    if (scannedImages.length === 0) return;
+    if (scannedImages.length === 0 && !archivoPdf) return;
     if (!docTitle.trim()) {
       Aviso.alert("Falta título", "Por favor ingresa un nombre para identificar este documento.");
       return;
@@ -169,8 +213,8 @@ export default function DocumentosScreen() {
 
     setIsUploading(true);
     try {
-      // Arma el PDF: en celular con expo-print, en navegador con jsPDF.
-      const pdf = await crearPdfDesdeImagenes(scannedImages);
+      // Si el usuario subió un PDF, se usa tal cual. Si no, se arma con las fotos.
+      const pdf = archivoPdf ? archivoPdf.uri : await crearPdfDesdeImagenes(scannedImages);
 
       if (isOffline) {
         const permanentPdfUri = await guardarPdfParaDespues(pdf);
@@ -190,6 +234,8 @@ export default function DocumentosScreen() {
 
         Aviso.alert("Guardado Offline", "El documento PDF se guardó localmente. Se subirá automáticamente al recuperar internet.");
         setScannedImages([]);
+      setArchivoPdf(null);
+        setArchivoPdf(null);
         setDocTitle('');
         setDocCategory('Plano');
         setCustomCategory('');
@@ -212,6 +258,7 @@ export default function DocumentosScreen() {
 
       Aviso.alert("¡Éxito!", "Documento generado y guardado en la nube.");
       setScannedImages([]);
+      setArchivoPdf(null);
       setDocTitle('');
       setDocCategory('Plano'); 
       setCustomCategory('');
@@ -333,14 +380,41 @@ export default function DocumentosScreen() {
           </View>
         )}
 
-        {scannedImages.length === 0 ? (
-          <TouchableOpacity style={styles.scanButton} onPress={handleScanDocument}>
-            <Feather name="camera" size={32} color="#FFF" />
-            <View style={styles.scanButtonTextContainer}>
-              <Text style={styles.scanButtonTitle}>Digitalizar Documento</Text>
-              <Text style={styles.scanButtonSub}>Usa la cámara para crear un PDF</Text>
+        {archivoPdf ? (
+          <View style={estilosOrigen.pdfElegido}>
+            <Feather name="file-text" size={26} color="#DC2626" />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={estilosOrigen.pdfNombre} numberOfLines={1}>{archivoPdf.nombre}</Text>
+              <Text style={estilosOrigen.pdfNota}>Se subirá tal cual, sin convertir</Text>
             </View>
-          </TouchableOpacity>
+            <TouchableOpacity onPress={() => setArchivoPdf(null)} style={{ padding: 6 }}>
+              <Feather name="x" size={18} color="#64748B" />
+            </TouchableOpacity>
+          </View>
+        ) : scannedImages.length === 0 ? (
+          <View>
+            <TouchableOpacity style={styles.scanButton} onPress={handleScanDocument}>
+              <Feather name="camera" size={32} color="#FFF" />
+              <View style={styles.scanButtonTextContainer}>
+                <Text style={styles.scanButtonTitle}>Digitalizar Documento</Text>
+                <Text style={styles.scanButtonSub}>Usa la cámara para crear un PDF</Text>
+              </View>
+            </TouchableOpacity>
+
+            <View style={estilosOrigen.otrasOpciones}>
+              <TouchableOpacity style={estilosOrigen.opcion} onPress={handleElegirDeGaleria}>
+                <Feather name="image" size={18} color="#2563EB" />
+                <Text style={estilosOrigen.opcionTexto}>Desde la galería</Text>
+              </TouchableOpacity>
+
+              {Platform.OS === 'web' && (
+                <TouchableOpacity style={estilosOrigen.opcion} onPress={handleElegirPdf}>
+                  <Feather name="file-text" size={18} color="#2563EB" />
+                  <Text style={estilosOrigen.opcionTexto}>Subir un PDF</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
         ) : (
           <View style={styles.previewContainer}>
             <Text style={styles.sectionTitle}>Páginas del Documento ({scannedImages.length})</Text>
@@ -357,10 +431,16 @@ export default function DocumentosScreen() {
               ))}
             </ScrollView>
 
-            <TouchableOpacity style={styles.addPageBtn} onPress={handleScanDocument} disabled={isUploading}>
-              <Feather name="plus-circle" size={20} color="#2563EB" />
-              <Text style={styles.addPageBtnText}>Agregar otra página</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity style={[styles.addPageBtn, { flex: 1 }]} onPress={handleScanDocument} disabled={isUploading}>
+                <Feather name="camera" size={18} color="#2563EB" />
+                <Text style={styles.addPageBtnText}>Con la cámara</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.addPageBtn, { flex: 1 }]} onPress={handleElegirDeGaleria} disabled={isUploading}>
+                <Feather name="image" size={18} color="#2563EB" />
+                <Text style={styles.addPageBtnText}>De la galería</Text>
+              </TouchableOpacity>
+            </View>
             
             <Text style={styles.label}>Nombre del Documento *</Text>
             <TextInput style={styles.input} placeholder="Ej. Contrato de Obra..." value={docTitle} onChangeText={setDocTitle} placeholderTextColor="#6B7280" />
@@ -537,4 +617,34 @@ const styles = StyleSheet.create({
   planoSub: { fontSize: 13, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 },
   actionButtonsContainer: { flexDirection: 'row', alignItems: 'center' },
   iconButton: { padding: 8, backgroundColor: '#F3F4F6', borderRadius: 8 }
+});
+
+const estilosOrigen = StyleSheet.create({
+  otrasOpciones: { flexDirection: 'row', gap: 10, marginTop: 10 },
+  opcion: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderStyle: 'dashed',
+    backgroundColor: '#EFF6FF',
+  },
+  opcionTexto: { color: '#2563EB', fontWeight: '700', fontSize: 13 },
+  pdfElegido: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    padding: 16,
+  },
+  pdfNombre: { fontSize: 14, fontWeight: '700', color: '#1E293B' },
+  pdfNota: { fontSize: 11, color: '#94A3B8', marginTop: 2 },
 });
