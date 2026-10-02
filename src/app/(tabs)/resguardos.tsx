@@ -21,6 +21,7 @@ import * as Sharing from 'expo-sharing';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
 import { supabase } from '../../lib/supabase';
+import { esDeHoy, eliminarRegistro } from '../../lib/permisos';
 import { generarPlantillaResponsiva } from '../../utils/pdfResponsiva';
 
 interface HerramientaAlmacen {
@@ -40,6 +41,7 @@ interface HerramientaAlmacen {
   firma_recibe_url?: string | null;
   fecha_entrega?: string | null;   
   fecha_devolucion?: string | null; 
+  created_at?: string;
 }
 
 interface ItemAdicional {
@@ -54,6 +56,11 @@ export default function ResguardosScreen() {
   const { profile } = useUser();
   const signatureRef = useRef<FirmaRef>(null);
   const isAdminOrOficina = profile?.role === 'admin' || profile?.role === 'oficina';
+  const esResidente = profile?.role === 'residente';
+  // El residente puede quitar una herramienta que acaba de dar de alta, por si
+  // repitió el código o escribió mal el nombre.
+  const puedeBorrarResidente = (item: HerramientaAlmacen) =>
+    esResidente && esDeHoy(item.created_at);
 
   const [herramientas, setHerramientas] = useState<HerramientaAlmacen[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,6 +105,41 @@ export default function ResguardosScreen() {
     setAsignadoA(item.asignado_a || '');
     setNotas(item.notas || item.notes || '');
     setModalVisible(true);
+  };
+
+  /* Esta pantalla no tenía forma de quitar una herramienta mal dada de alta.
+   * El residente solo la desactiva (recuperable); admin y oficina sí la borran. */
+  const eliminarHerramienta = (item: HerramientaAlmacen) => {
+    if (isOffline) {
+      Aviso.alert("Sin conexión", "Necesitas internet para eliminar una herramienta.");
+      return;
+    }
+
+    const tieneResguardo = item.ubicacion === 'obra' || !!item.firma_recibe_url;
+    Aviso.alert(
+      "Eliminar Herramienta",
+      tieneResguardo
+        ? `"${item.nombre}" tiene un resguardo firmado. Si lo eliminas se pierde esa responsiva. ¿Continuar?`
+        : esResidente
+          ? `¿Quitar "${item.nombre}" del almacén? Si fue un error, un administrador puede recuperarla.`
+          : `¿Eliminar "${item.nombre}" permanentemente del almacén?`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Eliminar",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const { error } = await eliminarRegistro('almacen_herramientas', item.id, esResidente);
+              if (error) throw error;
+              fetchInventarioAlmacen();
+            } catch (err: any) {
+              Aviso.alert("Error al eliminar", err.message);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const iniciarAltaNueva = () => {
@@ -529,6 +571,11 @@ export default function ResguardosScreen() {
               <Text style={styles.codeText}>{item.codigo}</Text>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <TouchableOpacity onPress={() => iniciarEdicion(item)} style={styles.editCardBtn}><Text style={styles.editCardBtnText}>Editar</Text></TouchableOpacity>
+                {(isAdminOrOficina || puedeBorrarResidente(item)) && (
+                  <TouchableOpacity onPress={() => eliminarHerramienta(item)} style={styles.editCardBtn}>
+                    <Feather name="trash-2" size={12} color="#EF4444" />
+                  </TouchableOpacity>
+                )}
                 <View style={[styles.locationBadge, item.ubicacion === 'obra' ? styles.badgeObra : styles.badgeBodega]}>
                   <Text style={[styles.locationBadgeText, item.ubicacion === 'obra' ? styles.textObra : styles.textBodega]}>{item.ubicacion === 'obra' ? '🏗️ En Obra' : '📦 En Bodega'}</Text>
                 </View>

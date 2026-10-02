@@ -32,6 +32,7 @@ import SummaryCard from '../components/SummaryCard';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
+import { esDeHoy, eliminarRegistro } from '../lib/permisos';
 import { generarPlantillaMaquinaria } from '../utils/pdfMaquinaria';
 
 interface GastoMaquinaria {
@@ -69,6 +70,12 @@ export default function GastosMaquinariaScreen() {
   const { activeProject, isOffline } = useProject();
   const { profile } = useUser();
   const isAdminOrOficina = profile?.role === 'admin' || profile?.role === 'oficina';
+  const esResidente = profile?.role === 'residente';
+  /* El residente puede quitar un registro que acaba de capturar (horas o monto
+   * mal teclados). Se mide con 'created_at', no con 'fecha', porque la fecha
+   * del movimiento la escribe el usuario y podría ser de otro día. */
+  const puedeBorrarResidente = (reg: any) =>
+    esResidente && esDeHoy(reg?.created_at || reg?.fecha);
 
   const [gastos, setGastos] = useState<GastoMaquinaria[]>([]);
   const [loading, setLoading] = useState(true);
@@ -475,18 +482,21 @@ export default function GastosMaquinariaScreen() {
    * Realiza un borrado físico permanente (.delete()) en Supabase para evitar registros huérfanos.
    */
   const handleEliminarRegistro = (id: string) => {
-    Aviso.alert("Eliminar Registro", "¿Deseas borrar permanentemente este movimiento del sistema?", [
+    Aviso.alert(
+      "Eliminar Registro",
+      esResidente
+        ? "¿Quitar este registro? Dejará de contar en los totales. Si fue un error, un administrador puede recuperarlo."
+        : "¿Deseas borrar permanentemente este movimiento del sistema?",
+      [
       { text: "Cancelar", style: "cancel" },
       { 
         text: "Borrar", 
         style: "destructive", 
         onPress: async () => {
           try {
-            // 🟢 Borrado físico permanente sincronizado con la Web
-            const { error } = await supabase
-              .from('gastos_maquinaria')
-              .delete()
-              .eq('id', id);
+            // El residente solo lo desactiva, para poder recuperarlo si se
+            // equivocó. Admin y oficina sí borran definitivamente.
+            const { error } = await eliminarRegistro('gastos_maquinaria', id, esResidente);
 
             if (error) throw error;
             
@@ -714,12 +724,16 @@ export default function GastosMaquinariaScreen() {
                       <Text style={styles.historyHrs}>{reg.asistencia_dias} hrs</Text>
                       <Text style={styles.historyAmountCargo}>${Number(reg.monto).toLocaleString('es-MX')}</Text>
                     </View>
-                    {isAdminOrOficina && (
+                    {isAdminOrOficina ? (
                       <View style={{marginLeft: 10, alignItems: 'center', justifyContent: 'center', gap: 10}}>
                         <TouchableOpacity onPress={() => iniciarEdicionRegistro(reg)}><Feather name="edit-2" size={18} color="#94A3B8" /></TouchableOpacity>
                         <TouchableOpacity onPress={() => handleEliminarRegistro(reg.id)}><Feather name="trash-2" size={18} color="#EF4444" /></TouchableOpacity>
                       </View>
-                    )}
+                    ) : puedeBorrarResidente(reg) ? (
+                      <View style={{marginLeft: 10, alignItems: 'center', justifyContent: 'center', gap: 10}}>
+                        <TouchableOpacity onPress={() => handleEliminarRegistro(reg.id)}><Feather name="trash-2" size={18} color="#EF4444" /></TouchableOpacity>
+                      </View>
+                    ) : null}
                   </View>
                 ))
               )}
@@ -736,12 +750,16 @@ export default function GastosMaquinariaScreen() {
                     <View style={styles.historyAmountBox}>
                       <Text style={styles.historyAmountAbono}>+${Number(reg.monto).toLocaleString('es-MX')}</Text>
                     </View>
-                    {isAdminOrOficina && (
+                    {isAdminOrOficina ? (
                       <View style={{marginLeft: 10, alignItems: 'center', justifyContent: 'center', gap: 10}}>
                         <TouchableOpacity onPress={() => iniciarEdicionRegistro(reg)}><Feather name="edit-2" size={18} color="#94A3B8" /></TouchableOpacity>
                         <TouchableOpacity onPress={() => handleEliminarRegistro(reg.id)}><Feather name="trash-2" size={18} color="#EF4444" /></TouchableOpacity>
                       </View>
-                    )}
+                    ) : puedeBorrarResidente(reg) ? (
+                      <View style={{marginLeft: 10, alignItems: 'center', justifyContent: 'center', gap: 10}}>
+                        <TouchableOpacity onPress={() => handleEliminarRegistro(reg.id)}><Feather name="trash-2" size={18} color="#EF4444" /></TouchableOpacity>
+                      </View>
+                    ) : null}
                   </View>
                 ))
               )}

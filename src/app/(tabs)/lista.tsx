@@ -18,6 +18,7 @@ import { Aviso } from '../../lib/aviso';
 import SummaryCard from '../../components/SummaryCard';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
+import { esDeHoy } from '../../lib/permisos';
 import { supabase } from '../../lib/supabase';
 import { generarPlantillaNomina } from '../../utils/pdfNomina';
 
@@ -31,6 +32,7 @@ interface WorkerState {
   discount: string;
   reason: string;
   categoria: string;
+  created_at?: string;
 }
 
 const DAYS = ['L', 'M', 'M', 'J', 'V', 'S'];
@@ -43,6 +45,10 @@ export default function ListaScreen() {
 
   const isFinancialRole = profile?.role === 'admin' || profile?.role === 'oficina';
   const isAdmin = profile?.role === 'admin';
+  // El residente puede dar de baja a un trabajador que acaba de registrar, por
+  // si escribió mal el nombre o lo capturó dos veces.
+  const puedeBorrarResidente = (worker: WorkerState) =>
+    profile?.role === 'residente' && esDeHoy(worker.created_at);
 
   const [allWorkers, setAllWorkers] = useState<WorkerState[]>([]); 
   const [activeCategory, setActiveCategory] = useState<'obrero' | 'tecnico'>('obrero'); 
@@ -154,7 +160,8 @@ export default function ListaScreen() {
         extraHours: '0',
         discount: '0',
         reason: '',
-        categoria: w.categoria || 'obrero'
+        categoria: w.categoria || 'obrero',
+        created_at: w.created_at
       }));
 
       setAllWorkers(initialUI);
@@ -204,6 +211,7 @@ export default function ListaScreen() {
 
         const nuevoEnPantalla = {
           id: `temp_${localUuid}`,
+          created_at: new Date().toISOString(),
           name_worker: newName,
           role: newRole,
           weekly_salary: Number(newSalary),
@@ -302,6 +310,10 @@ export default function ListaScreen() {
   };
 
   const handleDeleteWorker = (worker: WorkerState) => {
+    if (typeof worker.id === 'string' && worker.id.startsWith('temp_')) {
+      Aviso.alert("Sin conexión", "Este trabajador todavía no se ha subido. Espera a tener internet para poder darlo de baja.");
+      return;
+    }
     Aviso.alert(
       "Eliminar Trabajador",
       `¿Estás seguro de que deseas dar de baja a ${worker.name_worker}? No aparecerá más en las listas activas de asistencia.`,
@@ -542,6 +554,10 @@ export default function ListaScreen() {
                   <View style={styles.adminActionIconsRow}>
                     <TouchableOpacity onPress={() => openEditWorkerModal(worker)} style={styles.inlineActionBtn}><Feather name="edit-2" size={13} color="#475569" /></TouchableOpacity>
                     <TouchableOpacity onPress={() => handleDeleteWorker(worker)} style={[styles.inlineActionBtn, {marginLeft: 8}]}><Feather name="trash-2" size={13} color="#EF4444" /></TouchableOpacity>
+                  </View>
+                ) : puedeBorrarResidente(worker) ? (
+                  <View style={styles.adminActionIconsRow}>
+                    <TouchableOpacity onPress={() => handleDeleteWorker(worker)} style={styles.inlineActionBtn}><Feather name="trash-2" size={13} color="#EF4444" /></TouchableOpacity>
                   </View>
                 ) : isFinancialRole && (
                   <View style={{alignItems: 'flex-end'}}><Text style={styles.salaryLabel}>Semanal</Text><Text style={styles.salaryValue}>${worker.weekly_salary}</Text></View>

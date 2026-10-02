@@ -18,6 +18,7 @@ import { FotoSinConexion } from '../../components/FotoSinConexion';
 import { Aviso } from '../../lib/aviso';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
+import { esDeHoy } from '../../lib/permisos';
 import { supabase } from '../../lib/supabase';
 import { generarPlantillaBitacora } from '../../utils/pdfTemplate';
 
@@ -48,6 +49,10 @@ export default function BitacoraScreen() {
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
   const isAdmin = profile?.role === 'admin';
+  // El residente puede borrar una nota que acaba de capturar, para corregir un
+  // error de dedo. Pasadas 24 horas la nota ya es historial de la obra.
+  const puedeBorrarResidente = (log: any) =>
+    profile?.role === 'residente' && esDeHoy(log?.created_at);
 
   const getCategoryColor = (category: string) => {
     switch (category) {
@@ -517,12 +522,14 @@ export default function BitacoraScreen() {
               <Text style={styles.detailSubTitle}>DESCRIPCIÓN DE ACTIVIDADES</Text>
               <Text style={styles.detailDescriptionText}>{selectedLog?.description}</Text>
 
-              {isAdmin && !selectedLog?.isPending && (
+              {(isAdmin || puedeBorrarResidente(selectedLog)) && !selectedLog?.isPending && (
                 <View style={styles.detailActionsRow}>
-                  <TouchableOpacity onPress={openEditLogModal} style={[styles.detailActionBtn, styles.editBtn]}>
-                    <Feather name="edit-2" size={16} color="#FFF" />
-                    <Text style={styles.detailActionBtnText}>Editar Reporte</Text>
-                  </TouchableOpacity>
+                  {isAdmin && (
+                    <TouchableOpacity onPress={openEditLogModal} style={[styles.detailActionBtn, styles.editBtn]}>
+                      <Feather name="edit-2" size={16} color="#FFF" />
+                      <Text style={styles.detailActionBtnText}>Editar Reporte</Text>
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity onPress={handleDeleteLog} style={[styles.detailActionBtn, styles.deleteBtn]}>
                     <Feather name="trash-2" size={16} color="#FFF" />
                     <Text style={styles.detailActionBtnText}>Eliminar</Text>

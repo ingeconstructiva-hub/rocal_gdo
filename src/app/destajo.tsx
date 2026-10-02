@@ -31,6 +31,7 @@ import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
+import { esDeHoy, eliminarRegistro } from '../lib/permisos';
 import { generarPlantillaInventario } from '../utils/pdfInventario';
 
 interface InventoryItem {
@@ -42,6 +43,7 @@ interface InventoryItem {
   week_label: string;
   requested_by: string;
   in_charge: string;
+  created_at?: string;
 }
 
 interface WorkerSimple {
@@ -57,6 +59,11 @@ export default function InventarioScreen() {
 
   // Permiso para exportaciones y acciones financieras (admin u oficina)
   const isFinancialRole = profile?.role === 'admin' || profile?.role === 'oficina';
+  const esResidente = profile?.role === 'residente';
+  // El residente puede quitar un destajo que acaba de capturar: cantidad o
+  // precio mal teclados. Pasadas 24 horas ya entró al reporte de la obra.
+  const puedeBorrarResidente = (item: InventoryItem) =>
+    esResidente && esDeHoy(item.created_at);
 
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [workers, setWorkers] = useState<WorkerSimple[]>([]);
@@ -320,7 +327,9 @@ export default function InventarioScreen() {
 
     Aviso.alert(
       "Eliminar Registro",
-      `¿Estás seguro de que deseas eliminar permanentemente "${itemName}" del reporte?`,
+      esResidente
+        ? `¿Quitar "${itemName}" del reporte? Si fue un error, un administrador puede recuperarlo.`
+        : `¿Estás seguro de que deseas eliminar permanentemente "${itemName}" del reporte?`,
       [
         { text: "Cancelar", style: "cancel" },
         { 
@@ -328,11 +337,9 @@ export default function InventarioScreen() {
           style: "destructive", 
           onPress: async () => {
             try {
-              // 🟢 Borrado físico permanente sincronizado con la Web
-              const { error } = await supabase
-                .from('inventory')
-                .delete()
-                .eq('id', id);
+              // El residente solo lo desactiva, para poder recuperarlo si se
+              // equivocó. Admin y oficina sí borran definitivamente.
+              const { error } = await eliminarRegistro('inventory', id, esResidente);
 
               if (error) throw error;
               
@@ -646,7 +653,7 @@ export default function InventarioScreen() {
                                   <Feather name="edit-2" size={10} color="#2563EB" />
                                 </TouchableOpacity>
                                 
-                                {isFinancialRole ? (
+                                {isFinancialRole || puedeBorrarResidente(item) ? (
                                   <TouchableOpacity onPress={() => confirmDelete(item.id, item.name)} style={[styles.deleteIcon, isOffline ? {opacity: 0.5} : null]}>
                                     <Feather name="trash-2" size={10} color="#DC2626" />
                                   </TouchableOpacity>

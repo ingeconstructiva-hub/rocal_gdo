@@ -16,6 +16,7 @@ import { subirArchivo } from '../../lib/subidas';
 import { Aviso } from '../../lib/aviso';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
+import { esDeHoy } from '../../lib/permisos';
 import { supabase } from '../../lib/supabase';
 
 export default function DocumentosScreen() {
@@ -45,6 +46,10 @@ export default function DocumentosScreen() {
   const filterCategories = ['Todos', ...defaultCategories];
 
   const isAdmin = profile?.role === 'admin';
+  // El residente puede quitar un documento que acaba de subir (mal escaneado o
+  // repetido). Después de 24 horas ya es parte del expediente de la obra.
+  const puedeBorrarResidente = (doc: any) =>
+    profile?.role === 'residente' && esDeHoy(doc?.created_at);
 
   useFocusEffect(
     useCallback(() => {
@@ -546,7 +551,7 @@ export default function DocumentosScreen() {
                     <Feather name="file-text" size={20} color="#2563EB" />
                   </TouchableOpacity>
 
-                  {isAdmin && (
+                  {(isAdmin || puedeBorrarResidente(doc)) && (
                     <TouchableOpacity style={[styles.iconButton, { marginLeft: 10 }]} onPress={() => handleDeleteDocument(doc.id, doc.file_url)}>
                       <Feather name="trash-2" size={20} color="#DC2626" />
                     </TouchableOpacity>

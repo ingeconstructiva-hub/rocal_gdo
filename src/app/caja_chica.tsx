@@ -40,6 +40,7 @@ import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
+import { esDeHoy, eliminarRegistro } from '../lib/permisos';
 import { generarPlantillaCajaChica } from '../utils/pdfCajaChica';
 
 interface ArticuloGasto {
@@ -63,6 +64,7 @@ interface MovimientoFinanciero {
   numero_nota?: string;
   foto_ticket: string | null;
   fecha: string;
+  created_at?: string;
   detalles_json?: any; 
 }
 
@@ -100,6 +102,12 @@ export default function CajaChicaScreen() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const isAdminOrOficina = profile?.role === 'admin' || profile?.role === 'oficina';
+  const esResidente = profile?.role === 'residente';
+  /* El residente puede quitar un movimiento que acaba de capturar: un monto o
+   * un concepto mal teclado. Se mide con la fecha de captura ('created_at'),
+   * no con 'fecha', porque esa última la puede escribir el usuario. */
+  const puedeBorrarResidente = (mov: MovimientoFinanciero) =>
+    esResidente && esDeHoy(mov.created_at || mov.fecha);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
 
   // Cálculos reactivos de balance global de caja
@@ -235,6 +243,7 @@ export default function CajaChicaScreen() {
         numero_nota: e.numero_nota,
         foto_ticket: e.foto_ticket,
         fecha: e.fecha,
+        created_at: e.created_at,
         detalles_json: e.detalles_json
       }));
 
@@ -246,7 +255,8 @@ export default function CajaChicaScreen() {
         monto: Number(i.monto),
         tipo_deposito: i.referencia || 'Depósito',
         foto_ticket: null,
-        fecha: i.fecha
+        fecha: i.fecha,
+        created_at: i.created_at
       }));
 
       const historialUnificado = [...ingresosFormateados, ...egresosFormateados].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
@@ -478,7 +488,12 @@ export default function CajaChicaScreen() {
    */
   const handleEliminarMovimiento = async (id: string, tipo: 'ingreso' | 'egreso') => {
     if (isOffline) { Aviso.alert("Offline", "Necesitas internet para eliminar registros."); return; }
-    Aviso.alert("Eliminar Registro", "¿Deseas borrar permanentemente este movimiento del sistema?", [
+    Aviso.alert(
+      "Eliminar Registro",
+      esResidente
+        ? "¿Quitar este movimiento? Dejará de contar en el balance. Si fue un error, un administrador puede recuperarlo."
+        : "¿Deseas borrar permanentemente este movimiento del sistema?",
+      [
       { text: "Cancelar", style: "cancel" },
       { 
         text: "Sí, eliminar", 
@@ -486,8 +501,9 @@ export default function CajaChicaScreen() {
         onPress: async () => {
           try {
             const tabla = tipo === 'ingreso' ? 'ingresos_obra' : 'caja_chica';
-            // 🟢 Borrado definitivo sincronizado
-            const { error } = await supabase.from(tabla).delete().eq('id', id);
+            // El residente solo lo desactiva, así un borrado por equivocación se
+            // puede recuperar. Admin y oficina sí borran definitivamente.
+            const { error } = await eliminarRegistro(tabla, id, esResidente);
             if (error) throw error;
             
             setMovimientos(prev => prev.filter(m => m.id !== id));
@@ -711,6 +727,13 @@ export default function CajaChicaScreen() {
                         <Feather name="edit-2" size={16} color="#FFF" />
                         <Text style={styles.editActionBtnText}>Editar</Text>
                       </TouchableOpacity>
+                      <TouchableOpacity style={styles.deleteActionBtn} onPress={() => handleEliminarMovimiento(movimientoSeleccionado.id, movimientoSeleccionado.tipo)}>
+                        <Feather name="trash-2" size={16} color="#EF4444" />
+                        <Text style={styles.deleteActionBtnText}>Borrar</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : puedeBorrarResidente(movimientoSeleccionado) ? (
+                    <View style={styles.detailActionsRow}>
                       <TouchableOpacity style={styles.deleteActionBtn} onPress={() => handleEliminarMovimiento(movimientoSeleccionado.id, movimientoSeleccionado.tipo)}>
                         <Feather name="trash-2" size={16} color="#EF4444" />
                         <Text style={styles.deleteActionBtnText}>Borrar</Text>
