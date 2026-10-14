@@ -171,9 +171,9 @@ export default function DocumentosScreen() {
     entrada.onchange = () => {
       const archivo = entrada.files && entrada.files[0];
       if (!archivo) return;
-      setArchivoPdf({ uri: URL.createObjectURL(archivo), nombre: archivo.name });
+      // Un PDF ya armado reemplaza a las paginas escaneadas.
       setScannedImages([]);
-      setArchivoPdf(null); // Un PDF ya armado reemplaza a las páginas escaneadas
+      setArchivoPdf({ uri: URL.createObjectURL(archivo), nombre: archivo.name });
       if (!docTitle) setDocTitle(archivo.name.replace(/\.pdf$/i, ''));
     };
     entrada.click();
@@ -205,7 +205,11 @@ export default function DocumentosScreen() {
   };
 
   const handleSaveToDatabase = async () => {
-    if (scannedImages.length === 0 && !archivoPdf) return;
+    // Salir en silencio deja a la persona picandole al boton sin entender.
+    if (scannedImages.length === 0 && !archivoPdf) {
+      Aviso.alert('Falta el documento', 'Escanea, elige una foto o selecciona un PDF antes de guardar.');
+      return;
+    }
     if (!docTitle.trim()) {
       Aviso.alert("Falta título", "Por favor ingresa un nombre para identificar este documento.");
       return;
@@ -240,7 +244,6 @@ export default function DocumentosScreen() {
 
         Aviso.alert("Guardado Offline", "El documento PDF se guardó localmente. Se subirá automáticamente al recuperar internet.");
         setScannedImages([]);
-      setArchivoPdf(null);
         setArchivoPdf(null);
         setDocTitle('');
         setDocCategory('Plano');
