@@ -2,7 +2,6 @@
 
 import { Feather } from '@expo/vector-icons';
 import Almacen from '../lib/almacen';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import { useRouter } from 'expo-router';
@@ -33,6 +32,7 @@ import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
 import { esDeHoy, eliminarRegistro } from '../lib/permisos';
+import { SelectorHora } from '../components/SelectorHora';
 import { generarPlantillaMaquinaria } from '../utils/pdfMaquinaria';
 
 interface GastoMaquinaria {
@@ -111,8 +111,6 @@ export default function GastosMaquinariaScreen() {
   const [horaSalida, setHoraSalida] = useState('');
   const [timeEntradaDate, setTimeEntradaDate] = useState(new Date());
   const [timeSalidaDate, setTimeSalidaDate] = useState(new Date());
-  const [showPickerEntrada, setShowPickerEntrada] = useState(false);
-  const [showPickerSalida, setShowPickerSalida] = useState(false);
 
   /**
    * 📌 NOTA: useEffect (Carga inicial de obra)
@@ -899,35 +897,19 @@ export default function GastosMaquinariaScreen() {
               <View style={styles.rowGrid}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.modalLabel}>Entrada (Opc.)</Text>
-                  {Platform.OS === 'ios' ? (
-                    <View style={[styles.modalInput, { padding: 4, justifyContent: 'center' }]}>
-                      <DateTimePicker value={timeEntradaDate} mode="time" display="default" style={{height: 30}} onChange={(e, d) => { if(d) handleEntradaChange(d); }} />
-                    </View>
-                  ) : (
-                    <View>
-                      <TouchableOpacity style={styles.timeBtn} onPress={() => setShowPickerEntrada(true)}>
-                        <Feather name="clock" size={14} color={horaEntrada ? '#2563EB' : '#94A3B8'} />
-                        <Text style={[styles.timeBtnText, horaEntrada ? {color: '#0F172A'} : null]}>{horaEntrada || 'Inicio'}</Text>
-                      </TouchableOpacity>
-                      {showPickerEntrada ? <DateTimePicker value={timeEntradaDate} mode="time" display="default" onChange={(e, d) => { setShowPickerEntrada(false); if(d) handleEntradaChange(d); }} /> : null}
-                    </View>
-                  )}
+                  <SelectorHora
+                    valor={horaEntrada ? timeEntradaDate : null}
+                    alCambiar={handleEntradaChange}
+                    textoVacio="Inicio"
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.modalLabel}>Salida (Auto)</Text>
-                  {Platform.OS === 'ios' ? (
-                    <View style={[styles.modalInput, { padding: 4, justifyContent: 'center' }]}>
-                      <DateTimePicker value={timeSalidaDate} mode="time" display="default" style={{height: 30}} onChange={(e, d) => { if(d) { setTimeSalidaDate(d); setHoraSalida(d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})); } }} />
-                    </View>
-                  ) : (
-                    <View>
-                      <TouchableOpacity style={styles.timeBtn} onPress={() => setShowPickerSalida(true)}>
-                        <Feather name="clock" size={14} color={horaSalida ? '#2563EB' : '#94A3B8'} />
-                        <Text style={[styles.timeBtnText, horaSalida ? {color: '#0F172A'} : null]}>{horaSalida || 'Fin'}</Text>
-                      </TouchableOpacity>
-                      {showPickerSalida ? <DateTimePicker value={timeSalidaDate} mode="time" display="default" onChange={(e, d) => { setShowPickerSalida(false); if(d) { setTimeSalidaDate(d); setHoraSalida(d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})); } }} /> : null}
-                    </View>
-                  )}
+                  <SelectorHora
+                    valor={horaSalida ? timeSalidaDate : null}
+                    alCambiar={(d) => { setTimeSalidaDate(d); setHoraSalida(d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })); }}
+                    textoVacio="Fin"
+                  />
                 </View>
               </View>
               <Text style={styles.modalLabel}>Nota / Reporte de Falla (Opcional)</Text>
@@ -1062,8 +1044,6 @@ const styles = StyleSheet.create({
   calcLabel: { fontSize: 12, color: '#64748B', fontWeight: 'bold' },
   modalLabel: { fontSize: 12, fontWeight: '700', color: '#475569', marginTop: 10, marginBottom: 6 },
   modalInput: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, padding: 12, fontSize: 14, color: '#0F172A', minHeight: 46, justifyContent: 'center' },
-  timeBtn: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  timeBtnText: { color: '#94A3B8', fontSize: 13, fontWeight: '600' },
   saveBtn: { flex: 2, backgroundColor: '#2563EB', padding: 15, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   saveBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
   cancelBtn: { flex: 1, backgroundColor: '#FFF', padding: 15, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#CBD5E1' },
