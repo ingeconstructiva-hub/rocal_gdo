@@ -41,6 +41,7 @@ import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
 import { esDeHoy, eliminarRegistro } from '../lib/permisos';
+import { mensajeDeError } from '../lib/errores';
 import { generarPlantillaCajaChica } from '../utils/pdfCajaChica';
 
 interface ArticuloGasto {
@@ -269,10 +270,35 @@ export default function CajaChicaScreen() {
    * Abre la cámara del dispositivo para capturar la evidencia física del ticket de compra.
    */
   const seleccionarFoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') { Aviso.alert("Permiso", "Necesitamos acceso a la cámara."); return; }
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 0.6 });
-    if (!result.canceled) setFotoTicket(result.assets[0].uri);
+    try {
+      // En navegador esta llamada no hace nada (los docs de Expo lo dicen así),
+      // y si devuelve algo distinto de 'granted' dejaba al usuario sin poder
+      // adjuntar nada. Por eso el candado solo aplica en celular.
+      if (Platform.OS !== 'web') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') { Aviso.alert("Permiso", "Necesitamos acceso a la cámara."); return; }
+      }
+      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
+      if (!result.canceled) setFotoTicket(result.assets[0].uri);
+    } catch {
+      Aviso.alert("No se pudo abrir la cámara", "Usa el botón 'De la galería' para elegir el ticket desde tus fotos.");
+    }
+  };
+
+  /* El ticket muchas veces YA está en el teléfono: lo fotografiaron antes de
+   * capturar el gasto, o se los mandaron. Sin esta opción, si la cámara falla
+   * no había ninguna forma de adjuntarlo, y el gasto se guardaba sin evidencia. */
+  const elegirFotoDeGaleria = async () => {
+    try {
+      if (Platform.OS !== 'web') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') { Aviso.alert("Permiso", "Necesitamos acceso a tus fotos."); return; }
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
+      if (!result.canceled) setFotoTicket(result.assets[0].uri);
+    } catch {
+      Aviso.alert("No se pudo abrir la galería", "Inténtalo de nuevo o toma la foto con la cámara.");
+    }
   };
 
   /**
@@ -405,7 +431,8 @@ export default function CajaChicaScreen() {
           // Sin internet va a la bandeja de salida, NO se pierde.
           await guardarEnBandeja('@bandeja_salida_ingresos', { ...nuevoIngreso, local_uuid: Crypto.randomUUID() });
         } else {
-          await supabase.from('ingresos_obra').insert([nuevoIngreso]);
+          const { error } = await supabase.from('ingresos_obra').insert([nuevoIngreso]);
+          if (error) throw new Error(mensajeDeError(error, 'registrar la inversión'));
         }
       } else {
         if (!encargado.trim()) throw new Error("El nombre del encargado es obligatorio.");
@@ -417,7 +444,11 @@ export default function CajaChicaScreen() {
           // Bucket 'tickets_caja_chica'. Antes decía 'tickets', que no existe en
           // Supabase, y como el error se ignoraba, el gasto se guardaba sin foto
           // sin avisarle a nadie.
-          fotoUrl = await subirArchivo(fotoTicket, 'tickets_caja_chica', { prefijo: 'ticket' });
+          try {
+            fotoUrl = await subirArchivo(fotoTicket, 'tickets_caja_chica', { prefijo: 'ticket' });
+          } catch (fallo: any) {
+            throw new Error(mensajeDeError(fallo, 'subir la foto del ticket'));
+          }
         }
 
         const nuevoGasto = { ...baseEgreso, project_id: pid, foto_ticket: fotoUrl, fecha: new Date().toISOString() };
@@ -435,7 +466,8 @@ export default function CajaChicaScreen() {
             local_uuid: Crypto.randomUUID(),
           });
         } else {
-          await supabase.from('caja_chica').insert([nuevoGasto]);
+          const { error } = await supabase.from('caja_chica').insert([nuevoGasto]);
+          if (error) throw new Error(mensajeDeError(error, 'guardar el gasto'));
         }
       }
       Aviso.alert(
@@ -462,17 +494,21 @@ export default function CajaChicaScreen() {
       if (tipoMovimientoForm === 'ingreso') {
         if (!importeInvertido.trim() || !encargado.trim()) throw new Error("Importe y solicitante son obligatorios.");
         if (!isOffline) {
-          await supabase.from('ingresos_obra').update({ 
+          const { error } = await supabase.from('ingresos_obra').update({ 
             monto: Number(importeInvertido), 
             solicitante: encargado.trim(), 
             referencia: tipoDeposito, 
             concepto: `Fondeo a: ${encargado.trim()}` 
           }).eq('id', editingRecordId);
+          if (error) throw new Error(mensajeDeError(error, 'actualizar la inversión'));
         }
       } else {
         if (!encargado.trim()) throw new Error("El encargado es obligatorio.");
         const baseEgreso = procesarDatosEgreso();
-        if (!isOffline) await supabase.from('caja_chica').update(baseEgreso).eq('id', editingRecordId);
+        if (!isOffline) {
+          const { error } = await supabase.from('caja_chica').update(baseEgreso).eq('id', editingRecordId);
+          if (error) throw new Error(mensajeDeError(error, 'actualizar el gasto'));
+        }
       }
 
       Aviso.alert("¡Éxito!", "Registro actualizado en el Libro Mayor.");
@@ -866,13 +902,27 @@ export default function CajaChicaScreen() {
                   <TextInput style={[styles.modalInput, { height: 50, textAlignVertical: 'top' }]} placeholderTextColor="#94A3B8" placeholder="Ej. Compra urgente para loza" value={justificacionGeneral} onChangeText={setJustificacionGeneral} multiline />
 
                   <Text style={styles.modalLabel}>Evidencia (Foto del Ticket)</Text>
-                  <TouchableOpacity style={styles.cameraBtn} onPress={seleccionarFoto}>
-                    {fotoTicket ? (
-                      <Image source={{ uri: fotoTicket }} style={styles.previewImage} />
-                    ) : (
-                      <Text style={styles.cameraBtnText}>Tomar foto</Text>
-                    )}
-                  </TouchableOpacity>
+                  {fotoTicket ? (
+                    <View>
+                      <TouchableOpacity style={styles.cameraBtn} onPress={seleccionarFoto}>
+                        <Image source={{ uri: fotoTicket }} style={styles.previewImage} />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => setFotoTicket(null)} style={{ alignSelf: 'center', paddingVertical: 8 }}>
+                        <Text style={{ color: '#EF4444', fontSize: 12, fontWeight: '600' }}>Quitar foto</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                      <TouchableOpacity style={[styles.cameraBtn, { flex: 1 }]} onPress={seleccionarFoto}>
+                        <Feather name="camera" size={18} color="#2563EB" />
+                        <Text style={[styles.cameraBtnText, { marginTop: 4 }]}>Tomar foto</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.cameraBtn, { flex: 1 }]} onPress={elegirFotoDeGaleria}>
+                        <Feather name="image" size={18} color="#2563EB" />
+                        <Text style={[styles.cameraBtnText, { marginTop: 4 }]}>De la galería</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               )}
 

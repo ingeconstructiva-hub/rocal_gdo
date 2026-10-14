@@ -9,6 +9,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Aviso } from '../lib/aviso';
 import { supabase } from '../lib/supabase';
+import { mensajeDeError } from '../lib/errores';
 
 type ProjectContextType = {
   activeProject: any;
@@ -129,6 +130,10 @@ const leerFotosEmbebidas = (photoUrl: any): string[] => {
 
 const sincronizarBandejasDeSalida = async () => {
   let subidos = 0;
+  /* Por qué falló lo que no subió. Antes solo iba a la consola, así que un
+   * residente podía quedarse días con tickets atorados en la bandeja sin que
+   * nadie supiera el motivo: la app se veía igual que si todo estuviera bien. */
+  let primerFallo: string | null = null;
 
   /* Sube una bandeja completa de un jalón (para registros sin archivos).
    * Regla de oro: si Supabase rechaza el lote, la bandeja NO se toca. Se queda
@@ -151,6 +156,7 @@ const sincronizarBandejasDeSalida = async () => {
     const { error } = await enviar(listos);
     if (error) {
       console.log(`No se pudo subir ${clave}, se queda en la bandeja:`, error.message);
+      if (!primerFallo) primerFallo = mensajeDeError(error, 'subir lo que guardaste sin conexión');
       return;
     }
 
@@ -171,6 +177,7 @@ const sincronizarBandejasDeSalida = async () => {
         subidos += 1;
       } catch (error) {
         console.log(`Registro de ${clave} no subió, se queda en la bandeja:`, error);
+        if (!primerFallo) primerFallo = mensajeDeError(error, 'subir lo que guardaste sin conexión');
         fallidos.push(registro);
       }
     }
@@ -281,6 +288,15 @@ const sincronizarBandejasDeSalida = async () => {
       Aviso.alert(
         'Sincronización exitosa',
         `Se subieron ${subidos} ${subidos === 1 ? 'registro guardado' : 'registros guardados'} sin conexión.`
+      );
+    }
+
+    // Lo que no subió sigue guardado, pero el usuario merece saber por qué.
+    const pendientes = await contarPendientes();
+    if (pendientes > 0 && primerFallo) {
+      Aviso.alert(
+        'Quedaron registros sin subir',
+        `${pendientes} ${pendientes === 1 ? 'registro sigue' : 'registros siguen'} esperando en este dispositivo. ${primerFallo}`
       );
     }
   } catch (error) {
