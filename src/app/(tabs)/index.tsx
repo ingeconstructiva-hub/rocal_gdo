@@ -108,6 +108,9 @@ export default function DashboardScreen() {
     { name: "Documentos", icon: "layers", type: "feather", route: "/planos", roles: ['admin', 'residente', 'oficina'] },
 
     { name: "Gastos", icon: "dollar-sign", type: "feather", route: "/gastos", roles: ['admin', 'residente', 'oficina'] },
+
+    // Lo que un residente quita por error sigue guardado: aquí se devuelve.
+    { name: "Papelera", icon: "rotate-ccw", type: "feather", route: "/recuperar", roles: ['admin'] },
   ].filter(m => m.roles.includes(profile?.role || 'residente'));
 };
 
