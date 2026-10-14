@@ -20,6 +20,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  FlatList,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -639,7 +640,7 @@ export default function CajaChicaScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2563EB']} tintColor="#2563EB" />}>
+      <View style={styles.barraFija}>
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>{filtroActivo === 'todos' ? 'Historial de Movimientos' : filtroActivo === 'ingreso' ? 'Solo Inversiones' : 'Solo Gastos'}</Text>
           
@@ -678,14 +679,25 @@ export default function CajaChicaScreen() {
             </TouchableOpacity>
           ) : null}
         </View> 
+      </View>
 
-        {loading ? (
-          <SkeletonLista filas={5} />
-        ) : movimientosFiltrados.length === 0 ? (
-          <Text style={styles.emptyText}>No hay registros.</Text>
-        ) : (
-          movimientosFiltrados.map((mov) => (
-            <TouchableOpacity key={mov.id} style={styles.gastoCard} activeOpacity={0.7} onPress={() => setMovimientoSeleccionado(mov)}>
+      <FlatList
+        data={loading ? [] : movimientosFiltrados}
+        keyExtractor={(mov) => mov.id}
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2563EB']} tintColor="#2563EB" />}
+        /* Dibuja solo lo que cabe en pantalla y un poco mas. Antes se armaban
+         * las tarjetas de TODO el historial antes de mostrar nada. */
+        initialNumToRender={12}
+        maxToRenderPerBatch={12}
+        windowSize={7}
+        ListEmptyComponent={
+          loading ? <SkeletonLista filas={5} /> : <Text style={styles.emptyText}>No hay registros.</Text>
+        }
+        renderItem={({ item: mov }) => (
+            <TouchableOpacity style={styles.gastoCard} activeOpacity={0.7} onPress={() => setMovimientoSeleccionado(mov)}>
               <View style={styles.gastoMainRow}>
                 <Feather name={mov.tipo === 'ingreso' ? "arrow-down-left" : "arrow-up-right"} size={24} color={mov.tipo === 'ingreso' ? "#10B981" : "#EF4444"} style={{ marginRight: 12 }} />
                 <View style={{ flex: 1 }}>
@@ -700,9 +712,8 @@ export default function CajaChicaScreen() {
                 </View>
               </View>
             </TouchableOpacity>
-          ))
         )}
-      </ScrollView>
+      />
 
       <TouchableOpacity style={styles.fab} onPress={() => setIsFormModalVisible(true)}>
         <Feather name="plus" size={28} color="#FFF" />
@@ -981,6 +992,7 @@ const styles = StyleSheet.create({
   contrastLabel: { fontSize: 10, color: '#94A3B8', fontWeight: '700' },
   contrastValueIngreso: { fontSize: 16, fontWeight: 'bold', color: '#10B981', marginTop: 4 },
   contrastValueEgreso: { fontSize: 16, fontWeight: 'bold', color: '#EF4444', marginTop: 4 },
+  barraFija: { paddingHorizontal: 20, paddingTop: 20, backgroundColor: '#F8FAFC' },
   body: { padding: 15, paddingBottom: 120 },
   sectionTitle: { fontSize: 15, fontWeight: 'bold', color: '#334155' },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },

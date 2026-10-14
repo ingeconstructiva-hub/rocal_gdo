@@ -4,7 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRefrescar } from '../../lib/refrescar';
 import { SkeletonLista } from '../../components/Skeleton';
 import { exportarPDF } from '../../lib/exportar';
@@ -563,10 +563,19 @@ export default function ResguardosScreen() {
       )}
 
       {/* CARDS */}
-      <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-        {loading && <SkeletonLista filas={5} />}
-        {!loading && filteredHerramientas.map((item: HerramientaAlmacen) => (
-          <View key={item.id} style={styles.toolCard}>
+      <FlatList
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={false}
+        data={loading ? [] : filteredHerramientas}
+        keyExtractor={(item: HerramientaAlmacen) => item.id}
+        /* Cada herramienta trae hasta cuatro imagenes (INE, reverso y firmas),
+         * asi que armarlas todas de golpe era lo mas pesado de la app. */
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={7}
+        ListEmptyComponent={loading ? <SkeletonLista filas={5} /> : null}
+        renderItem={({ item }: { item: HerramientaAlmacen }) => (
+          <View style={styles.toolCard}>
             <View style={styles.metaLabelRow}>
               <Text style={styles.codeText}>{item.codigo}</Text>
               <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -621,8 +630,8 @@ export default function ResguardosScreen() {
               </>
             )}
           </View>
-        ))}
-      </ScrollView>
+        )}
+      />
 
       {/* 🔒 MODAL DE FIRMA MULTI-MATERIAL CON AUTOCOMPLETADO (100% ESTÁTICO) */}
       <Modal visible={modalFirmaVisible} animationType="slide" transparent={false}>

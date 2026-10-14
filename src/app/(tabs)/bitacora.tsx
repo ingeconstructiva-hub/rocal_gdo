@@ -7,7 +7,7 @@ import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRefrescar } from '../../lib/refrescar';
 import { SkeletonLista } from '../../components/Skeleton';
 import { exportarPDF } from '../../lib/exportar';
@@ -399,8 +399,26 @@ export default function BitacoraScreen() {
         </View>
       </View>
 
-      <ScrollView style={styles.body} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
-        
+      <FlatList
+        style={styles.body}
+        contentContainerStyle={{ paddingBottom: 100 }}
+        showsVerticalScrollIndicator={false}
+        data={cargando ? [] : logs}
+        keyExtractor={(log, i) => log.id?.toString() ?? `pendiente_${i}`}
+        /* Dibuja solo lo que cabe en pantalla. Las notas traen fotos, asi que
+         * armarlas todas de golpe era lo que trababa la bitacora. */
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={7}
+        ListEmptyComponent={
+          cargando ? <SkeletonLista filas={4} /> : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No hay entradas en la bitácora aún.</Text>
+            </View>
+          )
+        }
+        ListHeaderComponent={
+          <>
         <View style={styles.chartCard}>
           <Text style={styles.sectionTitle}>ACTIVIDAD POR CONCEPTO</Text>
           {categoryStats.length === 0 ? (
@@ -435,18 +453,12 @@ export default function BitacoraScreen() {
             </TouchableOpacity>
           )}
         </View>
-
-        {cargando ? (
-          <SkeletonLista filas={4} />
-        ) : logs.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>No hay entradas en la bitácora aún.</Text>
-          </View>
-        ) : (
-          logs.map((log) => {
+          </>
+        }
+        renderItem={({ item: log }) => {
             const fotos = parsePhotos(log.photo_url);
             return (
-              <TouchableOpacity key={log.id || Math.random().toString()} onPress={() => openLogDetail(log)} activeOpacity={0.8} style={[styles.entryCard, log.isPending && styles.entryCardPending]}>
+              <TouchableOpacity onPress={() => openLogDetail(log)} activeOpacity={0.8} style={[styles.entryCard, log.isPending && styles.entryCardPending]}>
                 <View style={styles.entryHeader}>
                   <Text style={styles.entryTitle} numberOfLines={2}>{log.description}</Text>
                   <View style={styles.photoBadge}>
@@ -473,9 +485,8 @@ export default function BitacoraScreen() {
                 </View>
               </TouchableOpacity>
             );
-          })
-        )}
-      </ScrollView>
+          }}
+      />
 
       {/* 🖼️ MODAL DE DETALLE CON SOPORTE DE CARRUSEL MULTI-FOTO */}
       <Modal visible={isDetailModalOpen} animationType="slide" transparent={true} onRequestClose={() => setIsDetailModalOpen(false)}>
