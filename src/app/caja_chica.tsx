@@ -42,6 +42,7 @@ import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
 import { esDeHoy, eliminarRegistro } from '../lib/permisos';
 import { mensajeDeError } from '../lib/errores';
+import { SelectorFecha } from '../components/SelectorFecha';
 import { generarPlantillaCajaChica } from '../utils/pdfCajaChica';
 
 interface ArticuloGasto {
@@ -99,6 +100,9 @@ export default function CajaChicaScreen() {
   const [tipoDeposito, setTipoDeposito] = useState<'efectivo' | 'transferencia'>('efectivo');
   const [justificacionGeneral, setJustificacionGeneral] = useState(''); 
   const [fotoTicket, setFotoTicket] = useState<string | null>(null);
+  // Fecha en que realmente se entregó la inversión. Normalmente es hoy, pero a
+  // veces se captura uno o varios días después de que se dio el dinero.
+  const [fechaInversion, setFechaInversion] = useState<Date>(new Date());
   const [importeInvertido, setImporteInvertido] = useState(''); 
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -349,6 +353,7 @@ export default function CajaChicaScreen() {
 
     if (mov.tipo === 'ingreso') {
       setImporteInvertido(mov.monto.toString());
+      setFechaInversion(mov.fecha ? new Date(mov.fecha) : new Date());
     } else {
       setNumeroNota(mov.numero_nota || '');
       setFrenteUnidad(mov.unidad || '');
@@ -383,6 +388,18 @@ export default function CajaChicaScreen() {
    * 📌 NOTA: procesarDatosEgreso
    * Valida y formatea el payload de un egreso de caja con su desglose en JSON y monto acumulado.
    */
+  /* Si la inversión se dio hoy guardamos la hora exacta; si fue un día pasado,
+   * la dejamos a mediodía, porque con la medianoche el cambio de huso horario
+   * puede recorrer el registro al día anterior. */
+  const fechaParaGuardar = (elegida: Date) => {
+    const ahora = new Date();
+    const esHoy = elegida.toDateString() === ahora.toDateString();
+    const fecha = esHoy
+      ? ahora
+      : new Date(elegida.getFullYear(), elegida.getMonth(), elegida.getDate(), 12, 0, 0);
+    return fecha.toISOString();
+  };
+
   const procesarDatosEgreso = () => {
     const articulosValidos = articulos.filter(a => a.concepto.trim() !== '' && Number(a.precioUnitario) > 0);
     if (articulosValidos.length === 0) throw new Error("Debes registrar al menos un artículo válido con precio.");
@@ -424,7 +441,7 @@ export default function CajaChicaScreen() {
           concepto: `Fondeo a: ${encargado.trim()}`,
           referencia: tipoDeposito,
           is_active: true,
-          fecha: new Date().toISOString()
+          fecha: fechaParaGuardar(fechaInversion)
         };
 
         if (isOffline) {
@@ -498,7 +515,8 @@ export default function CajaChicaScreen() {
             monto: Number(importeInvertido), 
             solicitante: encargado.trim(), 
             referencia: tipoDeposito, 
-            concepto: `Fondeo a: ${encargado.trim()}` 
+            concepto: `Fondeo a: ${encargado.trim()}`,
+            fecha: fechaParaGuardar(fechaInversion)
           }).eq('id', editingRecordId);
           if (error) throw new Error(mensajeDeError(error, 'actualizar la inversión'));
         }
@@ -560,6 +578,7 @@ export default function CajaChicaScreen() {
     setIsFormModalVisible(false); setIsEditing(false); setEditingRecordId(null);
     setNumeroNota(''); setEncargado(''); setFrenteUnidad(''); setJustificacionGeneral('');
     setFotoTicket(null); setImporteInvertido(''); setTipoMovimientoForm('egreso');
+    setFechaInversion(new Date());
     setArticulos([{ id: Date.now().toString(), concepto: '', cantidad: '1', unidad: '', precioUnitario: '' }]);
   };
 
@@ -838,6 +857,12 @@ export default function CajaChicaScreen() {
                   
                   <Text style={styles.modalLabel}>Solicitante / Receptor</Text>
                   <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="Nombre..." value={encargado} onChangeText={setEncargado} />
+
+                  <Text style={styles.modalLabel}>Fecha en que se entregó</Text>
+                  <SelectorFecha valor={fechaInversion} alCambiar={setFechaInversion} maxima={new Date()} />
+                  <Text style={styles.ayudaFecha}>
+                    Déjala como está si la inversión se dio hoy. Cámbiala si la estás registrando días después.
+                  </Text>
                   
                   <Text style={styles.modalLabel}>Método</Text>
                   <View style={styles.selectorContainer}>
@@ -992,6 +1017,7 @@ const styles = StyleSheet.create({
   selectorText: { fontSize: 12, color: '#4B5563', fontWeight: '600' },
   selectorTextActive: { color: '#FFF' },
   cameraBtn: { height: 60, borderWidth: 1, borderColor: '#BFDBFE', borderStyle: 'dashed', backgroundColor: '#EFF6FF', borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 5 },
+  ayudaFecha: { fontSize: 11, color: '#94A3B8', marginTop: 6, lineHeight: 15 },
   cameraBtnText: { color: '#2563EB', fontSize: 12, fontWeight: '600' },
   previewImage: { width: '100%', height: '100%', borderRadius: 10 },
   saveBtn: { backgroundColor: '#1E293B', padding: 14, borderRadius: 10, alignItems: 'center', marginTop: 20 },
