@@ -16,10 +16,11 @@ function aTextoDeCampo(fecha: Date): string {
 }
 
 export function SelectorFecha({ valor, alCambiar, maxima }: PropsSelectorFecha) {
+  // Sin fecha elegida se deja vacío: el navegador ya muestra 'dd/mm/aaaa'.
   return (
     <input
       type="date"
-      value={aTextoDeCampo(valor)}
+      value={valor ? aTextoDeCampo(valor) : ''}
       max={maxima ? aTextoDeCampo(maxima) : undefined}
       onChange={(evento) => {
         const [anio, mes, dia] = evento.target.value.split('-').map(Number);

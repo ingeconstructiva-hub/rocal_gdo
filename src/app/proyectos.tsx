@@ -1,13 +1,13 @@
 'use client';
 
 import { Feather } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SelectorFecha } from '../components/SelectorFecha';
 import { SkeletonTarjetas } from '../components/Skeleton';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
@@ -50,11 +50,9 @@ export default function ProyectosScreen() {
   const [fotoObra, setFotoObra] = useState<string | null>(null);
 
   const [startDate, setStartDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [dateSelected, setDateSelected] = useState(false);
 
   const [endDate, setEndDate] = useState(new Date());
-  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [endDateSelected, setEndDateSelected] = useState(false);
 
   const [isGettingLocation, setIsGettingLocation] = useState(false);
@@ -897,34 +895,16 @@ export default function ProyectosScreen() {
               </View>
 
               <Text style={styles.modalLabel}>Fecha de Inicio (Opcional)</Text>
-              <TouchableOpacity
-                style={[styles.modalInput, { flexDirection: 'row', alignItems: 'center' }]}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Feather name="calendar" size={18} color="#9CA3AF" style={{ marginRight: 10 }} />
-                <Text style={{ color: dateSelected ? '#111827' : '#9CA3AF', fontSize: 15 }}>
-                  {dateSelected ? startDate.toLocaleDateString('es-MX') : "Toca para seleccionar fecha"}
-                </Text>
-              </TouchableOpacity>
-
-              {showDatePicker && (
-                <DateTimePicker value={startDate} mode="date" display="default" onChange={(e, d) => { setShowDatePicker(false); if(d){ setStartDate(d); setDateSelected(true); } }} />
-              )}
+              <SelectorFecha
+                valor={dateSelected ? startDate : null}
+                alCambiar={(d) => { setStartDate(d); setDateSelected(true); }}
+              />
 
               <Text style={styles.modalLabel}>Fecha de Entrega (Opcional)</Text>
-              <TouchableOpacity
-                style={[styles.modalInput, { flexDirection: 'row', alignItems: 'center' }]}
-                onPress={() => setShowEndDatePicker(true)}
-              >
-                <Feather name="flag" size={18} color="#9CA3AF" style={{ marginRight: 10 }} />
-                <Text style={{ color: endDateSelected ? '#111827' : '#9CA3AF', fontSize: 15 }}>
-                  {endDateSelected ? endDate.toLocaleDateString('es-MX') : "Toca para seleccionar fecha"}
-                </Text>
-              </TouchableOpacity>
-
-              {showEndDatePicker && (
-                <DateTimePicker value={endDate} mode="date" display="default" onChange={(e, d) => { setShowEndDatePicker(false); if(d){ setEndDate(d); setEndDateSelected(true); } }} />
-              )}
+              <SelectorFecha
+                valor={endDateSelected ? endDate : null}
+                alCambiar={(d) => { setEndDate(d); setEndDateSelected(true); }}
+              />
 
               <TouchableOpacity style={styles.modalButton} onPress={handleSaveProject} disabled={isSaving}>
                 {isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.modalButtonText}>{modalMode === 'edit' ? 'Guardar Cambios' : 'Crear Obra'}</Text>}

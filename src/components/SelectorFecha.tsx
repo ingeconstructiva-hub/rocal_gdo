@@ -11,25 +11,30 @@ import { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity } from 'react-native';
 
 export type PropsSelectorFecha = {
-  valor: Date;
+  /** null cuando todavía no se ha elegido nada (campos opcionales). */
+  valor: Date | null;
   alCambiar: (fecha: Date) => void;
   /** Fecha máxima que se puede elegir. Para registros atrasados, hoy. */
   maxima?: Date;
+  /** Qué decir mientras no hay fecha elegida. */
+  textoVacio?: string;
 };
 
-export function SelectorFecha({ valor, alCambiar, maxima }: PropsSelectorFecha) {
+export function SelectorFecha({ valor, alCambiar, maxima, textoVacio }: PropsSelectorFecha) {
   const [abierto, setAbierto] = useState(false);
 
   return (
     <>
       <TouchableOpacity style={estilos.campo} onPress={() => setAbierto(true)}>
         <Feather name="calendar" size={18} color="#64748B" style={{ marginRight: 10 }} />
-        <Text style={estilos.texto}>{valor.toLocaleDateString('es-MX')}</Text>
+        <Text style={[estilos.texto, !valor && estilos.textoVacio]}>
+          {valor ? valor.toLocaleDateString('es-MX') : textoVacio ?? 'Toca para seleccionar fecha'}
+        </Text>
       </TouchableOpacity>
 
       {abierto && (
         <DateTimePicker
-          value={valor}
+          value={valor ?? new Date()}
           mode="date"
           display="default"
           maximumDate={maxima}
@@ -55,4 +60,5 @@ const estilos = StyleSheet.create({
     marginTop: 5,
   },
   texto: { fontSize: 15, color: '#1E293B', fontWeight: '600' },
+  textoVacio: { color: '#9CA3AF', fontWeight: '400' },
 });
