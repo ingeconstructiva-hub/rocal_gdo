@@ -35,6 +35,29 @@ export function partirUrlPublica(url: string): { bucket: string; ruta: string } 
   return { bucket: resto.slice(0, corte), ruta: decodeURIComponent(resto.slice(corte + 1)) };
 }
 
+/* Saca bucket y ruta de CUALQUIER direccion del almacen, ya sea publica,
+ * firmada o autenticada, y sin la parte del token.
+ *
+ * Hace falta para borrar un archivo: cuando la pantalla ya firmo la direccion,
+ * quedarse con lo que sigue a la ultima diagonal devuelve 'archivo.pdf?token=...',
+ * y el borrado apunta a un nombre que no existe. */
+export function partirUrlDeAlmacen(url: string): { bucket: string; ruta: string } | null {
+  const marcas = ['/storage/v1/object/public/', '/storage/v1/object/sign/', '/storage/v1/object/authenticated/'];
+
+  for (const marca of marcas) {
+    const i = url.indexOf(marca);
+    if (i === -1) continue;
+
+    const resto = url.slice(i + marca.length).split('?')[0];
+    const corte = resto.indexOf('/');
+    if (corte === -1) continue;
+
+    return { bucket: resto.slice(0, corte), ruta: decodeURIComponent(resto.slice(corte + 1)) };
+  }
+
+  return null;
+}
+
 /** Lo que ya es una foto local o un texto base64 no se toca. */
 function esLocal(url: string): boolean {
   return url.startsWith('data:') || url.startsWith('file:') || url.startsWith('blob:') || url.startsWith('idb://');

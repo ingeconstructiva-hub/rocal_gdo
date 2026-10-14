@@ -17,6 +17,7 @@ import { Aviso } from '../../lib/aviso';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
 import { esDeHoy } from '../../lib/permisos';
+import { partirUrlDeAlmacen } from '../../lib/urlsFirmadas';
 import { supabase } from '../../lib/supabase';
 
 export default function DocumentosScreen() {
@@ -309,9 +310,19 @@ export default function DocumentosScreen() {
               if (dbError) throw dbError;
 
               if (fileUrl) {
-                const fileName = fileUrl.split('/').pop(); 
-                if (fileName) {
-                  await supabase.storage.from('planos_obras').remove([fileName]);
+                // La direccion ya viene firmada, asi que trae un '?token=...'
+                // pegado al final. Hay que partirla bien o se intenta borrar
+                // un archivo que no existe.
+                const partes = partirUrlDeAlmacen(fileUrl);
+                if (partes) {
+                  const { error: archivoError } = await supabase.storage
+                    .from(partes.bucket)
+                    .remove([partes.ruta]);
+
+                  // El documento ya se quito de la lista, que es lo que el
+                  // usuario pidio. Si el PDF se queda en el almacen es un
+                  // pendiente de limpieza, no algo que deba detenerlo.
+                  if (archivoError) console.log('El PDF quedo en el almacen:', archivoError.message);
                 }
               }
               loadDocumentos(); 
