@@ -148,7 +148,13 @@ export default function InventarioScreen() {
   const fetchData = async () => {
     setLoading(true);
     const projectId = activeProject?.id;
-    if (!projectId) return;
+    // Sin obra activa no hay nada que pedir, pero el esqueleto ya estaba
+    // encendido: si se sale sin apagarlo, la pantalla se queda cargando
+    // para siempre.
+    if (!projectId) {
+      setLoading(false);
+      return;
+    }
 
     const storageKeyItems = `@inventario_cache_${projectId}`;
     const storageKeyWorkers = `@workers_simple_cache_${projectId}`;

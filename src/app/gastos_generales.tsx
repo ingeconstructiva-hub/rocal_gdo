@@ -126,7 +126,13 @@ export default function GastosGeneralesScreen() {
   const fetchGastos = async () => {
     setLoading(true);
     const pid = activeProject?.id;
-    if (!pid) return;
+    // Sin obra activa no hay nada que pedir, pero el esqueleto ya estaba
+    // encendido: si se sale sin apagarlo, la pantalla se queda cargando
+    // para siempre.
+    if (!pid) {
+      setLoading(false);
+      return;
+    }
 
     const storageKey = `@gastos_generales_log_${pid}`;
 

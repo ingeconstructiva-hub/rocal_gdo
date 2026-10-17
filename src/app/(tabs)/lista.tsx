@@ -8,8 +8,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import { useNavigation, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { memo, useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SkeletonLista } from '../../components/Skeleton';
 import { exportarPDF, exportarTexto } from '../../lib/exportar';
 import { regresar } from '../../lib/navegar';
@@ -36,6 +36,113 @@ interface WorkerState {
 }
 
 const DAYS = ['L', 'M', 'M', 'J', 'V', 'S'];
+
+function calculateFinalTotal(w: WorkerState) {
+  const totalHoursInWeek = 45; // 5 días de 8h (40h) + 1 día de 5h (5h)
+  const hourlyRate = w.weekly_salary / totalHoursInWeek; // Valor base por hora trabajada
+
+  let hoursEarned = 0;
+
+  // Calcular lunes a viernes (8 horas por día asistido)
+  for (let i = 0; i < 5; i++) {
+    if (w.attendance[i]) {
+      hoursEarned += 8;
+    }
+  }
+
+  // Calcular sábado (5 horas si asistió)
+  if (w.attendance[5]) {
+    hoursEarned += 5;
+  }
+
+  const extraH = Number(w.extraHours || 0);
+  const disc = Number(w.discount || 0);
+
+  // Las horas extra se calculan al doble de la tarifa ordinaria integrada
+  const extraHourlyRate = hourlyRate * 2; 
+
+  return (hoursEarned * hourlyRate) + (extraH * extraHourlyRate) - disc;
+}
+
+/* La tarjeta de cada trabajador, aislada y memorizada.
+ *
+ * Antes todas las tarjetas vivian dentro del render de la pantalla. Marcar un
+ * dia de asistencia reconstruia el arreglo completo y React volvia a dibujar a
+ * los 40 trabajadores: 240 botones de dia y 240 iconos por cada toque. En un
+ * telefono de obra eso se siente como que la app se congela.
+ *
+ * Con memo, al marcar un dia solo se redibuja ese trabajador. Para que sirva,
+ * las funciones que recibe tienen que ser las mismas entre renders: por eso
+ * alla arriba van envueltas en useCallback.
+ */
+type PropsTarjeta = {
+  worker: WorkerState;
+  isAdmin: boolean;
+  isFinancialRole: boolean;
+  puedeBorrar: boolean;
+  onToggle: (workerId: string, dayIdx: number) => void;
+  onEditar: (worker: WorkerState) => void;
+  onBorrar: (worker: WorkerState) => void;
+  onExtras: (worker: WorkerState) => void;
+  onDescuento: (worker: WorkerState) => void;
+};
+
+const TarjetaTrabajador = memo(function TarjetaTrabajador({
+  worker, isAdmin, isFinancialRole, puedeBorrar, onToggle, onEditar, onBorrar, onExtras, onDescuento,
+}: PropsTarjeta) {
+  return (
+    <View style={styles.workerCard}>
+      <View style={styles.cardHeader}>
+        <View style={{flex: 1}}>
+          <Text style={styles.workerName}>{worker.name_worker}</Text>
+          <Text style={styles.workerRole}>{worker.role}{isFinancialRole && <Text style={{color: '#64748B', fontWeight: 'normal'}}> • S. Hora: ${(worker.weekly_salary / 45).toFixed(1)}</Text>}</Text>
+        </View>
+        {isAdmin ? (
+          <View style={styles.adminActionIconsRow}>
+            <TouchableOpacity onPress={() => onEditar(worker)} style={styles.inlineActionBtn}><Feather name="edit-2" size={13} color="#475569" /></TouchableOpacity>
+            <TouchableOpacity onPress={() => onBorrar(worker)} style={[styles.inlineActionBtn, {marginLeft: 8}]}><Feather name="trash-2" size={13} color="#EF4444" /></TouchableOpacity>
+          </View>
+        ) : puedeBorrar ? (
+          <View style={styles.adminActionIconsRow}>
+            <TouchableOpacity onPress={() => onBorrar(worker)} style={styles.inlineActionBtn}><Feather name="trash-2" size={13} color="#EF4444" /></TouchableOpacity>
+          </View>
+        ) : isFinancialRole && (
+          <View style={{alignItems: 'flex-end'}}><Text style={styles.salaryLabel}>Semanal</Text><Text style={styles.salaryValue}>${worker.weekly_salary}</Text></View>
+        )}
+      </View>
+
+      <View style={styles.attendanceRow}>
+        {DAYS.map((day, idx) => (
+          <TouchableOpacity key={day + idx} style={styles.dayBox} onPress={() => onToggle(worker.id, idx)}>
+            <Text style={styles.dayText}>{day}</Text>
+            <Feather name={worker.attendance[idx] ? "check-circle" : "circle"} size={18} color={worker.attendance[idx] ? "#2563EB" : "#CBD5E1"} />
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <View style={styles.actionsContainerRow}>
+        <TouchableOpacity style={styles.actionCardBtn} onPress={() => onExtras(worker)}>
+          <Feather name="clock" size={13} color="#2563EB" />
+          <View style={{flex: 1, marginLeft: 5}}><Text style={styles.actionBtnLabel}>Hrs Extra: <Text style={styles.actionBtnValue}>{Number(worker.extraHours) > 0 ? `${worker.extraHours} H` : '0'}</Text></Text></View>
+        </TouchableOpacity>
+        {isFinancialRole ? (
+          <TouchableOpacity style={[styles.actionCardBtn, {marginLeft: 6}]} onPress={() => onDescuento(worker)}>
+            <Feather name="alert-circle" size={13} color="#EF4444" />
+            <View style={{flex: 1, marginLeft: 5}}><Text style={[styles.actionBtnLabel, {color: '#EF4444'}]}>Deducción: <Text style={styles.actionBtnValue}>{Number(worker.discount) > 0 ? `-$${worker.discount}` : worker.reason ? 'Nota' : '$0'}</Text></Text></View>
+          </TouchableOpacity>
+        ) : <View style={[styles.actionCardBtn, {marginLeft: 6, borderColor: 'transparent', backgroundColor: 'transparent'}]} />}
+      </View>
+
+      {isFinancialRole && (
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>TOTAL A PAGAR:</Text>
+          <Text style={styles.totalValue}>${calculateFinalTotal(worker).toLocaleString('es-MX', {minimumFractionDigits: 2})}</Text>
+        </View>
+      )}
+    </View>
+  );
+});
+
 
 export default function ListaScreen() {
   const router = useRouter();
@@ -177,7 +284,7 @@ export default function ListaScreen() {
     }
   };
 
-  const toggleAttendance = (workerId: string, dayIdx: number) => {
+  const toggleAttendance = useCallback((workerId: string, dayIdx: number) => {
     setHasChanges(true); 
     setAllWorkers(prev => prev.map(w => {
       if (w.id === workerId) {
@@ -187,7 +294,7 @@ export default function ListaScreen() {
       }
       return w;
     }));
-  };
+  }, []);
 
   const handleAddWorker = async () => {
     if (!newName || !newSalary) return;
@@ -275,13 +382,13 @@ export default function ListaScreen() {
     }
   };
 
-  const openEditWorkerModal = (worker: WorkerState) => {
+  const openEditWorkerModal = useCallback((worker: WorkerState) => {
     setEditWorkerId(worker.id);
     setEditName(worker.name_worker);
     setEditRole(worker.role);
     setEditSalary(String(worker.weekly_salary));
     setIsEditModalOpen(true);
-  };
+  }, []);
 
   const handleUpdateWorker = async () => {
     if (!editWorkerId || !editName || !editSalary) return;
@@ -309,7 +416,7 @@ export default function ListaScreen() {
     }
   };
 
-  const handleDeleteWorker = (worker: WorkerState) => {
+  const handleDeleteWorker = useCallback((worker: WorkerState) => {
     if (typeof worker.id === 'string' && worker.id.startsWith('temp_')) {
       Aviso.alert("Sin conexión", "Este trabajador todavía no se ha subido. Espera a tener internet para poder darlo de baja.");
       return;
@@ -341,13 +448,13 @@ export default function ListaScreen() {
         }
       ]
     );
-  };
+  }, []);
 
-  const openExtrasModal = (worker: WorkerState) => {
+  const openExtrasModal = useCallback((worker: WorkerState) => {
     setSelectedWorkerId(worker.id);
     setTempExtras(worker.extraHours);
     setIsExtrasModalOpen(true);
-  };
+  }, []);
 
   const saveExtrasChanges = () => {
     setHasChanges(true); 
@@ -356,12 +463,12 @@ export default function ListaScreen() {
     setSelectedWorkerId(null);
   };
 
-  const openDiscountModal = (worker: WorkerState) => {
+  const openDiscountModal = useCallback((worker: WorkerState) => {
     setSelectedWorkerId(worker.id);
     setTempDiscount(worker.discount);
     setTempReason(worker.reason);
     setIsDiscountModalOpen(true);
-  };
+  }, []);
 
   const saveDiscountChanges = () => {
     setHasChanges(true); 
@@ -371,32 +478,6 @@ export default function ListaScreen() {
   };
 
   // 🟢 CALCULADORA CON PROPORCIÓN AJUSTADA PARA SÁBADO DE 5 HORAS
-  function calculateFinalTotal(w: WorkerState) {
-    const totalHoursInWeek = 45; // 5 días de 8h (40h) + 1 día de 5h (5h)
-    const hourlyRate = w.weekly_salary / totalHoursInWeek; // Valor base por hora trabajada
-
-    let hoursEarned = 0;
-
-    // Calcular lunes a viernes (8 horas por día asistido)
-    for (let i = 0; i < 5; i++) {
-      if (w.attendance[i]) {
-        hoursEarned += 8;
-      }
-    }
-
-    // Calcular sábado (5 horas si asistió)
-    if (w.attendance[5]) {
-      hoursEarned += 5;
-    }
-
-    const extraH = Number(w.extraHours || 0);
-    const disc = Number(w.discount || 0);
-
-    // Las horas extra se calculan al doble de la tarifa ordinaria integrada
-    const extraHourlyRate = hourlyRate * 2; 
-
-    return (hoursEarned * hourlyRate) + (extraH * extraHourlyRate) - disc;
-  }
 
   const handleSavePayroll = async (isSilent = false) => {
     if (!isSilent) setIsSaving(true);
@@ -528,73 +609,52 @@ export default function ListaScreen() {
       )}
 
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{flex: 1}}>
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <SummaryCard labelLeft="Nómina Base" valueLeft={nominaBase} labelRight="Proyección Final" valueRight={proyeccionFinal} colorRight="#10B981" />
+        <FlatList
+          data={loading ? [] : displayedWorkers}
+          keyExtractor={(w) => w.id}
+          contentContainerStyle={styles.body}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          // Solo se dibujan las tarjetas que caben en pantalla y unas pocas
+          // alrededor; con 40 trabajadores esto evita cientos de botones vivos.
+          initialNumToRender={6}
+          windowSize={5}
+          ListHeaderComponent={
+            <>
+              <SummaryCard labelLeft="Nómina Base" valueLeft={nominaBase} labelRight="Proyección Final" valueRight={proyeccionFinal} colorRight="#10B981" />
 
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Lista de {activeCategory === 'obrero' ? 'Obreros' : 'Técnicos'}</Text>
-            {isFinancialRole && (
-              <View style={styles.exportButtonsContainer}>
-                <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#DC2626'}]} onPress={handleGeneratePDF}><Feather name="file-text" size={14} color="#FFF" /><Text style={styles.exportBtnText}>PDF</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#10B981', marginLeft: 8}]} onPress={handleExportarExcel}><Feather name="grid" size={14} color="#FFF" /><Text style={styles.exportBtnText}>Excel</Text></TouchableOpacity>
-              </View>
-            )}
-          </View>
-
-          {loading ? <SkeletonLista filas={6} /> : displayedWorkers.length === 0 ? (
-            <Text style={{textAlign: 'center', color: '#64748B', marginTop: 40}}>No hay {activeCategory === 'obrero' ? 'obreros' : 'técnicos'} registrados.</Text>
-          ) : displayedWorkers.map((worker) => (
-            <View key={worker.id} style={styles.workerCard}>
-              <View style={styles.cardHeader}>
-                <View style={{flex: 1}}>
-                  <Text style={styles.workerName}>{worker.name_worker}</Text>
-                  <Text style={styles.workerRole}>{worker.role}{isFinancialRole && <Text style={{color: '#64748B', fontWeight: 'normal'}}> • S. Hora: ${(worker.weekly_salary / 45).toFixed(1)}</Text>}</Text>
-                </View>
-                {isAdmin ? (
-                  <View style={styles.adminActionIconsRow}>
-                    <TouchableOpacity onPress={() => openEditWorkerModal(worker)} style={styles.inlineActionBtn}><Feather name="edit-2" size={13} color="#475569" /></TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleDeleteWorker(worker)} style={[styles.inlineActionBtn, {marginLeft: 8}]}><Feather name="trash-2" size={13} color="#EF4444" /></TouchableOpacity>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>Lista de {activeCategory === 'obrero' ? 'Obreros' : 'Técnicos'}</Text>
+                {isFinancialRole && (
+                  <View style={styles.exportButtonsContainer}>
+                    <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#DC2626'}]} onPress={handleGeneratePDF}><Feather name="file-text" size={14} color="#FFF" /><Text style={styles.exportBtnText}>PDF</Text></TouchableOpacity>
+                    <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#10B981', marginLeft: 8}]} onPress={handleExportarExcel}><Feather name="grid" size={14} color="#FFF" /><Text style={styles.exportBtnText}>Excel</Text></TouchableOpacity>
                   </View>
-                ) : puedeBorrarResidente(worker) ? (
-                  <View style={styles.adminActionIconsRow}>
-                    <TouchableOpacity onPress={() => handleDeleteWorker(worker)} style={styles.inlineActionBtn}><Feather name="trash-2" size={13} color="#EF4444" /></TouchableOpacity>
-                  </View>
-                ) : isFinancialRole && (
-                  <View style={{alignItems: 'flex-end'}}><Text style={styles.salaryLabel}>Semanal</Text><Text style={styles.salaryValue}>${worker.weekly_salary}</Text></View>
                 )}
               </View>
 
-              <View style={styles.attendanceRow}>
-                {DAYS.map((day, idx) => (
-                  <TouchableOpacity key={day + idx} style={styles.dayBox} onPress={() => toggleAttendance(worker.id, idx)}>
-                    <Text style={styles.dayText}>{day}</Text>
-                    <Feather name={worker.attendance[idx] ? "check-circle" : "circle"} size={18} color={worker.attendance[idx] ? "#2563EB" : "#CBD5E1"} />
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <View style={styles.actionsContainerRow}>
-                <TouchableOpacity style={styles.actionCardBtn} onPress={() => openExtrasModal(worker)}>
-                  <Feather name="clock" size={13} color="#2563EB" />
-                  <View style={{flex: 1, marginLeft: 5}}><Text style={styles.actionBtnLabel}>Hrs Extra: <Text style={styles.actionBtnValue}>{Number(worker.extraHours) > 0 ? `${worker.extraHours} H` : '0'}</Text></Text></View>
-                </TouchableOpacity>
-                {isFinancialRole ? (
-                  <TouchableOpacity style={[styles.actionCardBtn, {marginLeft: 6}]} onPress={() => openDiscountModal(worker)}>
-                    <Feather name="alert-circle" size={13} color="#EF4444" />
-                    <View style={{flex: 1, marginLeft: 5}}><Text style={[styles.actionBtnLabel, {color: '#EF4444'}]}>Deducción: <Text style={styles.actionBtnValue}>{Number(worker.discount) > 0 ? `-$${worker.discount}` : worker.reason ? 'Nota' : '$0'}</Text></Text></View>
-                  </TouchableOpacity>
-                ) : <View style={[styles.actionCardBtn, {marginLeft: 6, borderColor: 'transparent', backgroundColor: 'transparent'}]} />}
-              </View>
-
-              {isFinancialRole && (
-                <View style={styles.totalRow}>
-                  <Text style={styles.totalLabel}>TOTAL A PAGAR:</Text>
-                  <Text style={styles.totalValue}>${calculateFinalTotal(worker).toLocaleString('es-MX', {minimumFractionDigits: 2})}</Text>
-                </View>
-              )}
-            </View>
-          ))}
-        </ScrollView>
+              {loading && <SkeletonLista filas={6} />}
+            </>
+          }
+          ListEmptyComponent={
+            loading ? null : (
+              <Text style={{textAlign: 'center', color: '#64748B', marginTop: 40}}>No hay {activeCategory === 'obrero' ? 'obreros' : 'técnicos'} registrados.</Text>
+            )
+          }
+          renderItem={({ item: worker }) => (
+            <TarjetaTrabajador
+              worker={worker}
+              isAdmin={isAdmin}
+              isFinancialRole={isFinancialRole}
+              puedeBorrar={puedeBorrarResidente(worker)}
+              onToggle={toggleAttendance}
+              onEditar={openEditWorkerModal}
+              onBorrar={handleDeleteWorker}
+              onExtras={openExtrasModal}
+              onDescuento={openDiscountModal}
+            />
+          )}
+        />
       </KeyboardAvoidingView>
 
       {isFinancialRole && (

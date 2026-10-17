@@ -216,7 +216,13 @@ export default function CajaChicaScreen() {
   const loadLibroMayor = async () => {
     setLoading(true);
     const pid = activeProject?.id;
-    if (!pid) return;
+    // Sin obra activa no hay nada que pedir, pero el esqueleto ya estaba
+    // encendido: si se sale sin apagarlo, la pantalla se queda cargando
+    // para siempre.
+    if (!pid) {
+      setLoading(false);
+      return;
+    }
 
     try {
       let listaEgresos: any[] = [];
