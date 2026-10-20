@@ -98,7 +98,7 @@ export default function GastosMaquinariaScreen() {
   const [originalMachineName, setOriginalMachineName] = useState('');
   const [equipo, setEquipo] = useState('');
   const [proveedor, setProveedor] = useState('');
-  const [modalidad, setModalidad] = useState<'dia' | 'semana' | 'mes'>('semana');
+  const [modalidad, setModalidad] = useState<'hora' | 'dia' | 'semana' | 'mes'>('semana');
   const [tarifaHora, setTarifaHora] = useState('');
   
   // Estados para registro operativo
@@ -211,6 +211,9 @@ export default function GastosMaquinariaScreen() {
 
     const costoDia = tarifa * JORNADA_HORAS;
 
+    // Por hora el corte es la tarifa misma: se factura una hora de operacion,
+    // sin suponer la jornada de 8 horas que usan los demas cortes.
+    if (modalidad === 'hora') return tarifa;
     if (modalidad === 'dia') return costoDia;
     if (modalidad === 'semana') return costoDia * 6; // 6 días laborables por semana
     if (modalidad === 'mes') return costoDia * 30;   // Mes de 30 días
@@ -822,6 +825,7 @@ export default function GastosMaquinariaScreen() {
               
               <Text style={styles.modalLabel}>Corte de Facturación / Modalidad</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillsContainer}>
+                <TouchableOpacity style={[styles.pillBtn, modalidad === 'hora' ? styles.pillActiveAzul : null]} onPress={() => setModalidad('hora')}><Text style={[styles.pillText, modalidad === 'hora' ? styles.pillTextActive : null]}>Por Hora</Text></TouchableOpacity>
                 <TouchableOpacity style={[styles.pillBtn, modalidad === 'dia' ? styles.pillActiveAzul : null]} onPress={() => setModalidad('dia')}><Text style={[styles.pillText, modalidad === 'dia' ? styles.pillTextActive : null]}>Por Día</Text></TouchableOpacity>
                 <TouchableOpacity style={[styles.pillBtn, modalidad === 'semana' ? styles.pillActiveAzul : null]} onPress={() => setModalidad('semana')}><Text style={[styles.pillText, modalidad === 'semana' ? styles.pillTextActive : null]}>Por Semana</Text></TouchableOpacity>
                 <TouchableOpacity style={[styles.pillBtn, modalidad === 'mes' ? styles.pillActiveAzul : null]} onPress={() => setModalidad('mes')}><Text style={[styles.pillText, modalidad === 'mes' ? styles.pillTextActive : null]}>Por Mes</Text></TouchableOpacity>
@@ -834,13 +838,15 @@ export default function GastosMaquinariaScreen() {
               {Number(tarifaHora) > 0 && (
                 <View style={styles.calcBox}>
                   <Text style={styles.calcLabel}>
-                    💰 Costo estimado por <Text style={{ color: '#2563EB', fontWeight: 'bold' }}>{modalidad === 'dia' ? 'Día (8 hrs)' : modalidad === 'semana' ? 'Semana (6 días)' : 'Mes (30 días)'}</Text>:
+                    💰 Costo estimado por <Text style={{ color: '#2563EB', fontWeight: 'bold' }}>{modalidad === 'hora' ? 'Hora' : modalidad === 'dia' ? 'Día (8 hrs)' : modalidad === 'semana' ? 'Semana (6 días)' : 'Mes (30 días)'}</Text>:
                   </Text>
                   <Text style={{ fontSize: 22, fontWeight: '900', color: '#10B981', marginTop: 4 }}>
                     ${estimacionGastoPeriodo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                   </Text>
                   <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 2, fontStyle: 'italic' }}>
-                    Calculado con base en una jornada fija de {JORNADA_HORAS} horas de operación diaria.
+                    {modalidad === 'hora'
+                      ? 'Es la tarifa de una hora de operación.'
+                      : `Calculado con base en una jornada fija de ${JORNADA_HORAS} horas de operación diaria.`}
                   </Text>
                 </View>
               )}
