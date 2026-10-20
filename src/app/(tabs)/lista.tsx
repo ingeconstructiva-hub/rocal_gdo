@@ -224,6 +224,18 @@ export default function ListaScreen() {
 
   useRefrescar(() => fetchWorkers(), { boton: false });
 
+  /* La obra activa se elige en Proyectos y se guarda en el dispositivo. Si
+   * falta, el project_id viaja vacio: al residente la politica lo rechaza y al
+   * admin lo deja pasar por rol, guardando el registro con la obra en blanco,
+   * donde la lista ya no lo encuentra. Mejor detenerlo aqui y decirlo. */
+  const exigirObra = (silencioso = false) => {
+    if (activeProject?.id) return true;
+    if (!silencioso) {
+      Aviso.alert('Sin obra seleccionada', 'Entra a Proyectos y elige tu obra antes de capturar.');
+    }
+    return false;
+  };
+
   const fetchWorkers = async () => {
     setLoading(true);
     const pid = activeProject?.id;
@@ -299,6 +311,7 @@ export default function ListaScreen() {
 
   const handleAddWorker = async () => {
     if (!newName || !newSalary) return;
+    if (!exigirObra()) return;
     setIsSaving(true);
 
     // Sin internet el alta iba directo a Supabase y tronaba con "Load failed".
@@ -481,6 +494,7 @@ export default function ListaScreen() {
   // 🟢 CALCULADORA CON PROPORCIÓN AJUSTADA PARA SÁBADO DE 5 HORAS
 
   const handleSavePayroll = async (isSilent = false) => {
+    if (!exigirObra(isSilent)) return;
     if (!isSilent) setIsSaving(true);
     try {
       const today = new Date();
@@ -561,7 +575,7 @@ export default function ListaScreen() {
       }).join("\n");
 
       const contenidoCSV = "\uFEFF" + encabezados.join(",") + filas;
-      const nombreArchivo = `Raya_${activeCategory}_${activeProject?.name_worker?.replace(/\s+/g, '_') || 'Obra'}.csv`;
+      const nombreArchivo = `Raya_${activeCategory}_${activeProject?.name?.replace(/\s+/g, '_') || 'Obra'}.csv`;
       
       await exportarTexto(contenidoCSV, nombreArchivo);
     } catch (error: any) {
@@ -577,7 +591,7 @@ export default function ListaScreen() {
           <Text style={styles.headerSubtitle}>ASISTENCIA Y NÓMINA</Text>
           <TouchableOpacity onPress={fetchWorkers}><Feather name="refresh-cw" size={20} color="#FFF" /></TouchableOpacity>
         </View>
-        <Text style={styles.headerTitle}>{activeProject?.name_worker || "Obra"}</Text>
+        <Text style={styles.headerTitle}>{activeProject?.name || "Obra"}</Text>
       </View>
 
       {hasChanges && (
@@ -639,7 +653,11 @@ export default function ListaScreen() {
           }
           ListEmptyComponent={
             loading ? null : (
-              <Text style={{textAlign: 'center', color: '#64748B', marginTop: 40}}>No hay {activeCategory === 'obrero' ? 'obreros' : 'técnicos'} registrados.</Text>
+              <Text style={{textAlign: 'center', color: '#64748B', marginTop: 40}}>
+                {activeProject?.id
+                  ? `No hay ${activeCategory === 'obrero' ? 'obreros' : 'técnicos'} registrados.`
+                  : 'No has elegido obra. Entra a Proyectos y selecciona tu obra para pasar lista.'}
+              </Text>
             )
           }
           renderItem={({ item: worker }) => (
@@ -658,11 +676,13 @@ export default function ListaScreen() {
         />
       </KeyboardAvoidingView>
 
-      {isFinancialRole && (
-        <View style={styles.fabContainer}>
-          <TouchableOpacity style={styles.fabPrimary} onPress={() => setIsModalVisible(true)}><Feather name="plus" size={30} color="#FFF" /></TouchableOpacity>
-        </View>
-      )}
+      {/* El alta de obreros tambien es del residente: es quien esta parado en
+          la obra. El boton solo existia para admin y oficina, asi que el
+          residente no tenia como dar de alta a nadie y, sin obreros, tampoco
+          como pasar lista. Ese era el "no me deja agregar" que se reportaba. */}
+      <View style={styles.fabContainer}>
+        <TouchableOpacity style={styles.fabPrimary} onPress={() => setIsModalVisible(true)}><Feather name="plus" size={30} color="#FFF" /></TouchableOpacity>
+      </View>
 
       {/* MODAL ALTA */}
       <Modal visible={isModalVisible} animationType="slide" transparent={true} onRequestClose={() => setIsModalVisible(false)}>
