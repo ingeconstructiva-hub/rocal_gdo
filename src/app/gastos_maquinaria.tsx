@@ -702,7 +702,10 @@ export default function GastosMaquinariaScreen() {
               </View>
               
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                {isAdminOrOficina && selectedMaquina && (
+                {/* Editar la maquina queda igual para todos los roles: el residente
+                    es quien la recibe en obra y quien detecta que el nombre, el
+                    proveedor o la tarifa quedaron mal capturados. */}
+                {selectedMaquina && (
                   <TouchableOpacity 
                     onPress={() => {
                       setModalDetalleMaquina(false);
