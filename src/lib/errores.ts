@@ -20,7 +20,20 @@ export function mensajeDeError(error: any, accion = 'guardar esto'): string {
     texto.includes('not authorized') ||
     texto.includes('permission denied')
   ) {
-    return `Tu usuario no tiene permiso para ${accion}. Pídele a un administrador que te habilite el acceso; el trabajo no se perdió.`;
+    return `Tu usuario no tiene permiso para ${accion}. Pídele a un administrador que te habilite el acceso a esta obra; el trabajo no se perdió. (código 42501)`;
+  }
+
+  // La obra activa apunta a algo que ya no está. Pasa porque la obra elegida se
+  // guarda en el teléfono y no se revalida: si la obra se borró o se recreó, el
+  // project_id que manda la app ya no existe. Le pega igual a un admin, así que
+  // es la pista que distingue este caso de una falta de permisos.
+  if (codigo === '23503' || texto.includes('foreign key') || texto.includes('violates foreign key')) {
+    return `La obra que tienes seleccionada ya no existe. Entra a Proyectos, vuelve a elegir tu obra y reintenta. (código 23503)`;
+  }
+
+  // Sin obra activa el project_id se va vacío y la base lo rechaza.
+  if (codigo === '23502' || texto.includes('null value in column') || texto.includes('not-null')) {
+    return `No tienes una obra seleccionada. Entra a Proyectos, elige tu obra y reintenta. (código 23502)`;
   }
 
   // La base de datos no tiene lo que la app espera: es un problema de

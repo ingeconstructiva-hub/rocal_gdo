@@ -15,6 +15,7 @@ import { Colors } from '../../constants/theme';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
 import { supabase } from '../../lib/supabase';
+import { mensajeDeError } from '../../lib/errores';
   
 export default function DashboardScreen() {
   const router = useRouter();
@@ -252,7 +253,7 @@ export default function DashboardScreen() {
         await refreshProfile();
       }
     } catch (error: any) {
-      Aviso.alert("Error", error.message);
+      Aviso.alert("Error", mensajeDeError(error, 'guardar tu perfil'));
     } finally {
       setIsSavingProfile(false);
     }

@@ -37,6 +37,7 @@ import SummaryCard from '../components/SummaryCard';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
+import { mensajeDeError } from '../lib/errores';
 import { generarPlantillaGastos } from '../utils/pdfGastosGen';
 
 interface GastoEstructural {
@@ -287,7 +288,7 @@ export default function GastosGeneralesScreen() {
       fetchGastos();
       Aviso.alert("¡Éxito!", isEditing ? "Gasto actualizado correctamente." : "Gasto registrado correctamente.");
     } catch (error: any) {
-      Aviso.alert("Error", error.message);
+      Aviso.alert("Error", mensajeDeError(error, 'guardar el gasto'));
     } finally {
       setIsSaving(false);
     }

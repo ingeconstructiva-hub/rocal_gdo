@@ -31,6 +31,7 @@ import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
+import { mensajeDeError } from '../lib/errores';
 import { esDeHoy, eliminarRegistro } from '../lib/permisos';
 import { generarPlantillaInventario } from '../utils/pdfInventario';
 
@@ -432,7 +433,7 @@ export default function InventarioScreen() {
       }
       setIsModalVisible(false);
     } catch (error: any) {
-      Aviso.alert("Error", error.message);
+      Aviso.alert("Error", mensajeDeError(error, 'guardar el registro'));
     } finally {
       setIsSaving(false);
     }

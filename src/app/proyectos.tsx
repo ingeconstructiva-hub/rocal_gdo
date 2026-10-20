@@ -17,6 +17,7 @@ import { VERSION_APP } from '../lib/version';
 import { Aviso } from '../lib/aviso';
 import { subirArchivo } from '../lib/subidas';
 import { supabase } from '../lib/supabase';
+import { mensajeDeError } from '../lib/errores';
 import { firmarCampos } from '../lib/urlsFirmadas';
 
 export default function ProyectosScreen() {
@@ -297,7 +298,7 @@ export default function ProyectosScreen() {
       cargarProyectos();
 
     } catch (error: any) {
-      Aviso.alert("Error", error.message);
+      Aviso.alert("Error", mensajeDeError(error, 'guardar la obra'));
     } finally {
       setIsSaving(false);
     }

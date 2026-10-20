@@ -19,6 +19,7 @@ import { useUser } from '../../context/UserContext';
 import { esDeHoy } from '../../lib/permisos';
 import { partirUrlDeAlmacen } from '../../lib/urlsFirmadas';
 import { supabase } from '../../lib/supabase';
+import { mensajeDeError } from '../../lib/errores';
 
 export default function DocumentosScreen() {
   const router = useRouter();
@@ -274,7 +275,7 @@ export default function DocumentosScreen() {
       loadDocumentos(); 
 
     } catch (error: any) {
-      Aviso.alert("Error", error.message);
+      Aviso.alert("Error", mensajeDeError(error, 'guardar el documento'));
     } finally {
       setIsUploading(false);
     }
@@ -330,7 +331,7 @@ export default function DocumentosScreen() {
               }
               loadDocumentos(); 
             } catch (error: any) {
-              Aviso.alert("Error", error.message);
+              Aviso.alert("Error", mensajeDeError(error, 'eliminar el documento'));
             }
           } 
         }

@@ -19,6 +19,7 @@ import SummaryCard from '../../components/SummaryCard';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
 import { esDeHoy } from '../../lib/permisos';
+import { mensajeDeError } from '../../lib/errores';
 import { supabase } from '../../lib/supabase';
 import { generarPlantillaNomina } from '../../utils/pdfNomina';
 
@@ -341,7 +342,7 @@ export default function ListaScreen() {
           'El trabajador quedó guardado en este dispositivo y se dará de alta solo cuando vuelva el internet.'
         );
       } catch (e: any) {
-        Aviso.alert('Error', e.message);
+        Aviso.alert('Error', mensajeDeError(e, 'dar de alta al trabajador'));
       } finally {
         setIsSaving(false);
       }
@@ -376,7 +377,7 @@ export default function ListaScreen() {
       setIsModalVisible(false);
       setNewName(''); setNewRole(''); setNewSalary('');
     } catch (e: any) {
-      Aviso.alert("Error", e.message);
+      Aviso.alert("Error", mensajeDeError(e, 'dar de alta al trabajador'));
     } finally {
       setIsSaving(false);
     }
@@ -410,7 +411,7 @@ export default function ListaScreen() {
       setIsEditModalOpen(false);
       setEditWorkerId(null);
     } catch (e: any) {
-      Aviso.alert("Error al editar", e.message);
+      Aviso.alert("Error al editar", mensajeDeError(e, 'editar al trabajador'));
     } finally {
       setIsSaving(false);
     }
@@ -442,7 +443,7 @@ export default function ListaScreen() {
               setAllWorkers(prev => prev.filter(w => w.id !== worker.id));
               Aviso.alert("¡Éxito!", "Trabajador dado de baja correctamente.");
             } catch (e: any) {
-              Aviso.alert("Error", e.message);
+              Aviso.alert("Error", mensajeDeError(e, 'dar de baja al trabajador'));
             }
           }
         }
@@ -529,7 +530,7 @@ export default function ListaScreen() {
       }
     } catch (e: any) {
       console.log(e);
-      if (!isSilent) Aviso.alert("Error de sincronización", e.message);
+      Aviso.alert("No se pudo enviar la asistencia", mensajeDeError(e, 'enviar la asistencia'));
     } finally {
       if (!isSilent) setIsSaving(false);
     }
