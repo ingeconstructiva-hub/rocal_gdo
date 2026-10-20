@@ -71,10 +71,12 @@ export default function GastosMaquinariaScreen() {
   const { profile } = useUser();
   const isAdminOrOficina = profile?.role === 'admin' || profile?.role === 'oficina';
   const esResidente = profile?.role === 'residente';
-  /* El residente puede quitar un registro que acaba de capturar (horas o monto
-   * mal teclados). Se mide con 'created_at', no con 'fecha', porque la fecha
-   * del movimiento la escribe el usuario y podría ser de otro día. */
-  const puedeBorrarResidente = (reg: any) =>
+  /* El residente puede corregir o quitar un registro que acaba de capturar
+   * (horas o monto mal teclados). Se mide con 'created_at', no con 'fecha',
+   * porque la fecha del movimiento la escribe el usuario y podría ser de otro
+   * día. Editar y borrar comparten la misma ventana: si puede deshacerlo,
+   * puede arreglarlo, y corregir es menos brusco que borrar y recapturar. */
+  const puedeCorregirResidente = (reg: any) =>
     esResidente && esDeHoy(reg?.created_at || reg?.fecha);
 
   const [gastos, setGastos] = useState<GastoMaquinaria[]>([]);
@@ -487,7 +489,9 @@ export default function GastosMaquinariaScreen() {
 
   /**
    * 📌 NOTA: handleEliminarRegistro
-   * Realiza un borrado físico permanente (.delete()) en Supabase para evitar registros huérfanos.
+   * Admin y oficina borran de verdad, para no dejar registros huérfanos. El
+   * residente solo desactiva (is_active = false), asi que su error se puede
+   * recuperar desde la pantalla de Recuperar.
    */
   const handleEliminarRegistro = (id: string) => {
     Aviso.alert(
@@ -741,8 +745,9 @@ export default function GastosMaquinariaScreen() {
                         <TouchableOpacity onPress={() => iniciarEdicionRegistro(reg)}><Feather name="edit-2" size={18} color="#94A3B8" /></TouchableOpacity>
                         <TouchableOpacity onPress={() => handleEliminarRegistro(reg.id)}><Feather name="trash-2" size={18} color="#EF4444" /></TouchableOpacity>
                       </View>
-                    ) : puedeBorrarResidente(reg) ? (
+                    ) : puedeCorregirResidente(reg) ? (
                       <View style={{marginLeft: 10, alignItems: 'center', justifyContent: 'center', gap: 10}}>
+                        <TouchableOpacity onPress={() => iniciarEdicionRegistro(reg)}><Feather name="edit-2" size={18} color="#94A3B8" /></TouchableOpacity>
                         <TouchableOpacity onPress={() => handleEliminarRegistro(reg.id)}><Feather name="trash-2" size={18} color="#EF4444" /></TouchableOpacity>
                       </View>
                     ) : null}
@@ -767,8 +772,9 @@ export default function GastosMaquinariaScreen() {
                         <TouchableOpacity onPress={() => iniciarEdicionRegistro(reg)}><Feather name="edit-2" size={18} color="#94A3B8" /></TouchableOpacity>
                         <TouchableOpacity onPress={() => handleEliminarRegistro(reg.id)}><Feather name="trash-2" size={18} color="#EF4444" /></TouchableOpacity>
                       </View>
-                    ) : puedeBorrarResidente(reg) ? (
+                    ) : puedeCorregirResidente(reg) ? (
                       <View style={{marginLeft: 10, alignItems: 'center', justifyContent: 'center', gap: 10}}>
+                        <TouchableOpacity onPress={() => iniciarEdicionRegistro(reg)}><Feather name="edit-2" size={18} color="#94A3B8" /></TouchableOpacity>
                         <TouchableOpacity onPress={() => handleEliminarRegistro(reg.id)}><Feather name="trash-2" size={18} color="#EF4444" /></TouchableOpacity>
                       </View>
                     ) : null}
