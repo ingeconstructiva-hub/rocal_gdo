@@ -266,6 +266,7 @@ export default function GastosMaquinariaScreen() {
    * Si cambia el nombre del equipo, renombra en cascada todos los registros previos asociados.
    */
   const handleGuardarConfig = async () => {
+    if (!activeProject?.id) { Aviso.alert('Sin obra seleccionada', 'Entra a Proyectos y elige tu obra antes de capturar.'); return; }
     if (!equipo.trim() || !tarifaHora.trim()) { Aviso.alert("Campos Vacíos", "El nombre y tarifa son obligatorios."); return; }
     if (isOffline) { Aviso.alert("Modo Offline", "Conéctate a internet para editar la configuración de la máquina."); return; }
     
@@ -619,7 +620,11 @@ export default function GastosMaquinariaScreen() {
           <SkeletonLista filas={5} />
         ) : (
           maquinasMap.length === 0 ? (
-            <Text style={styles.emptyText}>Da de alta tu primera máquina tocando el botón "+".</Text>
+            <Text style={styles.emptyText}>
+              {activeProject?.id
+                ? 'Da de alta tu primera máquina tocando el botón "+".'
+                : 'No has elegido obra. Entra a Proyectos y selecciona tu obra.'}
+            </Text>
           ) : (
             maquinasMap.map((maquina, index) => (
               <TouchableOpacity 
@@ -670,11 +675,11 @@ export default function GastosMaquinariaScreen() {
         )}
       </ScrollView>
 
-      {isAdminOrOficina && (
-        <TouchableOpacity style={styles.fab} onPress={() => { limpiarFormularioMaquina(); setModalNuevaMaquina(true); }}>
-          <Feather name="plus" size={30} color="#FFF" />
-        </TouchableOpacity>
-      )}
+      {/* El residente tambien da de alta maquinaria: es quien la recibe en
+          obra. Abonar pagos y editar tarifas siguen siendo de admin. */}
+      <TouchableOpacity style={styles.fab} onPress={() => { limpiarFormularioMaquina(); setModalNuevaMaquina(true); }}>
+        <Feather name="plus" size={30} color="#FFF" />
+      </TouchableOpacity>
 
       {/* MODAL: DETALLES DE LA MÁQUINA */}
       <Modal visible={modalDetalleMaquina} animationType="slide" transparent={true} onRequestClose={() => setModalDetalleMaquina(false)}>

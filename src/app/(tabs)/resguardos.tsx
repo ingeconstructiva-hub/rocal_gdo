@@ -555,12 +555,13 @@ export default function ResguardosScreen() {
         <TextInput style={styles.searchInput} placeholder="Buscar herramienta..." value={searchQuery} onChangeText={setSearchQuery} placeholderTextColor="#94A3B8" />
       </View>
 
-      {isAdminOrOficina && (
-        <TouchableOpacity style={styles.staticAddBtn} onPress={iniciarAltaNueva}>
-          <Feather name="plus-circle" size={16} color="#FFF" />
-          <Text style={styles.staticAddBtnText}>Agregar Herramienta al Almacén</Text>
-        </TouchableOpacity>
-      )}
+      {/* El residente tambien da de alta herramienta: es quien la recibe en
+          obra. La politica de almacen_herramientas siempre se lo permitio;
+          era la interfaz la que no le dibujaba el boton. */}
+      <TouchableOpacity style={styles.staticAddBtn} onPress={iniciarAltaNueva}>
+        <Feather name="plus-circle" size={16} color="#FFF" />
+        <Text style={styles.staticAddBtnText}>Agregar Herramienta al Almacén</Text>
+      </TouchableOpacity>
 
       {/* CARDS */}
       <FlatList
