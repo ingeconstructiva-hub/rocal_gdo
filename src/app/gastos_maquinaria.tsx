@@ -31,6 +31,7 @@ import SummaryCard from '../components/SummaryCard';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
+import { mensajeDeError } from '../lib/errores';
 import { esDeHoy, eliminarRegistro } from '../lib/permisos';
 import { SelectorHora } from '../components/SelectorHora';
 import { generarPlantillaMaquinaria } from '../utils/pdfMaquinaria';
@@ -407,15 +408,17 @@ export default function GastosMaquinariaScreen() {
     };
 
     try {
-      if (editingRecordId) {
-        await supabase.from('gastos_maquinaria').update(datosPayload).eq('id', editingRecordId);
-      } else {
-        await supabase.from('gastos_maquinaria').insert([datosPayload]);
-      }
+      // Supabase no lanza excepcion: devuelve { error }. Sin revisarlo, un
+      // rechazo pasaba de largo y la app anunciaba "Bitacora guardada" con la
+      // bitacora vacia, que es justo lo que se reportaba como "no se ve nada".
+      const { error } = editingRecordId
+        ? await supabase.from('gastos_maquinaria').update(datosPayload).eq('id', editingRecordId)
+        : await supabase.from('gastos_maquinaria').insert([datosPayload]);
+      if (error) throw error;
       setModalHoras(false); limpiarFormsSecundarios(); fetchGastos();
       Aviso.alert("¡Éxito!", editingRecordId ? "Bitácora actualizada." : "Bitácora guardada.");
     } catch (e: any) { 
-      Aviso.alert("Error", e.message); 
+      Aviso.alert("Error", mensajeDeError(e, 'guardar la bitácora')); 
     } finally { 
       setIsSaving(false); 
     }
@@ -440,15 +443,14 @@ export default function GastosMaquinariaScreen() {
     };
 
     try {
-      if (editingRecordId) {
-        await supabase.from('gastos_maquinaria').update(datosPayload).eq('id', editingRecordId);
-      } else {
-        await supabase.from('gastos_maquinaria').insert([datosPayload]);
-      }
+      const { error } = editingRecordId
+        ? await supabase.from('gastos_maquinaria').update(datosPayload).eq('id', editingRecordId)
+        : await supabase.from('gastos_maquinaria').insert([datosPayload]);
+      if (error) throw error;
       setModalAnticipo(false); limpiarFormsSecundarios(); fetchGastos();
       Aviso.alert("¡Éxito!", "Pago registrado.");
     } catch (e: any) { 
-      Aviso.alert("Error", e.message); 
+      Aviso.alert("Error", mensajeDeError(e, 'registrar el pago')); 
     } finally { 
       setIsSaving(false); 
     }
