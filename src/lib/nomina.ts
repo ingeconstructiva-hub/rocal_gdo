@@ -49,3 +49,31 @@ export const descuentoTotal = (w: TrabajadorNomina) =>
 
 export const calcularTotalFinal = (w: TrabajadorNomina) =>
   horasTrabajadas(w) * tarifaPorHora(w) + montoHorasExtra(w) - Number(w.discount || 0);
+
+/* La semana de raya va de lunes a sabado.
+ *
+ * Antes week_start guardaba la fecha de hoy, asi que con el indice unico
+ * (worker_id, week_start) cada dia nacia un registro distinto y no habia
+ * manera de acumular por semana: la columna decia "semana" pero guardaba dias.
+ */
+export const inicioDeSemana = (fecha: Date = new Date()): string => {
+  const d = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
+  const corrimiento = (d.getDay() + 6) % 7; // lunes = 0, domingo = 6
+  d.setDate(d.getDate() - corrimiento);
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const dia = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mes}-${dia}`;
+};
+
+/** "13 al 18 de oct de 2026", para encabezar cada corte. */
+export const etiquetaSemana = (inicio: string): string => {
+  const [anio, mes, dia] = inicio.split('-').map(Number);
+  if (!anio || !mes || !dia) return inicio;
+  const lunes = new Date(anio, mes - 1, dia);
+  const sabado = new Date(anio, mes - 1, dia + 5);
+  const soloDia = (f: Date) => f.getDate();
+  const mesCorto = (f: Date) => f.toLocaleDateString('es-MX', { month: 'short' }).replace('.', '');
+  return lunes.getMonth() === sabado.getMonth()
+    ? `${soloDia(lunes)} al ${soloDia(sabado)} de ${mesCorto(lunes)} de ${lunes.getFullYear()}`
+    : `${soloDia(lunes)} de ${mesCorto(lunes)} al ${soloDia(sabado)} de ${mesCorto(sabado)} de ${lunes.getFullYear()}`;
+};

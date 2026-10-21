@@ -19,10 +19,10 @@ import SummaryCard from '../../components/SummaryCard';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
 import { esDeHoy } from '../../lib/permisos';
-import { calcularTotalFinal } from '../../lib/nomina';
+import { calcularTotalFinal, etiquetaSemana, inicioDeSemana } from '../../lib/nomina';
 import { mensajeDeError } from '../../lib/errores';
 import { supabase } from '../../lib/supabase';
-import { generarPlantillaNomina } from '../../utils/pdfNomina';
+import { generarPlantillaHistorial, generarPlantillaNomina } from '../../utils/pdfNomina';
 
 interface WorkerState {
   id: string;
@@ -168,6 +168,11 @@ export default function ListaScreen() {
   const [tempDiscount, setTempDiscount] = useState('0');
   const [tempReason, setTempReason] = useState('');
 
+  // --- ACUMULADO POR SEMANA ---
+  const [modalSemanas, setModalSemanas] = useState(false);
+  const [semanas, setSemanas] = useState<any[]>([]);
+  const [cargandoSemanas, setCargandoSemanas] = useState(false);
+
   useEffect(() => {
     if (activeProject?.id) {
       fetchWorkers();
@@ -263,9 +268,48 @@ export default function ListaScreen() {
         created_at: w.created_at
       }));
 
-      setAllWorkers(initialUI);
+      /* La semana en curso ya puede traer asistencia guardada y hay que
+       * cargarla. Ahora que el registro es uno por semana y no uno por dia,
+       * abrir la pantalla el miercoles mostrando a todos presentes y guardar
+       * borraria las faltas del lunes y el martes.
+       *
+       * Las horas extra no se pueden recuperar porque payroll_records no tiene
+       * columna para ellas: quedan dentro de final_salary y no se vuelven a
+       * capturar solas. */
+      const semanaActual = inicioDeSemana();
+      const { data: registros } = await supabase
+        .from('payroll_records')
+        .select('worker_id, attendance, deduction_amount, reason')
+        .eq('project_id', pid)
+        .eq('week_start', semanaActual)
+        .eq('is_active', true);
+
+      const guardadoPorTrabajador: Record<string, any> = {};
+      (registros || []).forEach((r: any) => { guardadoPorTrabajador[r.worker_id] = r; });
+
+      const conLoGuardado = initialUI.map(w => {
+        const r = guardadoPorTrabajador[w.id];
+        if (!r) return w;
+
+        let asistencia = w.attendance;
+        try {
+          const previa = typeof r.attendance === 'string' ? JSON.parse(r.attendance) : r.attendance;
+          if (Array.isArray(previa) && previa.length === 6) asistencia = previa;
+        } catch {
+          // Si quedo corrupta se usa la de por defecto, mejor que tronar.
+        }
+
+        return {
+          ...w,
+          attendance: asistencia,
+          discount: String(r.deduction_amount ?? 0),
+          reason: r.reason || '',
+        };
+      });
+
+      setAllWorkers(conLoGuardado);
       setHasChanges(false); 
-      await Almacen.setItem(llaveCache, JSON.stringify(initialUI));
+      await Almacen.setItem(llaveCache, JSON.stringify(conLoGuardado));
     } catch (e) {
       console.log(e);
       // Si falló la red, mostramos la última lista guardada.
@@ -477,7 +521,7 @@ export default function ListaScreen() {
     if (!isSilent) setIsSaving(true);
     try {
       const today = new Date();
-      const weekStart = today.toISOString().split('T')[0];
+      const weekStart = inicioDeSemana(today);
 
       const recordsToSave = allWorkers.map(w => {
         const daysAbsent = 6 - w.attendance.filter(Boolean).length;
@@ -529,7 +573,68 @@ export default function ListaScreen() {
     }
   };
 
+  /* El acumulado se arma desde payroll_records, que es lo que quedo guardado al
+   * cerrar cada semana, y no se recalcula con los sueldos de hoy: la raya de
+   * octubre tiene que seguir diciendo lo que se pago en octubre aunque despues
+   * hubiera aumento. Por eso se usan final_salary y deduction_amount tal cual. */
+  const cargarSemanas = async () => {
+    const pid = activeProject?.id;
+    if (!exigirObra()) return;
+    setCargandoSemanas(true);
+    try {
+      const { data, error } = await supabase
+        .from('payroll_records')
+        .select('*, workers(name_worker, role, weekly_salary)')
+        .eq('project_id', pid)
+        .eq('is_active', true)
+        .order('week_start', { ascending: false });
+      if (error) throw error;
+
+      const porSemana: Record<string, any> = {};
+      (data || []).forEach((r: any) => {
+        const llave = r.week_start;
+        if (!llave) return;
+        if (!porSemana[llave]) {
+          porSemana[llave] = {
+            semana: llave,
+            etiqueta: etiquetaSemana(llave),
+            registros: [],
+            total: 0,
+            descuentos: 0,
+            faltas: 0,
+          };
+        }
+        porSemana[llave].registros.push(r);
+        porSemana[llave].total += Number(r.final_salary || 0);
+        porSemana[llave].descuentos += Number(r.deduction_amount || 0);
+        porSemana[llave].faltas += Number(r.days_absent || 0);
+      });
+
+      setSemanas(Object.values(porSemana));
+    } catch (e: any) {
+      Aviso.alert('Error', mensajeDeError(e, 'cargar el acumulado por semana'));
+    } finally {
+      setCargandoSemanas(false);
+    }
+  };
+
+  const abrirSemanas = () => {
+    setModalSemanas(true);
+    cargarSemanas();
+  };
+
+  const imprimirSemanas = async (lista: any[], nombre: string) => {
+    if (lista.length === 0) { Aviso.alert('Sin datos', 'Todavia no hay semanas guardadas.'); return; }
+    try {
+      const html = generarPlantillaHistorial(lista, activeProject?.name || 'Obra');
+      await exportarPDF(html, nombre);
+    } catch (e: any) {
+      Aviso.alert('Error PDF', mensajeDeError(e, 'generar el PDF'));
+    }
+  };
+
   const handleGeneratePDF = async () => {
+
     if (displayedWorkers.length === 0) return;
     try {
       const weekLabel = new Date().toLocaleDateString('es-MX');
@@ -623,6 +728,7 @@ export default function ListaScreen() {
                   <View style={styles.exportButtonsContainer}>
                     <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#DC2626'}]} onPress={handleGeneratePDF}><Feather name="file-text" size={14} color="#FFF" /><Text style={styles.exportBtnText}>PDF</Text></TouchableOpacity>
                     <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#10B981', marginLeft: 8}]} onPress={handleExportarExcel}><Feather name="grid" size={14} color="#FFF" /><Text style={styles.exportBtnText}>Excel</Text></TouchableOpacity>
+                    <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#0F172A', marginLeft: 8}]} onPress={abrirSemanas}><Feather name="calendar" size={14} color="#FFF" /><Text style={styles.exportBtnText}>Semanas</Text></TouchableOpacity>
                   </View>
                 )}
               </View>
@@ -662,6 +768,59 @@ export default function ListaScreen() {
       <View style={styles.fabContainer}>
         <TouchableOpacity style={styles.fabPrimary} onPress={() => setIsModalVisible(true)}><Feather name="plus" size={30} color="#FFF" /></TouchableOpacity>
       </View>
+
+      {/* MODAL ACUMULADO POR SEMANA */}
+      <Modal visible={modalSemanas} animationType="slide" transparent={true} onRequestClose={() => setModalSemanas(false)}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setModalSemanas(false)} />
+          <View style={styles.modalContent}>
+            <View style={styles.semanasHeader}>
+              <Text style={[styles.modalTitle, { marginBottom: 0 }]}>Acumulado por semana</Text>
+              <TouchableOpacity onPress={() => setModalSemanas(false)}><Feather name="x" size={22} color="#64748B" /></TouchableOpacity>
+            </View>
+
+            {cargandoSemanas ? (
+              <ActivityIndicator color="#2563EB" style={{ marginVertical: 30 }} />
+            ) : semanas.length === 0 ? (
+              <Text style={{ textAlign: 'center', color: '#64748B', marginVertical: 30 }}>
+                Todavía no hay semanas guardadas. Pasa lista y guárdala para que aparezca aquí.
+              </Text>
+            ) : (
+              <>
+                <TouchableOpacity style={styles.imprimirTodasBtn} onPress={() => imprimirSemanas(semanas, 'Nomina_Acumulado.pdf')}>
+                  <Feather name="printer" size={16} color="#FFF" />
+                  <Text style={styles.imprimirTodasTexto}>
+                    Imprimir {semanas.length === 1 ? 'la semana' : `las ${semanas.length} semanas`}
+                  </Text>
+                </TouchableOpacity>
+
+                <ScrollView style={{ marginTop: 14 }}>
+                  {semanas.map((s) => (
+                    <View key={s.semana} style={styles.semanaFila}>
+                      <View style={{ flex: 1, paddingRight: 10 }}>
+                        <Text style={styles.semanaEtiqueta}>{s.etiqueta}</Text>
+                        <Text style={styles.semanaDetalle}>
+                          {s.registros.length} {s.registros.length === 1 ? 'trabajador' : 'trabajadores'} · {s.faltas} {s.faltas === 1 ? 'falta' : 'faltas'}
+                          {s.descuentos > 0 ? ` · -$${s.descuentos.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={styles.semanaTotal}>
+                          ${s.total.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </Text>
+                        <TouchableOpacity style={styles.semanaImprimir} onPress={() => imprimirSemanas([s], `Nomina_${s.semana}.pdf`)}>
+                          <Feather name="file-text" size={12} color="#2563EB" />
+                          <Text style={styles.semanaImprimirTexto}>PDF</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </ScrollView>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* MODAL ALTA */}
       <Modal visible={isModalVisible} animationType="slide" transparent={true} onRequestClose={() => setIsModalVisible(false)}>
@@ -773,6 +932,15 @@ const styles = StyleSheet.create({
   fabContainer: { position: 'absolute', bottom: 25, right: 20 },
   fabPrimary: { width: 54, height: 54, borderRadius: 27, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', boxShadow: '0px 4px 10px rgba(15, 23, 42, 0.14)', elevation: 4 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 20 },
+  semanasHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  imprimirTodasBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#0F172A', paddingVertical: 12, borderRadius: 12 },
+  imprimirTodasTexto: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
+  semanaFila: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+  semanaEtiqueta: { fontSize: 14, fontWeight: 'bold', color: '#1E293B' },
+  semanaDetalle: { fontSize: 11, color: '#64748B', marginTop: 2 },
+  semanaTotal: { fontSize: 15, fontWeight: '900', color: '#047857' },
+  semanaImprimir: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  semanaImprimirTexto: { fontSize: 11, color: '#2563EB', fontWeight: 'bold' },
   modalContent: { backgroundColor: '#FFF', borderRadius: 24, padding: 22, maxHeight: '85%' },
   modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#1E293B', marginBottom: 15 },
   modalInput: { backgroundColor: '#F1F5F9', borderRadius: 10, padding: 12, fontSize: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0', color: '#1E293B' },

@@ -172,3 +172,96 @@ export const generarPlantillaNomina = (workers: any[], weekLabel: string) => {
     </html>
   `;
 };
+/* Hoja de raya por semanas ya cerradas.
+ *
+ * Reimprime lo que quedo guardado en payroll_records, no lo recalcula: si a un
+ * trabajador le subieron el sueldo en noviembre, la raya de octubre tiene que
+ * seguir diciendo lo que se le pago en octubre. Por eso se usan final_salary y
+ * deduction_amount tal como se registraron.
+ */
+export const generarPlantillaHistorial = (semanas: any[], obra: string) => {
+  const dinero = (n: number) =>
+    Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const granTotal = semanas.reduce((s, w) => s + Number(w.total || 0), 0);
+
+  const bloques = semanas
+    .map((semana) => {
+      const filas = semana.registros
+        .map((r: any, i: number) => {
+          const t = r.workers || {};
+          const nota = r.reason
+            ? `<br><span style="font-size:9px;color:#DC2626;">(${r.reason})</span>`
+            : '';
+          return `
+            <tr class="${i % 2 === 0 ? 'bg-gray' : ''}">
+              <td><strong>${t.name_worker || 'Trabajador dado de baja'}</strong><br><span class="role">${t.role || ''}</span></td>
+              <td class="c">$${dinero(t.weekly_salary)}</td>
+              <td class="c red b">${Number(r.days_absent) > 0 ? r.days_absent : '-'}</td>
+              <td class="c red">${Number(r.deduction_amount) > 0 ? '-$' + dinero(r.deduction_amount) : '-'}${nota}</td>
+              <td class="r b green">$${dinero(r.final_salary)}</td>
+              <td class="firma"><div class="linea"></div></td>
+            </tr>`;
+        })
+        .join('');
+
+      return `
+        <div class="semana">
+          <div class="semana-titulo">
+            <span>Semana del ${semana.etiqueta}</span>
+            <span class="semana-total">$${dinero(semana.total)}</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width:35%">Trabajador / Puesto</th>
+                <th class="c" style="width:15%">Sueldo Base</th>
+                <th class="c" style="width:8%">Faltas</th>
+                <th class="c" style="width:15%">Descuentos</th>
+                <th class="r" style="width:15%">Total a Pagar</th>
+                <th class="c" style="width:12%">Firma</th>
+              </tr>
+            </thead>
+            <tbody>${filas}</tbody>
+          </table>
+        </div>`;
+    })
+    .join('');
+
+  const resumen =
+    semanas.length > 1
+      ? `<div class="gran-total"><span>Total acumulado de ${semanas.length} semanas:</span><span>$${dinero(granTotal)}</span></div>`
+      : '';
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+  @page { margin: 0; size: letter; }
+  body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin:0; padding:34px; color:#111827; }
+  .cabecera { border-bottom:3px solid #00AEEF; padding-bottom:12px; margin-bottom:18px; }
+  .cabecera h1 { margin:0; font-size:19px; }
+  .cabecera p { margin:3px 0 0; font-size:11px; color:#64748B; }
+  .semana { margin-bottom:22px; page-break-inside:avoid; }
+  .semana-titulo { display:flex; justify-content:space-between; align-items:baseline;
+    background:#0F172A; color:#FFF; padding:7px 10px; font-size:12px; font-weight:bold; }
+  .semana-total { color:#34D399; }
+  table { width:100%; border-collapse:collapse; font-size:10px; }
+  th { background:#E2E8F0; padding:6px; text-align:left; font-size:9px; text-transform:uppercase; color:#334155; }
+  td { padding:6px; border-bottom:1px solid #E2E8F0; vertical-align:top; }
+  .bg-gray { background:#F8FAFC; }
+  .c { text-align:center; } .r { text-align:right; } .b { font-weight:bold; }
+  .red { color:#DC2626; } .green { color:#047857; }
+  .role { font-size:9px; color:#64748B; }
+  .firma { padding-top:14px; }
+  .linea { border-bottom:1px solid #94A3B8; height:1px; }
+  .gran-total { display:flex; justify-content:space-between; margin-top:10px; padding:11px 10px;
+    background:#0F172A; color:#FFF; font-size:13px; font-weight:bold; }
+</style></head>
+<body>
+  <div class="cabecera">
+    <h1>Acumulado de Nómina</h1>
+    <p>${obra} &nbsp;·&nbsp; ${semanas.length} ${semanas.length === 1 ? 'semana' : 'semanas'} &nbsp;·&nbsp; Emitido el ${new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+  </div>
+  ${bloques}
+  ${resumen}
+</body></html>`;
+};
