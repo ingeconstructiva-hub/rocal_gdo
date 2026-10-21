@@ -19,6 +19,7 @@ import SummaryCard from '../../components/SummaryCard';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
 import { esDeHoy } from '../../lib/permisos';
+import { calcularTotalFinal } from '../../lib/nomina';
 import { mensajeDeError } from '../../lib/errores';
 import { supabase } from '../../lib/supabase';
 import { generarPlantillaNomina } from '../../utils/pdfNomina';
@@ -38,32 +39,9 @@ interface WorkerState {
 
 const DAYS = ['L', 'M', 'M', 'J', 'V', 'S'];
 
-function calculateFinalTotal(w: WorkerState) {
-  const totalHoursInWeek = 45; // 5 días de 8h (40h) + 1 día de 5h (5h)
-  const hourlyRate = w.weekly_salary / totalHoursInWeek; // Valor base por hora trabajada
-
-  let hoursEarned = 0;
-
-  // Calcular lunes a viernes (8 horas por día asistido)
-  for (let i = 0; i < 5; i++) {
-    if (w.attendance[i]) {
-      hoursEarned += 8;
-    }
-  }
-
-  // Calcular sábado (5 horas si asistió)
-  if (w.attendance[5]) {
-    hoursEarned += 5;
-  }
-
-  const extraH = Number(w.extraHours || 0);
-  const disc = Number(w.discount || 0);
-
-  // Las horas extra se calculan al doble de la tarifa ordinaria integrada
-  const extraHourlyRate = hourlyRate * 2; 
-
-  return (hoursEarned * hourlyRate) + (extraH * extraHourlyRate) - disc;
-}
+/* El calculo vive en lib/nomina para que la pantalla y el PDF que se firma den
+ * exactamente el mismo numero. Antes cada uno tenia su copia y no cuadraban. */
+const calculateFinalTotal = (w: WorkerState) => calcularTotalFinal(w);
 
 /* La tarjeta de cada trabajador, aislada y memorizada.
  *

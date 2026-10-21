@@ -1,50 +1,47 @@
-export const generarPlantillaNomina = (workers: any[], weekLabel: string) => {
-  
-  // 1. Lógica matemática
-  const calculateFinalSalary = (w: any) => {
-    const dailySalary = w.weekly_salary / 6;
-    const attendanceArray = w.attendance || [true, true, true, true, true];
-    const daysPresent = attendanceArray.filter(Boolean).length;
-    const extraDeduction = Number(w.extraDeduction || 0);
-    return Math.max(0, (dailySalary * daysPresent) - extraDeduction);
-  };
+import { calcularTotalFinal, descuentoTotal, diasFaltados, montoHorasExtra } from '../lib/nomina';
 
+export const generarPlantillaNomina = (workers: any[], weekLabel: string) => {
+
+  // Las cuentas salen de lib/nomina, las mismas que muestra la pantalla. Antes
+  // esta plantilla tenia su propia version y no cuadraba con la app.
   const totalBase = workers.reduce((sum, w) => sum + Number(w.weekly_salary), 0);
-  const totalFinal = workers.reduce((sum, w) => sum + calculateFinalSalary(w), 0);
+  const totalExtra = workers.reduce((sum, w) => sum + montoHorasExtra(w), 0);
+  const totalDescuentos = workers.reduce((sum, w) => sum + descuentoTotal(w), 0);
+  const totalFinal = workers.reduce((sum, w) => sum + calcularTotalFinal(w), 0);
 
   // 2. Generamos las filas de la tabla
   const rowsHtml = workers.map((worker, index) => {
-    const dailySalary = worker.weekly_salary / 5;
-    const attendanceArray = worker.attendance || [true, true, true, true, true];
-    
-    const daysPresent = attendanceArray.filter(Boolean).length;
-    const daysAbsent = 5 - daysPresent;
-    
-    const absenceDeduction = daysAbsent * dailySalary;
-    const extraDeduction = Number(worker.extraDeduction || 0);
-    const totalDeductions = absenceDeduction + extraDeduction;
-    
-    const finalSalary = calculateFinalSalary(worker);
+    const daysAbsent = diasFaltados(worker);
+    const totalDeductions = descuentoTotal(worker);
+    const extraAmount = montoHorasExtra(worker);
+    const finalSalary = calcularTotalFinal(worker);
 
     const reasonText = worker.reason 
       ? `<br><span style="font-size: 9px; color: #DC2626;">(${worker.reason})</span>` 
       : '';
 
+    // Las horas extra suben el total, asi que se anotan aqui: si no, la fila
+    // parece no cuadrar (base menos descuentos no da el total a pagar).
+    const extraText = extraAmount > 0
+      ? `<br><span style="font-size: 9px; color: #047857;">+$${extraAmount.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} por ${worker.extraHours} hrs extra</span>`
+      : '';
+
     return `
       <tr class="${index % 2 === 0 ? 'bg-gray' : ''}">
         <td>
-          <strong>${worker.name}</strong><br>
+          <strong>${worker.name_worker}</strong><br>
           <span class="role-text">${worker.role}</span>
         </td>
-        <td class="text-center">$${worker.weekly_salary.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+        <td class="text-center">$${Number(worker.weekly_salary).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
         <td class="text-center text-red text-bold">
           ${daysAbsent > 0 ? daysAbsent : '-'}
         </td>
         <td class="text-center text-red">
-          ${totalDeductions > 0 ? '-$' + totalDeductions.toLocaleString('es-MX', { minimumFractionDigits: 2 }) : '-'}
+          ${totalDeductions > 0 ? '-$' + totalDeductions.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
           ${reasonText}
+          ${extraText}
         </td>
-        <td class="text-right text-bold text-green">$${finalSalary.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+        <td class="text-right text-bold text-green">$${finalSalary.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
         <td class="signature-cell"><div class="signature-line"></div></td>
       </tr>
     `;
@@ -153,15 +150,19 @@ export const generarPlantillaNomina = (workers: any[], weekLabel: string) => {
         <div class="totals-box">
           <div class="totals-row">
             <span>Nómina Base Teórica:</span>
-            <span>$${totalBase.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+            <span>$${totalBase.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
           <div class="totals-row">
             <span>Descuentos Totales Aplicados:</span>
-            <span class="text-red">-$${(totalBase - totalFinal).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+            <span class="text-red">-$${totalDescuentos.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+          <div class="totals-row">
+            <span>Horas Extra:</span>
+            <span style="color:#047857;">+$${totalExtra.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
           <div class="totals-row totals-final">
             <span style="color:#0F172A;">Total a Pagar (Real):</span>
-            <span>$${totalFinal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+            <span>$${totalFinal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
         </div>
         
