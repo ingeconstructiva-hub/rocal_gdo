@@ -112,7 +112,7 @@ export default function CajaChicaScreen() {
   /* El residente puede quitar un movimiento que acaba de capturar: un monto o
    * un concepto mal teclado. Se mide con la fecha de captura ('created_at'),
    * no con 'fecha', porque esa última la puede escribir el usuario. */
-  const puedeBorrarResidente = (mov: MovimientoFinanciero) =>
+  const puedeCorregirResidente = (mov: MovimientoFinanciero) =>
     esResidente && esDeHoy(mov.created_at || mov.fecha);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
 
@@ -804,8 +804,12 @@ export default function CajaChicaScreen() {
                         <Text style={styles.deleteActionBtnText}>Borrar</Text>
                       </TouchableOpacity>
                     </View>
-                  ) : puedeBorrarResidente(movimientoSeleccionado) ? (
+                  ) : puedeCorregirResidente(movimientoSeleccionado) ? (
                     <View style={styles.detailActionsRow}>
+                      <TouchableOpacity style={styles.editActionBtn} onPress={() => iniciarEdicion(movimientoSeleccionado)}>
+                        <Feather name="edit-2" size={16} color="#FFF" />
+                        <Text style={styles.editActionBtnText}>Editar</Text>
+                      </TouchableOpacity>
                       <TouchableOpacity style={styles.deleteActionBtn} onPress={() => handleEliminarMovimiento(movimientoSeleccionado.id, movimientoSeleccionado.tipo)}>
                         <Feather name="trash-2" size={16} color="#EF4444" />
                         <Text style={styles.deleteActionBtnText}>Borrar</Text>

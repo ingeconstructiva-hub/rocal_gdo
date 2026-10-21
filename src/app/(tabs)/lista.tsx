@@ -80,7 +80,7 @@ type PropsTarjeta = {
   worker: WorkerState;
   isAdmin: boolean;
   isFinancialRole: boolean;
-  puedeBorrar: boolean;
+  puedeCorregir: boolean;
   onToggle: (workerId: string, dayIdx: number) => void;
   onEditar: (worker: WorkerState) => void;
   onBorrar: (worker: WorkerState) => void;
@@ -89,7 +89,7 @@ type PropsTarjeta = {
 };
 
 const TarjetaTrabajador = memo(function TarjetaTrabajador({
-  worker, isAdmin, isFinancialRole, puedeBorrar, onToggle, onEditar, onBorrar, onExtras, onDescuento,
+  worker, isAdmin, isFinancialRole, puedeCorregir, onToggle, onEditar, onBorrar, onExtras, onDescuento,
 }: PropsTarjeta) {
   return (
     <View style={styles.workerCard}>
@@ -103,9 +103,10 @@ const TarjetaTrabajador = memo(function TarjetaTrabajador({
             <TouchableOpacity onPress={() => onEditar(worker)} style={styles.inlineActionBtn}><Feather name="edit-2" size={13} color="#475569" /></TouchableOpacity>
             <TouchableOpacity onPress={() => onBorrar(worker)} style={[styles.inlineActionBtn, {marginLeft: 8}]}><Feather name="trash-2" size={13} color="#EF4444" /></TouchableOpacity>
           </View>
-        ) : puedeBorrar ? (
+        ) : puedeCorregir ? (
           <View style={styles.adminActionIconsRow}>
-            <TouchableOpacity onPress={() => onBorrar(worker)} style={styles.inlineActionBtn}><Feather name="trash-2" size={13} color="#EF4444" /></TouchableOpacity>
+            <TouchableOpacity onPress={() => onEditar(worker)} style={styles.inlineActionBtn}><Feather name="edit-2" size={13} color="#475569" /></TouchableOpacity>
+            <TouchableOpacity onPress={() => onBorrar(worker)} style={[styles.inlineActionBtn, {marginLeft: 8}]}><Feather name="trash-2" size={13} color="#EF4444" /></TouchableOpacity>
           </View>
         ) : isFinancialRole && (
           <View style={{alignItems: 'flex-end'}}><Text style={styles.salaryLabel}>Semanal</Text><Text style={styles.salaryValue}>${worker.weekly_salary}</Text></View>
@@ -155,7 +156,7 @@ export default function ListaScreen() {
   const isAdmin = profile?.role === 'admin';
   // El residente puede dar de baja a un trabajador que acaba de registrar, por
   // si escribió mal el nombre o lo capturó dos veces.
-  const puedeBorrarResidente = (worker: WorkerState) =>
+  const puedeCorregirResidente = (worker: WorkerState) =>
     profile?.role === 'residente' && esDeHoy(worker.created_at);
 
   const [allWorkers, setAllWorkers] = useState<WorkerState[]>([]); 
@@ -665,7 +666,7 @@ export default function ListaScreen() {
               worker={worker}
               isAdmin={isAdmin}
               isFinancialRole={isFinancialRole}
-              puedeBorrar={puedeBorrarResidente(worker)}
+              puedeCorregir={puedeCorregirResidente(worker)}
               onToggle={toggleAttendance}
               onEditar={openEditWorkerModal}
               onBorrar={handleDeleteWorker}

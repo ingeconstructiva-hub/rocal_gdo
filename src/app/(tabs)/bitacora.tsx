@@ -51,7 +51,7 @@ export default function BitacoraScreen() {
   const isAdmin = profile?.role === 'admin';
   // El residente puede borrar una nota que acaba de capturar, para corregir un
   // error de dedo. Pasadas 24 horas la nota ya es historial de la obra.
-  const puedeBorrarResidente = (log: any) =>
+  const puedeCorregirResidente = (log: any) =>
     profile?.role === 'residente' && esDeHoy(log?.created_at);
 
   const getCategoryColor = (category: string) => {
@@ -533,14 +533,12 @@ export default function BitacoraScreen() {
               <Text style={styles.detailSubTitle}>DESCRIPCIÓN DE ACTIVIDADES</Text>
               <Text style={styles.detailDescriptionText}>{selectedLog?.description}</Text>
 
-              {(isAdmin || puedeBorrarResidente(selectedLog)) && !selectedLog?.isPending && (
+              {(isAdmin || puedeCorregirResidente(selectedLog)) && !selectedLog?.isPending && (
                 <View style={styles.detailActionsRow}>
-                  {isAdmin && (
-                    <TouchableOpacity onPress={openEditLogModal} style={[styles.detailActionBtn, styles.editBtn]}>
-                      <Feather name="edit-2" size={16} color="#FFF" />
-                      <Text style={styles.detailActionBtnText}>Editar Reporte</Text>
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity onPress={openEditLogModal} style={[styles.detailActionBtn, styles.editBtn]}>
+                    <Feather name="edit-2" size={16} color="#FFF" />
+                    <Text style={styles.detailActionBtnText}>Editar Reporte</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity onPress={handleDeleteLog} style={[styles.detailActionBtn, styles.deleteBtn]}>
                     <Feather name="trash-2" size={16} color="#FFF" />
                     <Text style={styles.detailActionBtnText}>Eliminar</Text>
