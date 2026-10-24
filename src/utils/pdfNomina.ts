@@ -23,7 +23,7 @@ export const generarPlantillaNomina = (workers: any[], weekLabel: string) => {
     // Las horas extra suben el total, asi que se anotan aqui: si no, la fila
     // parece no cuadrar (base menos descuentos no da el total a pagar).
     const extraText = extraAmount > 0
-      ? `<br><span style="font-size: 9px; color: #047857;">+$${extraAmount.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} por ${worker.extraHours} hrs extra</span>`
+      ? `<br><span style="font-size: 9px; color: #047857;">+$${extraAmount.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} por ${worker.extraHours} hrs extra${worker.extraReason ? ' (' + worker.extraReason + ')' : ''}</span>`
       : '';
 
     return `
@@ -190,6 +190,9 @@ export const generarPlantillaHistorial = (semanas: any[], obra: string) => {
       const filas = semana.registros
         .map((r: any, i: number) => {
           const t = r.workers || {};
+          const extra = Number(r.extra_hours || 0) > 0
+            ? `<br><span style="font-size:9px;color:#047857;">+${r.extra_hours} hrs extra${r.extra_reason ? ' (' + r.extra_reason + ')' : ''}</span>`
+            : '';
           const nota = r.reason
             ? `<br><span style="font-size:9px;color:#DC2626;">(${r.reason})</span>`
             : '';
@@ -198,7 +201,7 @@ export const generarPlantillaHistorial = (semanas: any[], obra: string) => {
               <td><strong>${t.name_worker || 'Trabajador dado de baja'}</strong><br><span class="role">${t.role || ''}</span></td>
               <td class="c">$${dinero(t.weekly_salary)}</td>
               <td class="c red b">${Number(r.days_absent) > 0 ? r.days_absent : '-'}</td>
-              <td class="c red">${Number(r.deduction_amount) > 0 ? '-$' + dinero(r.deduction_amount) : '-'}${nota}</td>
+              <td class="c red">${Number(r.deduction_amount) > 0 ? '-$' + dinero(r.deduction_amount) : '-'}${nota}${extra}</td>
               <td class="r b green">$${dinero(r.final_salary)}</td>
               <td class="firma"><div class="linea"></div></td>
             </tr>`;

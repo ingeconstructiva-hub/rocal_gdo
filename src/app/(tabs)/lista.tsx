@@ -31,6 +31,7 @@ interface WorkerState {
   weekly_salary: number;
   attendance: boolean[]; // L, M, M, J, V, S
   extraHours: string;
+  extraReason: string;
   discount: string;
   reason: string;
   categoria: string;
@@ -165,6 +166,7 @@ export default function ListaScreen() {
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
 
   const [tempExtras, setTempExtras] = useState('0');
+  const [tempExtraReason, setTempExtraReason] = useState('');
   const [tempDiscount, setTempDiscount] = useState('0');
   const [tempReason, setTempReason] = useState('');
 
@@ -262,6 +264,7 @@ export default function ListaScreen() {
         weekly_salary: w.weekly_salary || 0,
         attendance: [true, true, true, true, true, true],
         extraHours: '0',
+        extraReason: '',
         discount: '0',
         reason: '',
         categoria: w.categoria || 'obrero',
@@ -279,7 +282,7 @@ export default function ListaScreen() {
       const semanaActual = inicioDeSemana();
       const { data: registros } = await supabase
         .from('payroll_records')
-        .select('worker_id, attendance, deduction_amount, reason')
+        .select('*')
         .eq('project_id', pid)
         .eq('week_start', semanaActual)
         .eq('is_active', true);
@@ -302,6 +305,8 @@ export default function ListaScreen() {
         return {
           ...w,
           attendance: asistencia,
+          extraHours: String(r.extra_hours ?? 0),
+          extraReason: r.extra_reason || '',
           discount: String(r.deduction_amount ?? 0),
           reason: r.reason || '',
         };
@@ -361,6 +366,7 @@ export default function ListaScreen() {
           weekly_salary: Number(newSalary),
           attendance: [true, true, true, true, true, true],
           extraHours: '0',
+          extraReason: '',
           discount: '0',
           reason: '',
           categoria: activeCategory,
@@ -406,6 +412,7 @@ export default function ListaScreen() {
         weekly_salary: nw.weekly_salary,
         attendance: [true, true, true, true, true, true],
         extraHours: '0',
+        extraReason: '',
         discount: '0',
         reason: '',
         categoria: nw.categoria
@@ -490,12 +497,13 @@ export default function ListaScreen() {
   const openExtrasModal = useCallback((worker: WorkerState) => {
     setSelectedWorkerId(worker.id);
     setTempExtras(worker.extraHours);
+    setTempExtraReason(worker.extraReason || '');
     setIsExtrasModalOpen(true);
   }, []);
 
   const saveExtrasChanges = () => {
     setHasChanges(true); 
-    setAllWorkers(prev => prev.map(w => w.id === selectedWorkerId ? { ...w, extraHours: tempExtras || '0' } : w));
+    setAllWorkers(prev => prev.map(w => w.id === selectedWorkerId ? { ...w, extraHours: tempExtras || '0', extraReason: tempExtraReason } : w));
     setIsExtrasModalOpen(false);
     setSelectedWorkerId(null);
   };
@@ -535,6 +543,8 @@ export default function ListaScreen() {
           final_salary: calculateFinalTotal(w),
           attendance: JSON.stringify(w.attendance), 
           reason: w.reason,
+          extra_hours: Number(w.extraHours || 0),
+          extra_reason: w.extraReason || null,
           is_active: true
         };
       }).filter(r => !r.worker_id.startsWith('temp_'));
@@ -558,7 +568,19 @@ export default function ListaScreen() {
         return;
       }
       
-      const { error } = await supabase.from('payroll_records').upsert(recordsToSave, { onConflict: 'worker_id,week_start' });
+      let { error } = await supabase.from('payroll_records').upsert(recordsToSave, { onConflict: 'worker_id,week_start' });
+
+      /* Las columnas de horas extra son nuevas. Mientras no se corra
+       * sql/horas_extra.sql la base las rechaza, y pasar lista es lo ultimo
+       * que puede dejar de funcionar: se reintenta sin ellas y se avisa. */
+      if (error && (error.code === '42703' || /extra_hours|extra_reason/.test(error.message || ''))) {
+        const sinExtras = recordsToSave.map(({ extra_hours, extra_reason, ...resto }: any) => resto);
+        ({ error } = await supabase.from('payroll_records').upsert(sinExtras, { onConflict: 'worker_id,week_start' }));
+        if (!error && !isSilent) {
+          Aviso.alert('Asistencia enviada', 'Las horas extra no se guardaron: falta correr sql/horas_extra.sql en la base.');
+        }
+      }
+
       if (error) throw error;
 
       setHasChanges(false); 
@@ -649,13 +671,14 @@ export default function ListaScreen() {
       return; 
     }
     try {
-      const encabezados = ["Trabajador", "Puesto", "Sueldo Base Semanal ($)", "Dias Asistidos", "Horas Extra (Hrs)", "Descuento Aplicado ($)", "Motivo/Nota", "Total a Pagar ($)\n"];
+      const encabezados = ["Trabajador", "Puesto", "Sueldo Base Semanal ($)", "Dias Asistidos", "Horas Extra (Hrs)", "Motivo Horas Extra", "Descuento Aplicado ($)", "Motivo/Nota", "Total a Pagar ($)\n"];
       
       const filas = displayedWorkers.map(w => {
         const asistencias = w.attendance.filter(Boolean).length;
         const total = calculateFinalTotal(w);
         const notaLimpia = w.reason ? w.reason.replace(/,/g, ' ') : ''; 
-        return `"${w.name_worker}","${w.role}",${w.weekly_salary},${asistencias},${w.extraHours},${w.discount},"${notaLimpia}",${total.toFixed(2)}`;
+        const notaExtra = w.extraReason ? w.extraReason.replace(/,/g, ' ') : '';
+        return `"${w.name_worker}","${w.role}",${w.weekly_salary},${asistencias},${w.extraHours},"${notaExtra}",${w.discount},"${notaLimpia}",${total.toFixed(2)}`;
       }).join("\n");
 
       const contenidoCSV = "\uFEFF" + encabezados.join(",") + filas;
@@ -865,6 +888,8 @@ export default function ListaScreen() {
             <Text style={styles.modalTitle}>🕒 Asignar Horas Extra</Text>
             <Text style={styles.subModalLabel}>Ingresa la cantidad total de horas acumuladas en la semana:</Text>
             <TextInput style={styles.modalInput} keyboardType="numeric" value={tempExtras} onChangeText={(v) => setTempExtras(v.replace(/[^0-9.]/g, ''))} placeholder="Ej. 4" autoFocus />
+            <Text style={styles.subModalLabel}>Motivo o Nota justificante:</Text>
+            <TextInput style={[styles.modalInput, {height: 50, textAlignVertical: 'top'}]} value={tempExtraReason} onChangeText={setTempExtraReason} placeholder="Ej. Colado de losa" multiline />
             <TouchableOpacity style={styles.saveBtn} onPress={saveExtrasChanges}><Text style={styles.saveBtnText}>Aplicar Horas</Text></TouchableOpacity>
           </View>
         </View>
