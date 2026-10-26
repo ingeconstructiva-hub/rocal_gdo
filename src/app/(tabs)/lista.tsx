@@ -623,6 +623,22 @@ export default function ListaScreen() {
     }
   };
 
+  /* Autoguardado.
+   *
+   * En obra nadie se acuerda del boton: se marca la falta, se guarda el
+   * telefono en la bolsa y la lista nunca llega a la oficina. Se espera a que
+   * el usuario deje de picar para no mandar un guardado por cada toque.
+   *
+   * Sin conexion tampoco se pierde: handleSavePayroll deja el registro en la
+   * bandeja y se sube solo al volver la señal. Los errores si avisan aunque el
+   * guardado sea silencioso; el exito no interrumpe a nadie. */
+  useEffect(() => {
+    if (!hasChanges || !activeProject?.id) return;
+    const temporizador = setTimeout(() => { handleSavePayroll(true); }, 2000);
+    return () => clearTimeout(temporizador);
+  }, [hasChanges, allWorkers, activeProject]);
+
+
   /* El acumulado se arma desde payroll_records, que es lo que quedo guardado al
    * cerrar cada semana, y no se recalcula con los sueldos de hoy: la raya de
    * octubre tiene que seguir diciendo lo que se pago en octubre aunque despues
@@ -796,7 +812,7 @@ export default function ListaScreen() {
                 <View style={{ flex: 1, alignItems: 'center' }}>
                   <Text style={styles.barraSemanaTitulo} numberOfLines={1}>{rangoSemanaActual}</Text>
                   <Text style={styles.barraSemanaDetalle}>
-                    {esSemanaActual ? 'Semana en curso' : 'Semana cerrada'} · {displayedWorkers.length} {displayedWorkers.length === 1 ? 'registro' : 'registros'}
+                    {esSemanaActual ? 'Semana en curso' : 'Semana cerrada'} · {displayedWorkers.length} {displayedWorkers.length === 1 ? 'registro' : 'registros'} · {hasChanges ? 'Guardando…' : 'Guardado'}
                   </Text>
                 </View>
 
