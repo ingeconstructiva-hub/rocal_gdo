@@ -182,7 +182,7 @@ export default function ResguardosScreen() {
     if (isOffline) {
       try {
         const guardado = await Almacen.getItem(llaveCache);
-        if (guardado) setHerramientas(JSON.parse(guardado));
+        if (guardado) setHerramientas(await firmarCampos(JSON.parse(guardado), ['ine_url', 'ine_reverso_url', 'firma_entrega_url', 'firma_recibe_url']));
       } catch (error) {
         console.log('Error leyendo el almacén guardado:', error);
       } finally {
@@ -206,13 +206,17 @@ export default function ResguardosScreen() {
         // privado sin que las pantallas ni los PDFs tengan que cambiar.
         const conUrls = await firmarCampos(data, ['ine_url', 'ine_reverso_url', 'firma_entrega_url', 'firma_recibe_url']);
         setHerramientas(conUrls);
-        await Almacen.setItem(llaveCache, JSON.stringify(conUrls));
+        /* Se guarda la fila CRUDA, no la firmada. Una direccion firmada
+         * caduca a las 8 horas y la copia local vive mucho mas: al leerla
+         * al dia siguiente todas las fotos salian rotas, y bastaba refrescar
+         * para que aparecieran porque ahi se volvian a firmar. */
+        await Almacen.setItem(llaveCache, JSON.stringify(data));
       }
     } catch (error) {
       console.log("Error loading warehouse inventory:", error);
       // Si falló la red, al menos mostramos lo último que se guardó.
       const guardado = await Almacen.getItem(llaveCache);
-      if (guardado) setHerramientas(JSON.parse(guardado));
+      if (guardado) setHerramientas(await firmarCampos(JSON.parse(guardado), ['ine_url', 'ine_reverso_url', 'firma_entrega_url', 'firma_recibe_url']));
     } finally {
       setLoading(false);
     }

@@ -123,7 +123,20 @@ async function traerFoto(request, llave) {
 
   try {
     const respuesta = await fetch(new Request(request.url, { mode: 'cors', credentials: 'omit' }));
-    if (respuesta.ok && cache) guardarImagen(llave, respuesta.clone());
+
+    if (respuesta.ok) {
+      if (cache) guardarImagen(llave, respuesta.clone());
+      return respuesta;
+    }
+
+    /* Una firma caducada contesta 400: no lanza error, asi que antes se
+     * devolvia ese 400 y la foto salia rota aunque hubiera copia guardada.
+     * Como la copia se guarda por nombre y no por token, aqui si sirve. */
+    if (cache) {
+      const guardada = await cache.match(llave);
+      if (guardada) return guardada;
+    }
+
     return respuesta;
   } catch {
     // Puede fallar por falta de internet o porque el servidor no permita cors.
