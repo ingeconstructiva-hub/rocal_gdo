@@ -11,6 +11,7 @@ import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Modal,
 import { useRefrescar } from '../../lib/refrescar';
 import { SkeletonLista } from '../../components/Skeleton';
 import { SinDatos } from '../../components/SinDatos';
+import { Minutas } from '../../components/Minutas';
 import { exportarPDF } from '../../lib/exportar';
 import { regresar } from '../../lib/navegar';
 import { firmarVarias } from '../../lib/urlsFirmadas';
@@ -31,6 +32,7 @@ export default function BitacoraScreen() {
   const [logs, setLogs] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
   const [categoryStats, setCategoryStats] = useState<any[]>([]);
+  const [apartado, setApartado] = useState<'entradas' | 'minutas'>('entradas');
   const [isExporting, setIsExporting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -402,6 +404,28 @@ export default function BitacoraScreen() {
         </View>
       </View>
 
+      {/* Las indicaciones viven en el mismo cuaderno que las notas, pero no
+          son lo mismo: la nota cuenta lo que paso, la minuta pide que algo
+          pase. Por eso van en su propio apartado y no mezcladas en la lista. */}
+      <View style={styles.apartados}>
+        <TouchableOpacity
+          style={[styles.apartado, apartado === 'entradas' && styles.apartadoActivo]}
+          onPress={() => setApartado('entradas')}
+        >
+          <Text style={[styles.apartadoTexto, apartado === 'entradas' && styles.apartadoTextoActivo]}>Entradas</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.apartado, apartado === 'minutas' && styles.apartadoActivo]}
+          onPress={() => setApartado('minutas')}
+        >
+          <Text style={[styles.apartadoTexto, apartado === 'minutas' && styles.apartadoTextoActivo]}>Minutas</Text>
+        </TouchableOpacity>
+      </View>
+
+      {apartado === 'minutas' ? (
+        <Minutas />
+      ) : (
+        <>
       <FlatList
         style={styles.body}
         contentContainerStyle={{ paddingBottom: 100 }}
@@ -615,12 +639,19 @@ export default function BitacoraScreen() {
       <TouchableOpacity style={styles.fab} onPress={handleAddNewLog}>
         <Feather name="plus" size={28} color="#FFF" />
       </TouchableOpacity>
+        </>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F6F8' },
+  apartados: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 14 },
+  apartado: { flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: '#E2E8F0', alignItems: 'center' },
+  apartadoActivo: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#2563EB' },
+  apartadoTexto: { fontSize: 13, fontWeight: 'bold', color: '#64748B' },
+  apartadoTextoActivo: { color: '#2563EB' },
   header: { backgroundColor: '#2563EB', paddingTop: 60, paddingBottom: 25, paddingHorizontal: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
   headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 },
   backButton: { padding: 4, marginLeft: -4 },
