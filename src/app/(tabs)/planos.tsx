@@ -55,9 +55,11 @@ export default function DocumentosScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (activeProject?.id) {
-        loadDocumentos();
-      }
+      /* Se llama siempre, incluso sin obra activa: la propia funcion
+       * apaga el esqueleto y la pantalla dice que falta elegir obra.
+       * Con el candado aqui, ese apagado nunca llegaba a correr y la
+       * pantalla se quedaba cargando para siempre. */
+      loadDocumentos();
     }, [activeProject])
   );
 
