@@ -13,7 +13,7 @@ import { SkeletonLista } from '../../components/Skeleton';
 import { SinDatos } from '../../components/SinDatos';
 import { Minutas } from '../../components/Minutas';
 import { exportarPDF } from '../../lib/exportar';
-import { regresar } from '../../lib/navegar';
+import { volverAlTablero } from '../../lib/navegar';
 import { firmarVarias } from '../../lib/urlsFirmadas';
 import { subirArchivo } from '../../lib/subidas';
 import { FotoSinConexion } from '../../components/FotoSinConexion';
@@ -158,7 +158,7 @@ export default function BitacoraScreen() {
         
         finalLogs.sort((a: any , b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-        processData(finalLogs);
+        await processData(finalLogs);
       } catch (error) {
         console.error("Error leyendo caché:", error);
       }
@@ -178,7 +178,7 @@ export default function BitacoraScreen() {
           let finalLogs = [...pendingLogs, ...data];
           finalLogs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
           
-          processData(finalLogs);
+          await processData(finalLogs);
           await Almacen.setItem(storageKey, JSON.stringify(data)); 
         }
       } catch (error: any) {
@@ -393,7 +393,7 @@ export default function BitacoraScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
-          <TouchableOpacity onPress={() => regresar()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => volverAlTablero()} style={styles.backButton}>
             <Feather name="chevron-left" size={28} color="#FFF" />
           </TouchableOpacity>
           <Text style={styles.headerSubtitle}>GESTIÓN DE OBRA</Text>
@@ -430,7 +430,12 @@ export default function BitacoraScreen() {
         style={styles.body}
         contentContainerStyle={{ paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
-        data={cargando ? [] : logs}
+        /* Antes decia `cargando ? [] : logs`: cualquier recarga vaciaba la
+         * lista aunque las notas ya estuvieran cargadas, y si esa recarga
+         * tardaba, la pantalla se quedaba en esqueletos con los datos ya
+         * en memoria. El esqueleto es para cuando no hay nada, no para
+         * tapar lo que ya se tiene. */
+        data={logs}
         keyExtractor={(log, i) => log.id?.toString() ?? `pendiente_${i}`}
         /* Dibuja solo lo que cabe en pantalla. Las notas traen fotos, asi que
          * armarlas todas de golpe era lo que trababa la bitacora. */
@@ -438,7 +443,7 @@ export default function BitacoraScreen() {
         maxToRenderPerBatch={8}
         windowSize={7}
         ListEmptyComponent={
-          cargando ? <SkeletonLista filas={4} /> : (
+          cargando && logs.length === 0 ? <SkeletonLista filas={4} /> : (
             <SinDatos mensaje="No hay datos para mostrar." onReintentar={fetchLogs} />
           )
         }
