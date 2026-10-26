@@ -182,7 +182,14 @@ export function Minutas() {
 
   return (
     <View style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 90 }}>
+      {/* Arriba y con su nombre: el circulo flotante tapaba contenido y no
+          decia que hacia. */}
+      <TouchableOpacity style={estilos.botonAgregar} onPress={() => setModal(true)}>
+        <Feather name="plus-circle" size={18} color="#FFF" />
+        <Text style={estilos.botonAgregarTexto}>Agregar indicación</Text>
+      </TouchableOpacity>
+
+      <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 10, paddingBottom: 40 }}>
         {cargando ? (
           <SkeletonLista filas={4} />
         ) : minutas.length === 0 ? (
@@ -240,10 +247,6 @@ export function Minutas() {
           })
         )}
       </ScrollView>
-
-      <TouchableOpacity style={estilos.fab} onPress={() => setModal(true)}>
-        <Feather name="plus" size={28} color="#FFF" />
-      </TouchableOpacity>
 
       <Modal visible={modal} animationType="slide" transparent onRequestClose={() => setModal(false)}>
         <View style={estilos.fondo}>
@@ -325,19 +328,18 @@ const estilos = StyleSheet.create({
   },
   accion: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   accionTexto: { fontSize: 12, color: '#2563EB', fontWeight: 'bold' },
-  fab: {
-    position: 'absolute',
-    bottom: 25,
-    right: 20,
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: '#2563EB',
-    justifyContent: 'center',
+  botonAgregar: {
+    flexDirection: 'row',
     alignItems: 'center',
-    elevation: 4,
-    boxShadow: '0px 4px 10px rgba(15, 23, 42, 0.14)',
+    justifyContent: 'center',
+    backgroundColor: '#2563EB',
+    marginHorizontal: 16,
+    marginTop: 14,
+    paddingVertical: 13,
+    borderRadius: 12,
+    gap: 8,
   },
+  botonAgregarTexto: { color: '#FFF', fontSize: 14, fontWeight: 'bold' },
   fondo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 20 },
   hoja: { backgroundColor: '#FFF', borderRadius: 24, padding: 22, maxHeight: '88%' },
   titulo: { fontSize: 18, fontWeight: 'bold', color: '#1E293B', marginBottom: 16 },

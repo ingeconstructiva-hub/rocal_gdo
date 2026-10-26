@@ -426,6 +426,10 @@ export default function BitacoraScreen() {
         <Minutas />
       ) : (
         <>
+      <TouchableOpacity style={styles.botonAgregar} onPress={handleAddNewLog}>
+        <Feather name="plus-circle" size={18} color="#FFF" />
+        <Text style={styles.botonAgregarTexto}>Agregar entrada a la bitácora</Text>
+      </TouchableOpacity>
       <FlatList
         style={styles.body}
         contentContainerStyle={{ paddingBottom: 100 }}
@@ -641,9 +645,6 @@ export default function BitacoraScreen() {
         </View>
       </Modal>
 
-      <TouchableOpacity style={styles.fab} onPress={handleAddNewLog}>
-        <Feather name="plus" size={28} color="#FFF" />
-      </TouchableOpacity>
         </>
       )}
     </View>
@@ -653,6 +654,8 @@ export default function BitacoraScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F6F8' },
   apartados: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 14 },
+  botonAgregar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2563EB', marginHorizontal: 16, marginTop: 14, paddingVertical: 13, borderRadius: 12, gap: 8 },
+  botonAgregarTexto: { color: '#FFF', fontSize: 14, fontWeight: 'bold' },
   apartado: { flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: '#E2E8F0', alignItems: 'center' },
   apartadoActivo: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#2563EB' },
   apartadoTexto: { fontSize: 13, fontWeight: 'bold', color: '#64748B' },
