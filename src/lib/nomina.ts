@@ -101,3 +101,14 @@ export const diasDeSemana = (inicio: string) => {
     };
   });
 };
+
+/** "26 OCT - 31 OCT 2026", para la barra que encabeza la semana en curso. */
+export const rangoSemana = (inicio: string): string => {
+  const [anio, mes, dia] = inicio.split('-').map(Number);
+  if (!anio || !mes || !dia) return inicio;
+  const lunes = new Date(anio, mes - 1, dia);
+  const sabado = new Date(anio, mes - 1, dia + 5);
+  const mesCorto = (f: Date) =>
+    f.toLocaleDateString('es-MX', { month: 'short' }).replace('.', '').toUpperCase();
+  return `${lunes.getDate()} ${mesCorto(lunes)} - ${sabado.getDate()} ${mesCorto(sabado)} ${sabado.getFullYear()}`;
+};

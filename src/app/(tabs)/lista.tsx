@@ -19,7 +19,7 @@ import SummaryCard from '../../components/SummaryCard';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
 import { esDeHoy } from '../../lib/permisos';
-import { calcularTotalFinal, diasDeSemana, etiquetaSemana, inicioDeSemana } from '../../lib/nomina';
+import { calcularTotalFinal, diasDeSemana, etiquetaSemana, inicioDeSemana, rangoSemana } from '../../lib/nomina';
 import { mensajeDeError } from '../../lib/errores';
 import { supabase } from '../../lib/supabase';
 import { generarPlantillaHistorial, generarPlantillaNomina } from '../../utils/pdfNomina';
@@ -179,7 +179,7 @@ export default function ListaScreen() {
    * todas las tarjetas reciban la misma referencia y su memo siga sirviendo. */
   const semanaEnCurso = inicioDeSemana();
   const diasSemana = useMemo(() => diasDeSemana(semanaEnCurso), [semanaEnCurso]);
-  const etiquetaSemanaActual = etiquetaSemana(semanaEnCurso);
+  const rangoSemanaActual = rangoSemana(semanaEnCurso);
 
   useEffect(() => {
     if (activeProject?.id) {
@@ -754,7 +754,6 @@ export default function ListaScreen() {
               <View style={styles.sectionHeaderRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sectionTitle}>Lista de {activeCategory === 'obrero' ? 'Obreros' : 'Técnicos'}</Text>
-                  <Text style={styles.sectionSubtitle}>Semana del {etiquetaSemanaActual}</Text>
                 </View>
                 {isFinancialRole && (
                   <View style={styles.exportButtonsContainer}>
@@ -763,6 +762,18 @@ export default function ListaScreen() {
                     <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#0F172A', marginLeft: 8}]} onPress={abrirSemanas}><Feather name="calendar" size={14} color="#FFF" /><Text style={styles.exportBtnText}>Semanas</Text></TouchableOpacity>
                   </View>
                 )}
+              </View>
+
+              {/* La semana manda: quien pasa lista necesita ver de que semana es
+                  antes de empezar a marcar. Mismo trato que el resumen de Destajo. */}
+              <View style={styles.barraSemana}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                  <Feather name="calendar" size={18} color="#1E3A8A" style={{ marginRight: 8 }} />
+                  <Text style={styles.barraSemanaTitulo} numberOfLines={1}>{rangoSemanaActual}</Text>
+                </View>
+                <Text style={styles.barraSemanaDetalle}>
+                  {displayedWorkers.length} {displayedWorkers.length === 1 ? 'registro' : 'registros'}
+                </Text>
               </View>
 
               {loading && <SkeletonLista filas={6} />}
@@ -959,7 +970,9 @@ const styles = StyleSheet.create({
   dayText: { fontSize: 10, fontWeight: 'bold', color: '#64748B', marginBottom: 2 },
   dayBoxHoy: { backgroundColor: '#DBEAFE', borderRadius: 8, paddingVertical: 2 },
   dayTextHoy: { color: '#1D4ED8' },
-  sectionSubtitle: { fontSize: 11, color: '#64748B', marginTop: 2 },
+  barraSemana: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#E0E7FF', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#C7D2FE', marginBottom: 10 },
+  barraSemanaTitulo: { fontSize: 14, fontWeight: 'bold', color: '#1E3A8A', textTransform: 'uppercase', flexShrink: 1 },
+  barraSemanaDetalle: { fontSize: 11, color: '#1E3A8A', fontWeight: '600' },
   actionsContainerRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
   actionCardBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', paddingVertical: 6, paddingHorizontal: 8, borderRadius: 10, gap: 4 },
   actionBtnLabel: { fontSize: 11, fontWeight: '600', color: '#475569' },
