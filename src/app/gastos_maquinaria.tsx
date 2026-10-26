@@ -630,7 +630,7 @@ export default function GastosMaquinariaScreen() {
           </View>
         )}
 
-        {loading ? ( 
+        {loading && maquinasMap.length === 0 ? ( 
           <SkeletonLista filas={5} />
         ) : (
           maquinasMap.length === 0 ? (

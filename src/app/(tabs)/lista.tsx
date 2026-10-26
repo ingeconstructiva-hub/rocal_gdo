@@ -779,7 +779,7 @@ export default function ListaScreen() {
 
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{flex: 1}}>
         <FlatList
-          data={loading ? [] : displayedWorkers}
+          data={displayedWorkers}
           keyExtractor={(w) => w.id}
           contentContainerStyle={styles.body}
           keyboardShouldPersistTaps="handled"
@@ -829,7 +829,7 @@ export default function ListaScreen() {
                 </TouchableOpacity>
               </View>
 
-              {loading && <SkeletonLista filas={6} />}
+              {loading && displayedWorkers.length === 0 && <SkeletonLista filas={6} />}
             </>
           }
           ListEmptyComponent={

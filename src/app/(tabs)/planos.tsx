@@ -538,7 +538,7 @@ export default function DocumentosScreen() {
             </View>
           </View>
           
-          {cargando ? (
+          {cargando && documentosFiltrados.length === 0 ? (
             <SkeletonLista filas={4} />
           ) : documentosFiltrados.length === 0 ? (
             <SinDatos

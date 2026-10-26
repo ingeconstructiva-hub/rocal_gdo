@@ -631,7 +631,7 @@ export default function GastosGeneralesScreen() {
 
         </View>
 
-        {loading ? (
+        {loading && gastosFiltrados.length === 0 ? (
           <SkeletonLista filas={5} />
         ) : gastosFiltrados.length === 0 ? (
           <Text style={styles.emptyText}>No hay gastos registrados con los filtros seleccionados.</Text>

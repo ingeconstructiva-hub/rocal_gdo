@@ -691,7 +691,7 @@ export default function CajaChicaScreen() {
       </View>
 
       <FlatList
-        data={loading ? [] : movimientosFiltrados}
+        data={movimientosFiltrados}
         keyExtractor={(mov) => mov.id}
         contentContainerStyle={styles.body}
         showsVerticalScrollIndicator={false}
@@ -703,7 +703,7 @@ export default function CajaChicaScreen() {
         maxToRenderPerBatch={12}
         windowSize={7}
         ListEmptyComponent={
-          loading ? <SkeletonLista filas={5} /> : <SinDatos onReintentar={loadLibroMayor} />
+          loading && movimientosFiltrados.length === 0 ? <SkeletonLista filas={5} /> : <SinDatos onReintentar={loadLibroMayor} />
         }
         renderItem={({ item: mov }) => (
             <TouchableOpacity style={styles.gastoCard} activeOpacity={0.7} onPress={() => setMovimientoSeleccionado(mov)}>

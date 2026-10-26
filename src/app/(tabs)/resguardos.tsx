@@ -592,14 +592,14 @@ export default function ResguardosScreen() {
       <FlatList
         contentContainerStyle={styles.body}
         showsVerticalScrollIndicator={false}
-        data={loading ? [] : filteredHerramientas}
+        data={filteredHerramientas}
         keyExtractor={(item: HerramientaAlmacen) => item.id}
         /* Cada herramienta trae hasta cuatro imagenes (INE, reverso y firmas),
          * asi que armarlas todas de golpe era lo mas pesado de la app. */
         initialNumToRender={8}
         maxToRenderPerBatch={8}
         windowSize={7}
-        ListEmptyComponent={loading ? <SkeletonLista filas={5} /> : <SinDatos onReintentar={fetchInventarioAlmacen} />}
+        ListEmptyComponent={loading && filteredHerramientas.length === 0 ? <SkeletonLista filas={5} /> : <SinDatos onReintentar={fetchInventarioAlmacen} />}
         renderItem={({ item }: { item: HerramientaAlmacen }) => (
           <View style={styles.toolCard}>
             <View style={styles.metaLabelRow}>

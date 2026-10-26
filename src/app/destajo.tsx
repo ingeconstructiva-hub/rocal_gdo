@@ -602,7 +602,7 @@ export default function InventarioScreen() {
             />
           }
         >
-          {loading ? (
+          {loading && Object.keys(groupedItems).length === 0 ? (
             <SkeletonLista filas={5} />
           ) : Object.keys(groupedItems).length === 0 ? (
             <SinDatos onReintentar={fetchData} />
