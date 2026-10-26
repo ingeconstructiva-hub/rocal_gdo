@@ -13,6 +13,7 @@ import { guardarArchivoLocal, leerComoBase64 } from '../lib/archivos';
 import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { supabase } from '../lib/supabase';
+import { regresar } from '../lib/navegar';
 import { SelectorCategoria } from './SelectorCategoria';
 import { mensajeDeError } from '../lib/errores';
 
@@ -203,7 +204,10 @@ export function LogForm() {
         <Stack.Screen options={{ headerShown: false }} />
         
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          {/* router.back() no hace nada sin historial, y aqui se queda sin el
+              seguido: al recargar la pagina parado en este formulario, o al
+              abrirlo desde un link. El boton parecia descompuesto. */}
+          <TouchableOpacity onPress={() => regresar('/(tabs)/bitacora')} style={styles.backButton}>
             <Feather name="chevron-left" size={28} color="#FFF" />
           </TouchableOpacity>
           <View style={styles.headerTextContainer}>
