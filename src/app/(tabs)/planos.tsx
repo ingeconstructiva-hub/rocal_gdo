@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRefrescar } from '../../lib/refrescar';
 import { SkeletonLista } from '../../components/Skeleton';
+import { SinDatos } from '../../components/SinDatos';
 import { regresar } from '../../lib/navegar';
 import { firmarCampos } from '../../lib/urlsFirmadas';
 import { crearPdfDesdeImagenes, guardarPdfParaDespues } from '../../lib/pdfDesdeImagenes';
@@ -544,12 +545,10 @@ export default function DocumentosScreen() {
           {cargando ? (
             <SkeletonLista filas={4} />
           ) : documentosFiltrados.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Feather name="folder" size={40} color="#CBD5E1" />
-              <Text style={styles.emptyStateText}>
-                {activeFilter === 'Todos' ? 'Aún no hay documentos guardados' : `No hay archivos tipo ${activeFilter}`}
-              </Text>
-            </View>
+            <SinDatos
+              mensaje={activeFilter === 'Todos' ? 'No hay datos para mostrar.' : `No hay archivos tipo ${activeFilter}.`}
+              onReintentar={loadDocumentos}
+            />
           ) : (
             documentosFiltrados.map((doc, index) => (
               <View key={index} style={styles.planoCard}>

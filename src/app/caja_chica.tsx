@@ -31,6 +31,7 @@ import {
 } from 'react-native';
 import { useRefrescar } from '../lib/refrescar';
 import { SkeletonLista } from '../components/Skeleton';
+import { SinDatos } from '../components/SinDatos';
 import { guardarArchivoLocal } from '../lib/archivos';
 import { subirArchivo } from '../lib/subidas';
 import { exportarPDF, exportarTexto } from '../lib/exportar';
@@ -702,7 +703,7 @@ export default function CajaChicaScreen() {
         maxToRenderPerBatch={12}
         windowSize={7}
         ListEmptyComponent={
-          loading ? <SkeletonLista filas={5} /> : <Text style={styles.emptyText}>No hay registros.</Text>
+          loading ? <SkeletonLista filas={5} /> : <SinDatos onReintentar={loadLibroMayor} />
         }
         renderItem={({ item: mov }) => (
             <TouchableOpacity style={styles.gastoCard} activeOpacity={0.7} onPress={() => setMovimientoSeleccionado(mov)}>

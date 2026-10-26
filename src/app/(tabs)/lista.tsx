@@ -11,6 +11,7 @@ import * as Sharing from 'expo-sharing';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SkeletonLista } from '../../components/Skeleton';
+import { SinDatos } from '../../components/SinDatos';
 import { exportarPDF, exportarTexto } from '../../lib/exportar';
 import { regresar } from '../../lib/navegar';
 import { useRefrescar } from '../../lib/refrescar';
@@ -833,11 +834,7 @@ export default function ListaScreen() {
           }
           ListEmptyComponent={
             loading ? null : (
-              <Text style={{textAlign: 'center', color: '#64748B', marginTop: 40}}>
-                {activeProject?.id
-                  ? `No hay ${activeCategory === 'obrero' ? 'obreros' : 'técnicos'} registrados.`
-                  : 'No has elegido obra. Entra a Proyectos y selecciona tu obra para pasar lista.'}
-              </Text>
+              <SinDatos mensaje="No hay datos para mostrar." onReintentar={fetchWorkers} />
             )
           }
           renderItem={({ item: worker }) => (

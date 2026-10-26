@@ -25,6 +25,7 @@ import {
 } from 'react-native';
 import { useRefrescar } from '../lib/refrescar';
 import { SkeletonLista } from '../components/Skeleton';
+import { SinDatos } from '../components/SinDatos';
 import { exportarPDF, exportarTexto } from '../lib/exportar';
 import { regresar } from '../lib/navegar';
 import { Aviso } from '../lib/aviso';
@@ -604,7 +605,7 @@ export default function InventarioScreen() {
           {loading ? (
             <SkeletonLista filas={5} />
           ) : Object.keys(groupedItems).length === 0 ? (
-            <Text style={styles.emptyText}>No se encontraron registros en esta obra.</Text>
+            <SinDatos onReintentar={fetchData} />
           ) : (
             Object.entries(groupedItems).map(([week, weekItems]) => {
               const weekSubtotal = weekItems.reduce((sum, i) => sum + (i.quantity * i.unit_price), 0);

@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRefrescar } from '../../lib/refrescar';
 import { SkeletonLista } from '../../components/Skeleton';
+import { SinDatos } from '../../components/SinDatos';
 import { exportarPDF } from '../../lib/exportar';
 import { regresar } from '../../lib/navegar';
 import { subirArchivo } from '../../lib/subidas';
@@ -598,7 +599,7 @@ export default function ResguardosScreen() {
         initialNumToRender={8}
         maxToRenderPerBatch={8}
         windowSize={7}
-        ListEmptyComponent={loading ? <SkeletonLista filas={5} /> : null}
+        ListEmptyComponent={loading ? <SkeletonLista filas={5} /> : <SinDatos onReintentar={fetchInventarioAlmacen} />}
         renderItem={({ item }: { item: HerramientaAlmacen }) => (
           <View style={styles.toolCard}>
             <View style={styles.metaLabelRow}>

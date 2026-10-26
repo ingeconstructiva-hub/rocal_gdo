@@ -28,6 +28,7 @@ import { regresar } from '../lib/navegar';
 import { Aviso } from '../lib/aviso';
 
 import SummaryCard from '../components/SummaryCard';
+import { SinDatos } from '../components/SinDatos';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
@@ -633,11 +634,7 @@ export default function GastosMaquinariaScreen() {
           <SkeletonLista filas={5} />
         ) : (
           maquinasMap.length === 0 ? (
-            <Text style={styles.emptyText}>
-              {activeProject?.id
-                ? 'Da de alta tu primera máquina tocando el botón "+".'
-                : 'No has elegido obra. Entra a Proyectos y selecciona tu obra.'}
-            </Text>
+            <SinDatos mensaje="No hay datos para mostrar." onReintentar={fetchGastos} />
           ) : (
             maquinasMap.map((maquina, index) => (
               <TouchableOpacity 

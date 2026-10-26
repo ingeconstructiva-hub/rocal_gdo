@@ -10,6 +10,7 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRefrescar } from '../../lib/refrescar';
 import { SkeletonLista } from '../../components/Skeleton';
+import { SinDatos } from '../../components/SinDatos';
 import { exportarPDF } from '../../lib/exportar';
 import { regresar } from '../../lib/navegar';
 import { firmarVarias } from '../../lib/urlsFirmadas';
@@ -414,9 +415,7 @@ export default function BitacoraScreen() {
         windowSize={7}
         ListEmptyComponent={
           cargando ? <SkeletonLista filas={4} /> : (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No hay entradas en la bitácora aún.</Text>
-            </View>
+            <SinDatos mensaje="No hay datos para mostrar." onReintentar={fetchLogs} />
           )
         }
         ListHeaderComponent={
