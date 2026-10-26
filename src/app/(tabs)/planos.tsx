@@ -10,6 +10,7 @@ import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Platfor
 import { useRefrescar } from '../../lib/refrescar';
 import { SkeletonLista } from '../../components/Skeleton';
 import { SinDatos } from '../../components/SinDatos';
+import { SelectorCategoria } from '../../components/SelectorCategoria';
 import { regresar } from '../../lib/navegar';
 import { firmarCampos } from '../../lib/urlsFirmadas';
 import { crearPdfDesdeImagenes, guardarPdfParaDespues } from '../../lib/pdfDesdeImagenes';
@@ -220,7 +221,9 @@ export default function DocumentosScreen() {
     }
     
     // Si eligió 'Otro', usa lo que escribió. Si está vacío, le pone 'General'
-    const finalCategory = docCategory === 'Otro' ? (customCategory.trim() || 'General') : docCategory;
+    // El desplegable ya entrega la categoria final: crear una nueva la deja
+    // seleccionada, asi que 'Otro' dejo de ser un caso aparte.
+    const finalCategory = docCategory;
 
     const projectId = activeProject?.id;
     if (!projectId) return;
@@ -469,23 +472,16 @@ export default function DocumentosScreen() {
             <TextInput style={styles.input} placeholder="Ej. Contrato de Obra..." value={docTitle} onChangeText={setDocTitle} placeholderTextColor="#6B7280" />
 
             <Text style={styles.label}>Categoría</Text>
-            <View style={styles.categoryContainer}>
-              {defaultCategories.map((cat) => (
-                <TouchableOpacity key={cat} style={[styles.categoryBadge, docCategory === cat && styles.categoryBadgeActive]} onPress={() => setDocCategory(cat)}>
-                  <Text style={[styles.categoryText, docCategory === cat && styles.categoryTextActive]}>{cat}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {docCategory === 'Otro' && (
-              <TextInput 
-                style={[styles.input, { marginTop: -10, marginBottom: 20 }]} 
-                placeholder="Escribe tu propia categoría..." 
-                value={customCategory} 
-                onChangeText={setCustomCategory} 
-                placeholderTextColor="#9CA3AF" 
+            <View style={{ marginBottom: 20 }}>
+              <SelectorCategoria
+                valor={docCategory}
+                alCambiar={setDocCategory}
+                modulo="planos"
+                categoriasBase={defaultCategories}
+                projectId={activeProject?.id}
+                sinConexion={isOffline}
               />
-            )}
+            </View>
 
             <TouchableOpacity style={styles.saveButton} onPress={handleSaveToDatabase} disabled={isUploading}>
               {isUploading ? <ActivityIndicator color="#FFF" /> : (

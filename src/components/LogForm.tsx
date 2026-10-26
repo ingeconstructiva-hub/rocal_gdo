@@ -13,6 +13,7 @@ import { guardarArchivoLocal, leerComoBase64 } from '../lib/archivos';
 import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { supabase } from '../lib/supabase';
+import { SelectorCategoria } from './SelectorCategoria';
 import { mensajeDeError } from '../lib/errores';
 
 export function LogForm() {
@@ -23,9 +24,7 @@ export function LogForm() {
   const [note, setNote] = useState('');
   const [category, setCategory] = useState('Estructura');
   const [sector, setSector] = useState('');
-  const [isCustom, setIsCustom] = useState(false);
-  const [customCategory, setCustomCategory] = useState('');
-  const [categoriesList, setCategoriesList] = useState(defaultCategories);
+
   const [isSavingInProgress, setIsSavingInProgress] = useState(false);
 
   /* Las categorias que inventa la obra viven en la base, no en el telefono.
@@ -37,29 +36,6 @@ export function LogForm() {
    *
    * Las seis de fabrica viven en el codigo y no se guardan: siempre estan.
    */
-  useEffect(() => {
-    const pid = activeProject?.id;
-    if (!pid || isOffline) return;
-
-    let vivo = true;
-    supabase
-      .from('bitacora_categorias')
-      .select('nombre')
-      .eq('project_id', pid)
-      .order('nombre')
-      .then(({ data, error }) => {
-        // Mientras no se corra sql/bitacora_categorias.sql la tabla no existe,
-        // y el formulario tiene que seguir sirviendo con las de fabrica.
-        if (!vivo || error || !data) return;
-        const propias = data
-          .map((c: any) => c.nombre)
-          .filter((n: string) => n && !defaultCategories.includes(n));
-        setCategoriesList([...defaultCategories, ...propias]);
-      });
-
-    return () => { vivo = false; };
-  }, [activeProject, isOffline]);
-
 
   const router = useRouter();
   const [imageUris, setImageUris] = useState<string[]>([]);
@@ -125,43 +101,6 @@ export function LogForm() {
 
   const removeImage = (indexToRemove: number) => {
     setImageUris(prev => prev.filter((_, index) => index !== indexToRemove));
-  };
-
-  const handleAddCustomCategory = async () => {
-    const newCat = customCategory.trim();
-    setIsCustom(false);
-    setCustomCategory('');
-    if (newCat === '') return;
-
-    if (!categoriesList.includes(newCat)) setCategoriesList([...categoriesList, newCat]);
-    setCategory(newCat);
-
-    const pid = activeProject?.id;
-    if (!pid || isOffline || defaultCategories.includes(newCat)) return;
-
-    const { error } = await supabase
-      .from('bitacora_categorias')
-      .insert([{ project_id: pid, nombre: newCat }]);
-
-    // 23505 es que ya existia, que es justo lo que se queria. Lo demas si se
-    // avisa: la categoria quedo en este reporte pero no para los demas.
-    if (error && error.code !== '23505') {
-      Aviso.alert('Aviso', mensajeDeError(error, 'guardar la categoría para la obra'));
-    }
-  };
-
-  const handleDeleteCategory = async (catToDelete: string) => {
-    setCategoriesList(prev => prev.filter(c => c !== catToDelete));
-    if (category === catToDelete) setCategory('Estructura');
-
-    const pid = activeProject?.id;
-    if (!pid || isOffline) return;
-
-    await supabase
-      .from('bitacora_categorias')
-      .delete()
-      .eq('project_id', pid)
-      .eq('nombre', catToDelete);
   };
 
   const handleSave = async () => {
@@ -318,35 +257,14 @@ export function LogForm() {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Concepto *</Text>
-            <View style={styles.categoryContainer}>
-              {categoriesList.map((cat) => {
-                const isDefault = defaultCategories.includes(cat);
-                return (
-                  <TouchableOpacity key={cat} style={[styles.categoryBadge, category === cat && styles.categoryBadgeActive]} onPress={() => setCategory(cat)}>
-                    <Text style={[styles.categoryText, category === cat && styles.categoryTextActive]}>{cat}</Text>
-                    {!isDefault && (
-                      <TouchableOpacity onPress={() => handleDeleteCategory(cat)} style={styles.deleteCategoryBtn}>
-                        <Feather name="x" size={14} color={category === cat ? "#2563EB" : "#EF4444"} />
-                      </TouchableOpacity>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-              
-              {!isCustom ? (
-                <TouchableOpacity style={styles.categoryBadge} onPress={() => setIsCustom(true)}>
-                  <Feather name="plus" size={14} color="#6B7280" />
-                  <Text style={styles.categoryText}> Otra</Text>
-                </TouchableOpacity>
-              ) : (
-                <View style={styles.customCategoryContainer}>
-                  <TextInput style={styles.customInput} placeholder="Nueva..." value={customCategory} onChangeText={setCustomCategory} onSubmitEditing={handleAddCustomCategory} autoFocus />
-                  <TouchableOpacity onPress={handleAddCustomCategory} style={styles.addCustomBtn}>
-                    <Feather name="check" size={16} color="#FFF" />
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
+            <SelectorCategoria
+              valor={category}
+              alCambiar={setCategory}
+              modulo="bitacora"
+              categoriasBase={defaultCategories}
+              projectId={activeProject?.id}
+              sinConexion={isOffline}
+            />
           </View>
 
           <View style={styles.inputGroup}>
