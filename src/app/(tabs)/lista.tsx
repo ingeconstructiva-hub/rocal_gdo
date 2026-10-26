@@ -185,7 +185,7 @@ export default function ListaScreen() {
     if (activeProject?.id) {
       fetchWorkers();
     }
-  }, [activeProject]);
+  }, [activeProject, semanaEnCurso]);
 
   useEffect(() => {
     navigation.setOptions({
