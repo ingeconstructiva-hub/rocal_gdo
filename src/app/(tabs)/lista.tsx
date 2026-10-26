@@ -175,17 +175,40 @@ export default function ListaScreen() {
   const [semanas, setSemanas] = useState<any[]>([]);
   const [cargandoSemanas, setCargandoSemanas] = useState(false);
 
-  /* La semana que se esta llenando. El arreglo de dias se memoriza para que
-   * todas las tarjetas reciban la misma referencia y su memo siga sirviendo. */
+  /* La semana que se esta viendo. Arranca en la actual, pero se puede retroceder
+   * para revisar o corregir una raya ya cerrada: el acumulado las mostraba y
+   * desde la lista no habia forma de llegar a ellas. */
   const semanaEnCurso = inicioDeSemana();
-  const diasSemana = useMemo(() => diasDeSemana(semanaEnCurso), [semanaEnCurso]);
-  const rangoSemanaActual = rangoSemana(semanaEnCurso);
+  const [semanaVista, setSemanaVista] = useState(semanaEnCurso);
+  const esSemanaActual = semanaVista === semanaEnCurso;
+
+  const diasSemana = useMemo(() => diasDeSemana(semanaVista), [semanaVista]);
+  const rangoSemanaActual = rangoSemana(semanaVista);
+
+  /* Al cruzar el lunes la vista salta sola a la semana nueva, salvo que el
+   * usuario se haya ido a mirar una pasada. */
+  useEffect(() => {
+    setSemanaVista(semanaEnCurso);
+  }, [semanaEnCurso]);
+
+  const moverSemana = (pasos: number) => {
+    if (hasChanges) {
+      Aviso.alert('Tienes cambios sin guardar', 'Guarda la asistencia antes de cambiar de semana.');
+      return;
+    }
+    const [a, m, d] = semanaVista.split('-').map(Number);
+    const destino = new Date(a, m - 1, d + pasos * 7);
+    const siguiente = inicioDeSemana(destino);
+    if (siguiente > semanaEnCurso) return; // No se adelanta al futuro.
+    setSemanaVista(siguiente);
+  };
+
 
   useEffect(() => {
     if (activeProject?.id) {
       fetchWorkers();
     }
-  }, [activeProject, semanaEnCurso]);
+  }, [activeProject, semanaVista]);
 
   useEffect(() => {
     navigation.setOptions({
@@ -285,7 +308,7 @@ export default function ListaScreen() {
        * Las horas extra no se pueden recuperar porque payroll_records no tiene
        * columna para ellas: quedan dentro de final_salary y no se vuelven a
        * capturar solas. */
-      const semanaActual = inicioDeSemana();
+      const semanaActual = semanaVista;
       const { data: registros } = await supabase
         .from('payroll_records')
         .select('*')
@@ -534,8 +557,7 @@ export default function ListaScreen() {
     if (!exigirObra(isSilent)) return;
     if (!isSilent) setIsSaving(true);
     try {
-      const today = new Date();
-      const weekStart = inicioDeSemana(today);
+      const weekStart = semanaVista;
 
       const recordsToSave = allWorkers.map(w => {
         const daysAbsent = 6 - w.attendance.filter(Boolean).length;
@@ -766,14 +788,26 @@ export default function ListaScreen() {
 
               {/* La semana manda: quien pasa lista necesita ver de que semana es
                   antes de empezar a marcar. Mismo trato que el resumen de Destajo. */}
-              <View style={styles.barraSemana}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                  <Feather name="calendar" size={18} color="#1E3A8A" style={{ marginRight: 8 }} />
+              <View style={[styles.barraSemana, !esSemanaActual && styles.barraSemanaPasada]}>
+                <TouchableOpacity onPress={() => moverSemana(-1)} style={styles.flechaSemana} hitSlop={10}>
+                  <Feather name="chevron-left" size={20} color="#1E3A8A" />
+                </TouchableOpacity>
+
+                <View style={{ flex: 1, alignItems: 'center' }}>
                   <Text style={styles.barraSemanaTitulo} numberOfLines={1}>{rangoSemanaActual}</Text>
+                  <Text style={styles.barraSemanaDetalle}>
+                    {esSemanaActual ? 'Semana en curso' : 'Semana cerrada'} · {displayedWorkers.length} {displayedWorkers.length === 1 ? 'registro' : 'registros'}
+                  </Text>
                 </View>
-                <Text style={styles.barraSemanaDetalle}>
-                  {displayedWorkers.length} {displayedWorkers.length === 1 ? 'registro' : 'registros'}
-                </Text>
+
+                <TouchableOpacity
+                  onPress={() => moverSemana(1)}
+                  style={[styles.flechaSemana, esSemanaActual && { opacity: 0.25 }]}
+                  disabled={esSemanaActual}
+                  hitSlop={10}
+                >
+                  <Feather name="chevron-right" size={20} color="#1E3A8A" />
+                </TouchableOpacity>
               </View>
 
               {loading && <SkeletonLista filas={6} />}
@@ -972,7 +1006,9 @@ const styles = StyleSheet.create({
   dayTextHoy: { color: '#1D4ED8' },
   barraSemana: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#E0E7FF', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#C7D2FE', marginBottom: 10 },
   barraSemanaTitulo: { fontSize: 14, fontWeight: 'bold', color: '#1E3A8A', textTransform: 'uppercase', flexShrink: 1 },
-  barraSemanaDetalle: { fontSize: 11, color: '#1E3A8A', fontWeight: '600' },
+  barraSemanaDetalle: { fontSize: 11, color: '#1E3A8A', fontWeight: '600', marginTop: 2 },
+  barraSemanaPasada: { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' },
+  flechaSemana: { padding: 4 },
   actionsContainerRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
   actionCardBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', paddingVertical: 6, paddingHorizontal: 8, borderRadius: 10, gap: 4 },
   actionBtnLabel: { fontSize: 11, fontWeight: '600', color: '#475569' },
