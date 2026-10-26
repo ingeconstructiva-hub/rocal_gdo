@@ -18,6 +18,10 @@ type Props = {
   descriptionText?: string;
   webStyle?: string;
   autoClear?: boolean;
+  /* En celular lo recorta la libreria; en navegador lo hace recortar().
+   * Sin esto la firma viaja rodeada de espacio vacio y en el PDF se ve
+   * diminuta aunque se haya firmado grande. */
+  trimWhitespace?: boolean;
 };
 
 export const Firma = forwardRef<FirmaRef, Props>((props, ref) => (

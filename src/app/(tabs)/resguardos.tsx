@@ -771,6 +771,7 @@ export default function ResguardosScreen() {
                     descriptionText={pasoFirma === 'entrega' ? 'Firma de quien entrega' : 'Firma de quien recibe'}
                     webStyle={`.m-signature-pad--footer { display: none; } body,html { width: 100%; height: 100%; }`}
                     autoClear={false}
+                    trimWhitespace
                   />
                 </View>
 

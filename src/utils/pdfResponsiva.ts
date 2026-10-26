@@ -12,7 +12,7 @@ export function generarPlantillaResponsiva(vale: any) {
         .equipos-box { background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; margin: 20px 0; font-family: monospace; white-space: pre-wrap; font-size: 13px; }
         .footer-signatures { margin-top: 60px; display: flex; justify-content: space-between; page-break-inside: avoid; }
         .signature-col { width: 45%; text-align: center; font-size: 12px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
-        .img-firma { height: 65px; max-width: 180px; object-fit: contain; margin-bottom: 4px; }
+        .img-firma { height: 100px; max-width: 100%; object-fit: contain; margin-bottom: 4px; }
         .anexo-ine { margin-top: 26px; padding-top: 16px; border-top: 1px dashed #94a3b8; text-align: center; page-break-inside: avoid; }
         .anexo-titulo { font-size: 11px; font-weight: bold; letter-spacing: 0.5px; color: #334155; margin: 0 0 10px 0; }
         .ine-caras { display: flex; gap: 14px; justify-content: center; align-items: flex-start; }
@@ -20,7 +20,7 @@ export function generarPlantillaResponsiva(vale: any) {
         .img-ine { width: 100%; max-height: 180px; object-fit: contain; border: 1px solid #cbd5e1; border-radius: 6px; }
         .ine-lado { display: block; font-size: 8px; color: #64748b; letter-spacing: 1px; margin-top: 4px; }
         .anexo-pie { font-size: 9px; color: #64748b; margin-top: 6px; }
-        .signature-placeholder { height: 65px; } 
+        .signature-placeholder { height: 100px; } 
         .digital-seal { margin-top: 40px; padding: 10px; border: 1px dashed #cbd5e1; background-color: #f1f5f9; border-radius: 6px; font-size: 10px; color: #64748B; font-family: monospace; }
         .verse { text-align: center; margin-top: 50px; font-size: 11px; font-style: italic; color: #64748b; }
       </style>

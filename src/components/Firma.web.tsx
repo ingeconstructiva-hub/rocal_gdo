@@ -21,9 +21,66 @@ type Props = {
   descriptionText?: string;
   webStyle?: string;
   autoClear?: boolean;
+  trimWhitespace?: boolean;
+};
+
+/* Recorta el lienzo a lo que de verdad se dibujo.
+ *
+ * El canvas ocupa todo el ancho del modal, pero una firma usa una fraccion de
+ * ese espacio. Al exportarlo completo se guardaba una imagen casi vacia, y el
+ * PDF la encajaba en 65px de alto: el trazo quedaba diminuto aunque la persona
+ * hubiera firmado grande. Recortando al rectangulo del trazo, la firma llena
+ * el espacio que le toca.
+ *
+ * El lienzo es transparente salvo el trazo (el blanco lo pone el View de
+ * atras), asi que basta mirar el canal alfa.
+ */
+const recortar = (lienzo: HTMLCanvasElement): string => {
+  const ctx = lienzo.getContext('2d');
+  if (!ctx) return lienzo.toDataURL('image/png');
+
+  const { width, height } = lienzo;
+  let datos: ImageData;
+  try {
+    datos = ctx.getImageData(0, 0, width, height);
+  } catch {
+    // Lienzo "manchado" por seguridad del navegador: mejor sin recortar.
+    return lienzo.toDataURL('image/png');
+  }
+
+  let x1 = width, y1 = height, x2 = -1, y2 = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (datos.data[(y * width + x) * 4 + 3] > 10) {
+        if (x < x1) x1 = x;
+        if (x > x2) x2 = x;
+        if (y < y1) y1 = y;
+        if (y > y2) y2 = y;
+      }
+    }
+  }
+
+  if (x2 < 0) return lienzo.toDataURL('image/png');
+
+  // Un respiro alrededor para que el trazo no quede pegado al borde.
+  const margen = Math.round(Math.max(width, height) * 0.03);
+  x1 = Math.max(0, x1 - margen);
+  y1 = Math.max(0, y1 - margen);
+  x2 = Math.min(width - 1, x2 + margen);
+  y2 = Math.min(height - 1, y2 + margen);
+
+  const recorte = document.createElement('canvas');
+  recorte.width = x2 - x1 + 1;
+  recorte.height = y2 - y1 + 1;
+  recorte
+    .getContext('2d')
+    ?.drawImage(lienzo, x1, y1, recorte.width, recorte.height, 0, 0, recorte.width, recorte.height);
+
+  return recorte.toDataURL('image/png');
 };
 
 export const Firma = forwardRef<FirmaRef, Props>(({ onOK, descriptionText }, ref) => {
+
   const lienzoRef = useRef<HTMLCanvasElement | null>(null);
   const contenedorRef = useRef<any>(null);
   const dibujando = useRef(false);
@@ -139,7 +196,7 @@ export const Firma = forwardRef<FirmaRef, Props>(({ onOK, descriptionText }, ref
     readSignature: () => {
       // Si está vacío no avisamos: la pantalla ya valida que haya firma.
       if (!hayTrazo.current || !lienzoRef.current) return;
-      onOK(lienzoRef.current.toDataURL('image/png'));
+      onOK(recortar(lienzoRef.current));
     },
   }));
 
