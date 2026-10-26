@@ -294,6 +294,18 @@ export default function ResguardosScreen() {
         });
       }
 
+      /* Se firman aqui y no se confia en lo que traiga la pantalla.
+       *
+       * Un vale recien hecho todavia carga las direcciones publicas que se
+       * acaban de subir, y el bucket es privado: en el PDF salian las fotos
+       * y las firmas rotas hasta refrescar, que era cuando fetchData las
+       * firmaba. Firmar lo que ya esta firmado no hace nada, asi que es
+       * seguro hacerlo siempre. */
+      const [conFirmas] = await firmarCampos(
+        [item],
+        ['ine_url', 'ine_reverso_url', 'firma_entrega_url', 'firma_recibe_url']
+      );
+
       const valePayload = {
         id: item.id,
         n_responsiva: item.codigo,
@@ -305,10 +317,10 @@ export default function ResguardosScreen() {
         equipos_detalle: detalleEquiposUnificado, 
         token_firma: item.token_firma, 
         fecha_firma: item.fecha_firma,
-        firma_entrega_url: item.firma_entrega_url || null,
-        firma_recibe_url: item.firma_recibe_url || null,
-        ine_url: item.ine_url || null,
-        ine_reverso_url: item.ine_reverso_url || null
+        firma_entrega_url: conFirmas?.firma_entrega_url || null,
+        firma_recibe_url: conFirmas?.firma_recibe_url || null,
+        ine_url: conFirmas?.ine_url || null,
+        ine_reverso_url: conFirmas?.ine_reverso_url || null
       };
 
       const htmlContent = generarPlantillaResponsiva(valePayload);
