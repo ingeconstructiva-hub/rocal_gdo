@@ -15,16 +15,46 @@ export default function RootLayout() {
   const segments = useSegments();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setIsInitialized(true);
-    });
+    let vivo = true;
+
+    /* Arranque a prueba de sesion podrida.
+     *
+     * getSession() lee el token guardado y, si ya caduco, intenta refrescarlo
+     * contra la red. Cuando eso fallaba o se colgaba, la promesa nunca llegaba
+     * a setIsInitialized, y mas abajo hay un `return null`: la app se quedaba
+     * en blanco para siempre, sin reintentar y sin decir nada. La unica salida
+     * era borrar la app, que funcionaba justo porque limpiaba el token.
+     *
+     * Ahora arranca pase lo que pase, y con su propio limite de tiempo por si
+     * la peticion no responde. Sin sesion valida se va a login, que es
+     * recuperable; quedarse en blanco no lo es.
+     */
+    const arrancar = async () => {
+      try {
+        const lectura = supabase.auth.getSession();
+        const limite = new Promise<never>((_, falla) =>
+          setTimeout(() => falla(new Error('La sesion tardo demasiado en leerse.')), 8000)
+        );
+        const { data } = await Promise.race([lectura, limite]);
+        if (vivo) setSession(data.session);
+      } catch (e) {
+        console.log('No se pudo leer la sesion al arrancar:', e);
+        if (vivo) setSession(null);
+      } finally {
+        if (vivo) setIsInitialized(true);
+      }
+    };
+
+    arrancar();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+      if (vivo) setSession(session);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      vivo = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -37,7 +67,7 @@ export default function RootLayout() {
     } else if (session && inAuthGroup) {
       router.replace('/proyectos');
     }
-  }, [session, isInitialized]);
+  }, [session, isInitialized, segments]);
 
   if (!isInitialized) return null;
 
