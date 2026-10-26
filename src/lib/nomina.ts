@@ -77,3 +77,27 @@ export const etiquetaSemana = (inicio: string): string => {
     ? `${soloDia(lunes)} al ${soloDia(sabado)} de ${mesCorto(lunes)} de ${lunes.getFullYear()}`
     : `${soloDia(lunes)} de ${mesCorto(lunes)} al ${soloDia(sabado)} de ${mesCorto(sabado)} de ${lunes.getFullYear()}`;
 };
+
+/* Los seis dias de la semana con su numero.
+ *
+ * La lista mostraba solo "L M M J V S" y no habia forma de saber a que fechas
+ * correspondian: con el corte semanal eso importa, porque quien pasa lista el
+ * jueves tiene que ver que esta marcando el jueves y no otro dia.
+ */
+export const diasDeSemana = (inicio: string) => {
+  const [anio, mes, dia] = inicio.split('-').map(Number);
+  const letras = ['L', 'M', 'M', 'J', 'V', 'S'];
+  const hoy = new Date();
+
+  return letras.map((letra, i) => {
+    const f = new Date(anio, mes - 1, dia + i);
+    return {
+      letra,
+      dia: f.getDate(),
+      esHoy:
+        f.getFullYear() === hoy.getFullYear() &&
+        f.getMonth() === hoy.getMonth() &&
+        f.getDate() === hoy.getDate(),
+    };
+  });
+};

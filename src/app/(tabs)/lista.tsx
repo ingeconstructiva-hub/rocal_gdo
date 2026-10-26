@@ -8,7 +8,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import { useNavigation, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SkeletonLista } from '../../components/Skeleton';
 import { exportarPDF, exportarTexto } from '../../lib/exportar';
@@ -19,7 +19,7 @@ import SummaryCard from '../../components/SummaryCard';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
 import { esDeHoy } from '../../lib/permisos';
-import { calcularTotalFinal, etiquetaSemana, inicioDeSemana } from '../../lib/nomina';
+import { calcularTotalFinal, diasDeSemana, etiquetaSemana, inicioDeSemana } from '../../lib/nomina';
 import { mensajeDeError } from '../../lib/errores';
 import { supabase } from '../../lib/supabase';
 import { generarPlantillaHistorial, generarPlantillaNomina } from '../../utils/pdfNomina';
@@ -38,7 +38,6 @@ interface WorkerState {
   created_at?: string;
 }
 
-const DAYS = ['L', 'M', 'M', 'J', 'V', 'S'];
 
 /* El calculo vive en lib/nomina para que la pantalla y el PDF que se firma den
  * exactamente el mismo numero. Antes cada uno tenia su copia y no cuadraban. */
@@ -60,6 +59,7 @@ type PropsTarjeta = {
   isAdmin: boolean;
   isFinancialRole: boolean;
   puedeCorregir: boolean;
+  dias: { letra: string; dia: number; esHoy: boolean }[];
   onToggle: (workerId: string, dayIdx: number) => void;
   onEditar: (worker: WorkerState) => void;
   onBorrar: (worker: WorkerState) => void;
@@ -68,7 +68,7 @@ type PropsTarjeta = {
 };
 
 const TarjetaTrabajador = memo(function TarjetaTrabajador({
-  worker, isAdmin, isFinancialRole, puedeCorregir, onToggle, onEditar, onBorrar, onExtras, onDescuento,
+  worker, isAdmin, isFinancialRole, puedeCorregir, dias, onToggle, onEditar, onBorrar, onExtras, onDescuento,
 }: PropsTarjeta) {
   return (
     <View style={styles.workerCard}>
@@ -93,9 +93,9 @@ const TarjetaTrabajador = memo(function TarjetaTrabajador({
       </View>
 
       <View style={styles.attendanceRow}>
-        {DAYS.map((day, idx) => (
-          <TouchableOpacity key={day + idx} style={styles.dayBox} onPress={() => onToggle(worker.id, idx)}>
-            <Text style={styles.dayText}>{day}</Text>
+        {dias.map((d, idx) => (
+          <TouchableOpacity key={d.letra + idx} style={[styles.dayBox, d.esHoy && styles.dayBoxHoy]} onPress={() => onToggle(worker.id, idx)}>
+            <Text style={[styles.dayText, d.esHoy && styles.dayTextHoy]}>{d.letra} {d.dia}</Text>
             <Feather name={worker.attendance[idx] ? "check-circle" : "circle"} size={18} color={worker.attendance[idx] ? "#2563EB" : "#CBD5E1"} />
           </TouchableOpacity>
         ))}
@@ -174,6 +174,12 @@ export default function ListaScreen() {
   const [modalSemanas, setModalSemanas] = useState(false);
   const [semanas, setSemanas] = useState<any[]>([]);
   const [cargandoSemanas, setCargandoSemanas] = useState(false);
+
+  /* La semana que se esta llenando. El arreglo de dias se memoriza para que
+   * todas las tarjetas reciban la misma referencia y su memo siga sirviendo. */
+  const semanaEnCurso = inicioDeSemana();
+  const diasSemana = useMemo(() => diasDeSemana(semanaEnCurso), [semanaEnCurso]);
+  const etiquetaSemanaActual = etiquetaSemana(semanaEnCurso);
 
   useEffect(() => {
     if (activeProject?.id) {
@@ -746,7 +752,10 @@ export default function ListaScreen() {
               <SummaryCard labelLeft="Nómina Base" valueLeft={nominaBase} labelRight="Proyección Final" valueRight={proyeccionFinal} colorRight="#10B981" />
 
               <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionTitle}>Lista de {activeCategory === 'obrero' ? 'Obreros' : 'Técnicos'}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sectionTitle}>Lista de {activeCategory === 'obrero' ? 'Obreros' : 'Técnicos'}</Text>
+                  <Text style={styles.sectionSubtitle}>Semana del {etiquetaSemanaActual}</Text>
+                </View>
                 {isFinancialRole && (
                   <View style={styles.exportButtonsContainer}>
                     <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#DC2626'}]} onPress={handleGeneratePDF}><Feather name="file-text" size={14} color="#FFF" /><Text style={styles.exportBtnText}>PDF</Text></TouchableOpacity>
@@ -774,6 +783,7 @@ export default function ListaScreen() {
               isAdmin={isAdmin}
               isFinancialRole={isFinancialRole}
               puedeCorregir={puedeCorregirResidente(worker)}
+              dias={diasSemana}
               onToggle={toggleAttendance}
               onEditar={openEditWorkerModal}
               onBorrar={handleDeleteWorker}
@@ -947,6 +957,9 @@ const styles = StyleSheet.create({
   attendanceRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#F8FAFC', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 12, marginBottom: 8 },
   dayBox: { alignItems: 'center', paddingHorizontal: 2 },
   dayText: { fontSize: 10, fontWeight: 'bold', color: '#64748B', marginBottom: 2 },
+  dayBoxHoy: { backgroundColor: '#DBEAFE', borderRadius: 8, paddingVertical: 2 },
+  dayTextHoy: { color: '#1D4ED8' },
+  sectionSubtitle: { fontSize: 11, color: '#64748B', marginTop: 2 },
   actionsContainerRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
   actionCardBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', paddingVertical: 6, paddingHorizontal: 8, borderRadius: 10, gap: 4 },
   actionBtnLabel: { fontSize: 11, fontWeight: '600', color: '#475569' },
