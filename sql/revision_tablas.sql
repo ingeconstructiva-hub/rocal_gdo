@@ -20,6 +20,8 @@ select p.proname as objeto, 'funcion' as tipo
 from pg_proc p
 join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public'
+  -- Solo funciones normales: pg_get_functiondef truena con las agregadas.
+  and p.prokind = 'f'
   and pg_get_functiondef(p.oid) ~* '(user_projects|abonos_gastos)'
 union all
 select c.relname, case c.relkind when 'v' then 'vista' else 'vista materializada' end
