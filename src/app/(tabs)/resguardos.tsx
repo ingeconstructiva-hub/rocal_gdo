@@ -11,6 +11,7 @@ import { exportarPDF } from '../../lib/exportar';
 import { regresar } from '../../lib/navegar';
 import { subirArchivo } from '../../lib/subidas';
 import { firmarCampos } from '../../lib/urlsFirmadas';
+import { mensajeDeError } from '../../lib/errores';
 import Almacen from '../../lib/almacen';
 import { FotoSinConexion } from '../../components/FotoSinConexion';
 import { Aviso } from '../../lib/aviso';
@@ -469,17 +470,20 @@ export default function ResguardosScreen() {
       notas: notas.trim() || null
     };
     try {
-      if (editingTool) {
-        await supabase.from('almacen_herramientas').update(payload).eq('id', editingTool.id);
-      } else {
-        await supabase.from('almacen_herramientas').insert([payload]);
-      }
+      /* Supabase no lanza excepcion: devuelve { error }. Sin revisarlo, un
+       * rechazo pasaba de largo, el modal se cerraba y la herramienta
+       * simplemente no aparecia, sin decir por que. */
+      const { error } = editingTool
+        ? await supabase.from('almacen_herramientas').update(payload).eq('id', editingTool.id)
+        : await supabase.from('almacen_herramientas').insert([payload]);
+      if (error) throw error;
+
       fetchInventarioAlmacen();
       setModalVisible(false);
       setEditingTool(null);
       setCodigo(''); setNombre(''); setMarcaModelo(''); setAsignadoA(''); setNotas('');
     } catch (err: any) {
-      Aviso.alert("Error", err.message);
+      Aviso.alert("Error", mensajeDeError(err, editingTool ? 'guardar los cambios' : 'dar de alta la herramienta'));
     }
   };
 
