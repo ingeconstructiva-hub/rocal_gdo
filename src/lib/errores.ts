@@ -53,6 +53,12 @@ export function mensajeDeError(error: any, accion = 'guardar esto'): string {
     return `La base de datos no está configurada para recibir esto. Muéstrale este detalle a un administrador: ${error?.message ?? codigo}`;
   }
 
+  // 22003: el numero no cabe en la columna. Postgres lo dice en ingles y
+  // sin decir cual campo, que es lo unico que el usuario necesita saber.
+  if (codigo === '22003' || texto.includes('numeric field overflow') || texto.includes('out of range')) {
+    return 'Alguna cantidad es demasiado grande para guardarse. Revisa el importe, el precio unitario o la cantidad. (código 22003)';
+  }
+
   if (texto.includes('duplicate key') || codigo === '23505') {
     return 'Ese registro ya existe. Revisa si lo capturaste dos veces.';
   }
