@@ -32,6 +32,7 @@ import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
+import { limitarNumero, MAX_CANTIDAD, revisarNumeros } from '../lib/limites';
 import { mensajeDeError } from '../lib/errores';
 import { esDeHoy, eliminarRegistro } from '../lib/permisos';
 import { generarPlantillaInventario } from '../utils/pdfInventario';
@@ -428,6 +429,13 @@ const fechaDeSemana = (etiqueta: string): number => {
     }
 
     setIsSaving(true);
+    const problema = revisarNumeros([
+      { etiqueta: 'El precio unitario', valor: price },
+      { etiqueta: 'La cantidad', valor: quantity, maximo: MAX_CANTIDAD },
+      { etiqueta: 'El importe del concepto', valor: Number(quantity || 0) * Number(price || 0) },
+    ]);
+    if (problema) { Aviso.alert('Cantidad demasiado grande', problema); return; }
+
     const itemData = {
       name: name.trim(),
       unit: unit.trim(),
@@ -907,7 +915,7 @@ const fechaDeSemana = (etiqueta: string): number => {
                     placeholderTextColor="#9CA3AF"
                     keyboardType="numeric" 
                     value={price} 
-                    onChangeText={setPrice} 
+                    onChangeText={(v) => setPrice(limitarNumero(v))} 
                   />
                 </View>
               </View>
@@ -919,7 +927,7 @@ const fechaDeSemana = (etiqueta: string): number => {
                 placeholderTextColor="#9CA3AF"
                 keyboardType="numeric" 
                 value={quantity} 
-                onChangeText={setQuantity} 
+                onChangeText={(v) => setQuantity(limitarNumero(v, MAX_CANTIDAD))} 
               />
 
               <Text style={styles.modalLabel}>Encargado / Recibe (Opcional)</Text>

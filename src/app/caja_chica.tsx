@@ -42,6 +42,7 @@ import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
+import { limitarNumero, revisarNumeros } from '../lib/limites';
 import { esDeHoy, eliminarRegistro } from '../lib/permisos';
 import { mensajeDeError } from '../lib/errores';
 import { SelectorFecha } from '../components/SelectorFecha';
@@ -417,6 +418,9 @@ export default function CajaChicaScreen() {
     const conceptoResumido = articulosValidos.map(a => `${a.cantidad}x ${a.concepto}`).join(', ');
     const conceptoFinal = justificacionGeneral.trim() ? `${conceptoResumido} (Nota: ${justificacionGeneral.trim()})` : conceptoResumido;
 
+    const problema = revisarNumeros([{ etiqueta: 'El importe del gasto', valor: gastoCalculado }]);
+    if (problema) throw new Error(problema);
+
     return {
       numero_nota: numeroNota.trim() || 'S/N',
       encargado: encargado.trim(),
@@ -445,6 +449,9 @@ export default function CajaChicaScreen() {
     try {
       if (tipoMovimientoForm === 'ingreso') {
         if (!importeInvertido.trim() || !encargado.trim()) throw new Error("El importe y el solicitante son obligatorios.");
+        const problemaIngreso = revisarNumeros([{ etiqueta: 'El importe de la inversión', valor: importeInvertido }]);
+        if (problemaIngreso) throw new Error(problemaIngreso);
+
         const nuevoIngreso = {
           project_id: pid,
           monto: Number(importeInvertido),
@@ -881,7 +888,7 @@ export default function CajaChicaScreen() {
               {tipoMovimientoForm === 'ingreso' ? (
                 <View>
                   <Text style={styles.modalLabel}>Importe Recibido ($)</Text>
-                  <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="Ej. 5000" keyboardType="numeric" value={importeInvertido} onChangeText={setImporteInvertido} />
+                  <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="Ej. 5000" keyboardType="numeric" value={importeInvertido} onChangeText={(v) => setImporteInvertido(limitarNumero(v))} />
                   
                   <Text style={styles.modalLabel}>Solicitante / Receptor</Text>
                   <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="Nombre..." value={encargado} onChangeText={setEncargado} />
@@ -929,13 +936,13 @@ export default function CajaChicaScreen() {
 
                       <View style={styles.rowInputs}>
                         <View style={{flex: 1, marginRight: 5}}>
-                          <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="Cant" keyboardType="numeric" value={art.cantidad} onChangeText={(v) => actualizarArticulo(art.id, 'cantidad', v.replace(/[^0-9.]/g, ''))} />
+                          <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="Cant" keyboardType="numeric" value={art.cantidad} onChangeText={(v) => actualizarArticulo(art.id, 'cantidad', limitarNumero(v))} />
                         </View>
                         <View style={{flex: 1, marginRight: 5}}>
                           <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="Unidad" value={art.unidad} onChangeText={(v) => actualizarArticulo(art.id, 'unidad', v)} />
                         </View>
                         <View style={{flex: 1.5}}>
-                          <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="P.U ($)" keyboardType="numeric" value={art.precioUnitario} onChangeText={(v) => actualizarArticulo(art.id, 'precioUnitario', v.replace(/[^0-9.]/g, ''))} />
+                          <TextInput style={styles.modalInput} placeholderTextColor="#94A3B8" placeholder="P.U ($)" keyboardType="numeric" value={art.precioUnitario} onChangeText={(v) => actualizarArticulo(art.id, 'precioUnitario', limitarNumero(v))} />
                         </View>
                       </View>
                     </View>

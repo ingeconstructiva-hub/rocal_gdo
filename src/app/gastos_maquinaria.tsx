@@ -32,6 +32,7 @@ import { SinDatos } from '../components/SinDatos';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
+import { limitarNumero, revisarNumeros } from '../lib/limites';
 import { mensajeDeError } from '../lib/errores';
 import { esDeHoy, eliminarRegistro } from '../lib/permisos';
 import { SelectorHora } from '../components/SelectorHora';
@@ -394,6 +395,10 @@ export default function GastosMaquinariaScreen() {
     const horas = Number(horasOperacion);
     const tarifa = Number(selectedMaquina.tarifaHora) || 0;
     const costoDia = horas * tarifa; 
+
+    const problema = revisarNumeros([{ etiqueta: 'El costo de la jornada', valor: costoDia }]);
+    if (problema) { Aviso.alert('Cantidad demasiado grande', problema); setIsSaving(false); return; }
+
     const conceptoFinal = concepto.trim() || `Jornada del día (${horas} hrs)`;
 
     const datosPayload = {
@@ -844,7 +849,7 @@ export default function GastosMaquinariaScreen() {
               </ScrollView>
               
               <Text style={styles.modalLabel}>Tarifa por HORA ($)</Text>
-              <TextInput style={styles.modalInput} placeholder="Ej. 1200" keyboardType="numeric" value={tarifaHora} onChangeText={(v) => setTarifaHora(v.replace(/[^0-9.]/g, ''))} />
+              <TextInput style={styles.modalInput} placeholder="Ej. 1200" keyboardType="numeric" value={tarifaHora} onChangeText={(v) => setTarifaHora(limitarNumero(v))} />
               
               {/* 🟢 GASTO ESTIMADO DINÁMICO */}
               {Number(tarifaHora) > 0 && (
@@ -916,7 +921,7 @@ export default function GastosMaquinariaScreen() {
                   keyboardType="numeric" 
                   value={horasOperacion} 
                   onChangeText={(v) => {
-                      const cleanValue = v.replace(/[^0-9.]/g, '');
+                      const cleanValue = limitarNumero(v);
                       setHorasOperacion(cleanValue);
                       recalcularHoraSalida(cleanValue, timeEntradaDate);
                   }} 
@@ -982,7 +987,7 @@ export default function GastosMaquinariaScreen() {
               }}
             >
               <Text style={styles.modalLabel}>Monto del Pago o Anticipo ($)</Text>
-              <TextInput style={[styles.modalInput, {fontSize: 24, fontWeight: 'bold', color: '#10B981', textAlign: 'center'}]} placeholder="0.00" keyboardType="numeric" value={montoAnticipo} onChangeText={(v) => setMontoAnticipo(v.replace(/[^0-9.]/g, ''))} autoFocus />
+              <TextInput style={[styles.modalInput, {fontSize: 24, fontWeight: 'bold', color: '#10B981', textAlign: 'center'}]} placeholder="0.00" keyboardType="numeric" value={montoAnticipo} onChangeText={(v) => setMontoAnticipo(limitarNumero(v))} autoFocus />
               <Text style={styles.modalLabel}>Concepto (Opcional)</Text>
               <TextInput style={[styles.modalInput, {height: 60, textAlignVertical: 'top'}]} placeholder="Ej. Pago semana 3" multiline value={concepto} onChangeText={setConcepto} />
               

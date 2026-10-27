@@ -37,6 +37,7 @@ import SummaryCard from '../components/SummaryCard';
 import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
+import { limitarNumero, revisarNumeros } from '../lib/limites';
 import { mensajeDeError } from '../lib/errores';
 import { generarPlantillaGastos } from '../utils/pdfGastosGen';
 
@@ -259,6 +260,12 @@ export default function GastosGeneralesScreen() {
       let finalMontoPagado = 0;
       if (estadoPagoForm === 'pagado') finalMontoPagado = montoTotalCalculado;
       else if (estadoPagoForm === 'abono_parcial') finalMontoPagado = Number(montoAbonadoForm);
+
+      const problema = revisarNumeros([
+        { etiqueta: 'El importe total', valor: montoTotalCalculado },
+        { etiqueta: 'El monto pagado', valor: finalMontoPagado },
+      ]);
+      if (problema) throw new Error(problema);
 
       const datosGasto = {
         project_id: pid,
@@ -918,7 +925,7 @@ export default function GastosGeneralesScreen() {
                         placeholder="0.00" 
                         keyboardType="numeric" 
                         value={montoAbonadoForm} 
-                        onChangeText={(v) => setMontoAbonadoForm(v.replace(/[^0-9.]/g, ''))} 
+                        onChangeText={(v) => setMontoAbonadoForm(limitarNumero(v))} 
                       />
                     </View>
                   ) : (
@@ -936,11 +943,11 @@ export default function GastosGeneralesScreen() {
               <View style={styles.rowInputs}>
                 <View style={{ flex: 1, marginRight: 10 }}>
                   <Text style={styles.modalLabel}>Cantidad</Text>
-                  <TextInput style={styles.modalInput} placeholder="Ej. 1" keyboardType="numeric" value={cantidad} onChangeText={(v) => setCantidad(v.replace(/[^0-9.]/g, ''))} />
+                  <TextInput style={styles.modalInput} placeholder="Ej. 1" keyboardType="numeric" value={cantidad} onChangeText={(v) => setCantidad(limitarNumero(v))} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.modalLabel}>Precio Unitario ($)</Text>
-                  <TextInput style={[styles.modalInput, {fontWeight: 'bold'}]} placeholder="0.00" keyboardType="numeric" value={precioUnitario} onChangeText={(v) => setPrecioUnitario(v.replace(/[^0-9.]/g, ''))} />
+                  <TextInput style={[styles.modalInput, {fontWeight: 'bold'}]} placeholder="0.00" keyboardType="numeric" value={precioUnitario} onChangeText={(v) => setPrecioUnitario(limitarNumero(v))} />
                 </View>
               </View>
 

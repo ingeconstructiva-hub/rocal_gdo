@@ -23,6 +23,7 @@ import { esDeHoy } from '../../lib/permisos';
 import { calcularTotalFinal, diasDeSemana, etiquetaSemana, inicioDeSemana, rangoSemana } from '../../lib/nomina';
 import { mensajeDeError } from '../../lib/errores';
 import { supabase } from '../../lib/supabase';
+import { limitarNumero } from '../../lib/limites';
 import { generarPlantillaHistorial, generarPlantillaNomina } from '../../utils/pdfNomina';
 
 interface WorkerState {
@@ -943,7 +944,7 @@ export default function ListaScreen() {
             <Text style={styles.subModalLabel}>Puesto u Oficio:</Text>
             <TextInput style={styles.modalInput} value={editRole} onChangeText={setEditRole} />
             <Text style={styles.subModalLabel}>Sueldo Base Semanal ($):</Text>
-            <TextInput style={styles.modalInput} keyboardType="numeric" value={editSalary} onChangeText={(v) => setEditSalary(v.replace(/[^0-9]/g, ''))} />
+            <TextInput style={styles.modalInput} keyboardType="numeric" value={editSalary} onChangeText={(v) => setEditSalary(limitarNumero(v))} />
             <TouchableOpacity style={styles.saveBtn} onPress={handleUpdateWorker} disabled={isSaving}>{isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>Guardar Cambios</Text>}</TouchableOpacity>
             </ScrollView>
           </View>
@@ -957,7 +958,7 @@ export default function ListaScreen() {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>🕒 Asignar Horas Extra</Text>
             <Text style={styles.subModalLabel}>Ingresa la cantidad total de horas acumuladas en la semana:</Text>
-            <TextInput style={styles.modalInput} keyboardType="numeric" value={tempExtras} onChangeText={(v) => setTempExtras(v.replace(/[^0-9.]/g, ''))} placeholder="Ej. 4" autoFocus />
+            <TextInput style={styles.modalInput} keyboardType="numeric" value={tempExtras} onChangeText={(v) => setTempExtras(limitarNumero(v))} placeholder="Ej. 4" autoFocus />
             <Text style={styles.subModalLabel}>Motivo o Nota justificante:</Text>
             <TextInput style={[styles.modalInput, {height: 50, textAlignVertical: 'top'}]} value={tempExtraReason} onChangeText={setTempExtraReason} placeholder="Ej. Colado de losa" multiline />
             <TouchableOpacity style={styles.saveBtn} onPress={saveExtrasChanges}><Text style={styles.saveBtnText}>Aplicar Horas</Text></TouchableOpacity>
@@ -972,7 +973,7 @@ export default function ListaScreen() {
           <View style={styles.modalContent}>
             <Text style={[styles.modalTitle, {color: '#EF4444'}]}>💸 Deducción y Observación</Text>
             <Text style={styles.subModalLabel}>Monto del Descuento ($):</Text>
-            <TextInput style={styles.modalInput} keyboardType="numeric" value={tempDiscount} onChangeText={(v) => setTempDiscount(v.replace(/[^0-9.]/g, ''))} placeholder="Ej. 150" />
+            <TextInput style={styles.modalInput} keyboardType="numeric" value={tempDiscount} onChangeText={(v) => setTempDiscount(limitarNumero(v))} placeholder="Ej. 150" />
             <Text style={styles.subModalLabel}>Motivo o Nota justificante:</Text>
             <TextInput style={[styles.modalInput, {height: 50, textAlignVertical: 'top'}]} value={tempReason} onChangeText={setTempReason} placeholder="Ej. Retardo" multiline />
             <TouchableOpacity style={[styles.saveBtn, {backgroundColor: '#EF4444'}]} onPress={saveDiscountChanges}><Text style={styles.saveBtnText}>Aplicar Descuento</Text></TouchableOpacity>
