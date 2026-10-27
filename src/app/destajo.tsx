@@ -7,7 +7,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -68,6 +68,29 @@ export default function InventarioScreen() {
     esResidente && esDeHoy(item.created_at);
 
   const [items, setItems] = useState<InventoryItem[]>([]);
+
+  /* Las semanas salen de TODOS los registros, no de los filtrados.
+   *
+   * Imprimir la raya de una semana con un filtro puesto sacaba un documento
+   * incompleto sin avisar: se veia bien y le faltaban renglones. Desde aqui
+   * una semana siempre sale entera. */
+  const [modalSemanas, setModalSemanas] = useState(false);
+
+  const semanasDestajo = useMemo(() => {
+    const porSemana: Record<string, InventoryItem[]> = {};
+    items.forEach((it) => {
+      const semana = it.week_label || 'Semana sin definir';
+      if (!porSemana[semana]) porSemana[semana] = [];
+      porSemana[semana].push(it);
+    });
+
+    return Object.entries(porSemana).map(([semana, registros]) => ({
+      semana,
+      registros,
+      total: registros.reduce((suma, r) => suma + r.quantity * r.unit_price, 0),
+    }));
+  }, [items]);
+
   const [workers, setWorkers] = useState<WorkerSimple[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -589,6 +612,11 @@ export default function InventarioScreen() {
                   <Feather name="grid" size={14} color="#FFF" />
                   <Text style={styles.addButtonText} adjustsFontSizeToFit numberOfLines={1}>Excel</Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.addButton, { backgroundColor: '#0F172A' }]} onPress={() => setModalSemanas(true)}>
+                  <Feather name="calendar" size={14} color="#FFF" />
+                  <Text style={styles.addButtonText} adjustsFontSizeToFit numberOfLines={1}>Semanas</Text>
+                </TouchableOpacity>
               </View>
             ) : null}
           </View>
@@ -631,17 +659,6 @@ export default function InventarioScreen() {
                       <Text style={styles.weekSubtotal}>${weekSubtotal.toFixed(2)}</Text>
                       <Text style={styles.weekItemCount}>{weekItems.length} registros</Text>
                     </View>
-
-                    {/* Cada semana se imprime sola: es lo que se entrega y se
-                        cobra. Antes solo se podia sacar todo junto. */}
-                    <TouchableOpacity
-                      style={styles.weekPdfBtn}
-                      onPress={() => ejecutarGeneracionPDF(weekItems, `Destajos_${week}`)}
-                      disabled={isExporting}
-                      hitSlop={10}
-                    >
-                      <Feather name="file-text" size={16} color="#DC2626" />
-                    </TouchableOpacity>
                   </TouchableOpacity>
 
                   {isExpanded ? (
@@ -712,6 +729,66 @@ export default function InventarioScreen() {
           )}
         </ScrollView>
       </View>
+
+      {/* SEMANAS: aqui se decide que imprimir */}
+      <Modal visible={modalSemanas} animationType="slide" transparent onRequestClose={() => setModalSemanas(false)}>
+        <View style={[styles.modalOverlay, { justifyContent: 'center', padding: 20 }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setModalSemanas(false)} />
+          <View style={[styles.modalContent, { borderRadius: 24, maxHeight: '85%' }]}>
+            <View style={styles.semanasEncabezado}>
+              <Text style={styles.modalTitle}>Imprimir por semana</Text>
+              <TouchableOpacity onPress={() => setModalSemanas(false)}>
+                <Feather name="x" size={22} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            {semanasDestajo.length === 0 ? (
+              <Text style={{ textAlign: 'center', color: '#64748B', marginVertical: 30 }}>
+                Todavía no hay semanas con registros.
+              </Text>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={styles.imprimirTodasBtn}
+                  disabled={isExporting}
+                  onPress={() => { setModalSemanas(false); ejecutarGeneracionPDF(items, 'Destajos_Completo'); }}
+                >
+                  <Feather name="printer" size={16} color="#FFF" />
+                  <Text style={styles.imprimirTodasTexto}>
+                    Imprimir {semanasDestajo.length === 1 ? 'la semana' : `las ${semanasDestajo.length} semanas`}
+                  </Text>
+                </TouchableOpacity>
+
+                <ScrollView style={{ marginTop: 14 }}>
+                  {semanasDestajo.map((s) => (
+                    <View key={s.semana} style={styles.semanaFila}>
+                      <View style={{ flex: 1, paddingRight: 10 }}>
+                        <Text style={styles.semanaEtiqueta}>{s.semana}</Text>
+                        <Text style={styles.semanaDetalle}>
+                          {s.registros.length} {s.registros.length === 1 ? 'registro' : 'registros'}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={styles.semanaTotal}>
+                          ${s.total.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.semanaImprimir}
+                          disabled={isExporting}
+                          onPress={() => { setModalSemanas(false); ejecutarGeneracionPDF(s.registros, `Destajos_${s.semana}`); }}
+                        >
+                          <Feather name="file-text" size={12} color="#2563EB" />
+                          <Text style={styles.semanaImprimirTexto}>PDF</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </ScrollView>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* ✏️ FORMULARIO TIPO BOTTOM SHEET */}
       <Modal visible={isModalVisible} animationType="slide" transparent={true} onRequestClose={() => setIsModalVisible(false)}>
@@ -902,7 +979,6 @@ const styles = StyleSheet.create({
   weekHeaderExpanded: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderBottomWidth: 0 },
   weekTitle: { fontSize: 14, fontWeight: 'bold', color: '#1E3A8A', textTransform: 'uppercase', flexShrink: 1 },
   weekSubtotal: { fontSize: 16, fontWeight: 'bold', color: '#059669', textAlign: 'right' },
-  weekPdfBtn: { marginLeft: 12, padding: 8, borderRadius: 10, backgroundColor: '#FEE2E2' },
   weekItemCount: { fontSize: 11, color: '#6366F1', fontWeight: '600', textAlign: 'right', marginTop: 2 },
   tableContainer: { borderWidth: 1, borderColor: '#C7D2FE', borderTopWidth: 0, borderBottomLeftRadius: 12, borderBottomRightRadius: 12, overflow: 'hidden' },
   tableHeader: { flexDirection: 'row', backgroundColor: '#F3F4F6', paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 1, borderColor: '#D1D5DB' },
@@ -920,6 +996,15 @@ const styles = StyleSheet.create({
   tdTotal: { fontSize: 14, color: '#059669', fontWeight: 'bold' },
   emptyText: { textAlign: 'center', color: '#6B7280', marginTop: 30, fontStyle: 'italic' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  semanasEncabezado: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  imprimirTodasBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#0F172A', paddingVertical: 12, borderRadius: 12 },
+  imprimirTodasTexto: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
+  semanaFila: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+  semanaEtiqueta: { fontSize: 14, fontWeight: 'bold', color: '#1E293B' },
+  semanaDetalle: { fontSize: 11, color: '#64748B', marginTop: 2 },
+  semanaTotal: { fontSize: 15, fontWeight: '900', color: '#047857' },
+  semanaImprimir: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  semanaImprimirTexto: { fontSize: 11, color: '#2563EB', fontWeight: 'bold' },
   modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
