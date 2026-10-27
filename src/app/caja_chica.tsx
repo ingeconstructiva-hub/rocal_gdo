@@ -448,6 +448,10 @@ export default function CajaChicaScreen() {
         const nuevoIngreso = {
           project_id: pid,
           monto: Number(importeInvertido),
+          /* El solicitante va en su columna y no solo dentro del concepto.
+           * Al crear nunca se guardaba, y la pantalla lo lee de ahi: por eso
+           * todas las inversiones aparecian como "Administracion". */
+          solicitante: encargado.trim(),
           concepto: `Fondeo a: ${encargado.trim()}`,
           referencia: tipoDeposito,
           is_active: true,
