@@ -38,7 +38,18 @@ export function mensajeDeError(error: any, accion = 'guardar esto'): string {
 
   // La base de datos no tiene lo que la app espera: es un problema de
   // configuración, no del usuario, así que conviene que llegue el detalle.
-  if (codigo === '42703' || codigo === '42P10' || texto.includes('does not exist') || texto.includes('on conflict')) {
+  // PGRST204 es el mismo problema visto desde PostgREST: la app manda una
+  // columna que la tabla no tiene. Lo dice en ingles y hablando de un
+  // "schema cache", que no significa nada para quien esta en obra.
+  if (
+    codigo === '42703' ||
+    codigo === '42P10' ||
+    codigo === 'PGRST204' ||
+    texto.includes('does not exist') ||
+    texto.includes('could not find') ||
+    texto.includes('schema cache') ||
+    texto.includes('on conflict')
+  ) {
     return `La base de datos no está configurada para recibir esto. Muéstrale este detalle a un administrador: ${error?.message ?? codigo}`;
   }
 
