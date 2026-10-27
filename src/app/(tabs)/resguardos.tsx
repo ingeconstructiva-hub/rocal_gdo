@@ -40,6 +40,8 @@ interface HerramientaAlmacen {
   ine_url?: string | null; 
   ine_reverso_url?: string | null;
   firma_entrega_url?: string | null;
+  entregado_por?: string | null;
+  nombre_entrega?: string | null;
   firma_recibe_url?: string | null;
   fecha_entrega?: string | null;   
   fecha_devolucion?: string | null; 
@@ -317,7 +319,9 @@ export default function ResguardosScreen() {
         n_responsiva: item.codigo,
         n_convenio: 'CV-' + item.id.slice(-4).toUpperCase(),
         fecha_prestamo: new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).toUpperCase(),
-        nombre_entrega: profile?.full_name?.toUpperCase() || 'INGENIERO RESIDENTE DE OBRA',
+        nombre_entrega:
+          (item.nombre_entrega || profile?.full_name)?.toUpperCase() ||
+          'INGENIERO RESIDENTE DE OBRA',
         nombre_recibe: item.asignado_a?.toUpperCase() || 'RESPONSABLE NO ASIGNADO',
         obra_nombre: activeProject?.name || 'PROYECTO DE CONSTRUCCIÓN',
         equipos_detalle: detalleEquiposUnificado, 
@@ -419,13 +423,30 @@ export default function ResguardosScreen() {
         firma_entrega_url: urlEntrega,
         firma_recibe_url: urlRecibe,
         fecha_entrega: timestampActual, 
-        fecha_devolucion: null           
+        fecha_devolucion: null,
+        /* Quien entrega se guarda aqui y no se deduce al imprimir.
+         * El nombre se congela: es un documento firmado, asi que si manana
+         * esta persona corrige su nombre en el perfil, el vale de hoy debe
+         * seguir diciendo lo que se firmo hoy. */
+        entregado_por: profile?.id || null,
+        nombre_entrega: profile?.full_name || profile?.name || null,
       };
 
-      const { error: dbErr } = await supabase
+      let { error: dbErr } = await supabase
         .from('almacen_herramientas')
         .update(payloadActualizado)
         .in('id', todosLosIdsAActualizar);
+
+      /* Mientras no se corra sql/quien_entrega.sql la base rechaza esas dos
+       * columnas. Firmar un vale es lo ultimo que puede dejar de funcionar
+       * por una migracion pendiente, asi que se reintenta sin ellas. */
+      if (dbErr && (dbErr.code === '42703' || /entregado_por|nombre_entrega/.test(dbErr.message || ''))) {
+        const { entregado_por, nombre_entrega, ...sinQuienEntrega } = payloadActualizado as any;
+        ({ error: dbErr } = await supabase
+          .from('almacen_herramientas')
+          .update(sinQuienEntrega)
+          .in('id', todosLosIdsAActualizar));
+      }
 
       if (dbErr) throw dbErr;
 
