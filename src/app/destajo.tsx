@@ -446,11 +446,16 @@ export default function InventarioScreen() {
    * 📌 NOTA: ejecutarGeneracionPDF
    * Genera el documento PDF de destajos a partir de la plantilla HTML y abre el diálogo nativo para compartir.
    */
-  const ejecutarGeneracionPDF = async () => {
+  const ejecutarGeneracionPDF = async (items = filteredItems, nombre = 'Inventario') => {
+    if (items.length === 0) {
+      Aviso.alert('Sin datos', 'No hay registros que imprimir.');
+      return;
+    }
+
     setIsExporting(true);
     try {
-      const htmlContent = generarPlantillaInventario(filteredItems);
-      await exportarPDF(htmlContent, 'Inventario.pdf');
+      const htmlContent = generarPlantillaInventario(items);
+      await exportarPDF(htmlContent, `${nombre.replace(/[^\w-]+/g, '_')}.pdf`);
     } catch (error: any) {
       console.error("Error al exportar inventario:", error);
       Aviso.alert("Error", "Ocurrió un problema al generar el documento.");
@@ -626,6 +631,17 @@ export default function InventarioScreen() {
                       <Text style={styles.weekSubtotal}>${weekSubtotal.toFixed(2)}</Text>
                       <Text style={styles.weekItemCount}>{weekItems.length} registros</Text>
                     </View>
+
+                    {/* Cada semana se imprime sola: es lo que se entrega y se
+                        cobra. Antes solo se podia sacar todo junto. */}
+                    <TouchableOpacity
+                      style={styles.weekPdfBtn}
+                      onPress={() => ejecutarGeneracionPDF(weekItems, `Destajos_${week}`)}
+                      disabled={isExporting}
+                      hitSlop={10}
+                    >
+                      <Feather name="file-text" size={16} color="#DC2626" />
+                    </TouchableOpacity>
                   </TouchableOpacity>
 
                   {isExpanded ? (
@@ -886,6 +902,7 @@ const styles = StyleSheet.create({
   weekHeaderExpanded: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderBottomWidth: 0 },
   weekTitle: { fontSize: 14, fontWeight: 'bold', color: '#1E3A8A', textTransform: 'uppercase', flexShrink: 1 },
   weekSubtotal: { fontSize: 16, fontWeight: 'bold', color: '#059669', textAlign: 'right' },
+  weekPdfBtn: { marginLeft: 12, padding: 8, borderRadius: 10, backgroundColor: '#FEE2E2' },
   weekItemCount: { fontSize: 11, color: '#6366F1', fontWeight: '600', textAlign: 'right', marginTop: 2 },
   tableContainer: { borderWidth: 1, borderColor: '#C7D2FE', borderTopWidth: 0, borderBottomLeftRadius: 12, borderBottomRightRadius: 12, overflow: 'hidden' },
   tableHeader: { flexDirection: 'row', backgroundColor: '#F3F4F6', paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 1, borderColor: '#D1D5DB' },
