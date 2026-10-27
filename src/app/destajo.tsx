@@ -84,11 +84,13 @@ export default function InventarioScreen() {
       porSemana[semana].push(it);
     });
 
-    return Object.entries(porSemana).map(([semana, registros]) => ({
-      semana,
-      registros,
-      total: registros.reduce((suma, r) => suma + r.quantity * r.unit_price, 0),
-    }));
+    return Object.entries(porSemana)
+      .map(([semana, registros]) => ({
+        semana,
+        registros,
+        total: registros.reduce((suma, r) => suma + r.quantity * r.unit_price, 0),
+      }))
+      .sort((a, b) => fechaDeSemana(b.semana) - fechaDeSemana(a.semana));
   }, [items]);
 
   const [workers, setWorkers] = useState<WorkerSimple[]>([]);
@@ -260,6 +262,28 @@ export default function InventarioScreen() {
       }
     }
   };
+
+/* Convierte la etiqueta de semana en una fecha para poder ordenarla.
+ *
+ * Las etiquetas son texto del estilo "28 SEP - 2 OCT 2026", asi que ordenarlas
+ * alfabeticamente pone "12 OCT" antes que "5 OCT". Se lee la fecha de cierre,
+ * que es la que trae el año.
+ *
+ * Lo que no se pueda leer se manda al final, no al principio: una etiqueta
+ * rara no debe encabezar el resumen.
+ */
+const MESES_CORTOS = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
+
+const fechaDeSemana = (etiqueta: string): number => {
+  const cierre = (etiqueta || '').split('-').pop()?.trim().toUpperCase() || '';
+  const partes = cierre.match(/^(\d{1,2})\s+([A-ZÁÉÍÓÚ]{3})\s+(\d{4})$/);
+  if (!partes) return -Infinity;
+
+  const mes = MESES_CORTOS.indexOf(partes[2]);
+  if (mes === -1) return -Infinity;
+
+  return new Date(Number(partes[3]), mes, Number(partes[1])).getTime();
+};
 
   // Filtrado reactivo por texto de búsqueda
   const filteredItems = items.filter(item => {
@@ -640,7 +664,9 @@ export default function InventarioScreen() {
           ) : Object.keys(groupedItems).length === 0 ? (
             <SinDatos onReintentar={fetchData} />
           ) : (
-            Object.entries(groupedItems).map(([week, weekItems]) => {
+            Object.entries(groupedItems)
+              .sort(([a], [b]) => fechaDeSemana(b) - fechaDeSemana(a))
+              .map(([week, weekItems]) => {
               const weekSubtotal = weekItems.reduce((sum, i) => sum + (i.quantity * i.unit_price), 0);
               const isExpanded = expandedWeeks[week] || false;
               
