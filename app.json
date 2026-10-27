@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "ROCAL",
-    "slug": "rocal-mobile-pwa",
+    "slug": "rocal-mobile",
     "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icono.png",
