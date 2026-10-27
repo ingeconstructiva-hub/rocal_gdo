@@ -6,7 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Print from 'expo-print';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRefrescar } from '../../lib/refrescar';
 import { SkeletonLista } from '../../components/Skeleton';
@@ -33,6 +33,26 @@ export default function BitacoraScreen() {
   const [cargando, setCargando] = useState(true);
   const [categoryStats, setCategoryStats] = useState<any[]>([]);
   const [apartado, setApartado] = useState<'entradas' | 'minutas'>('entradas');
+  const [busqueda, setBusqueda] = useState('');
+
+  /* Busca en la nota, en su concepto y en el sector.
+   *
+   * Ignora acentos y mayusculas a proposito: en obra nadie escribe "Electrico"
+   * con acento al buscar, y que no aparezca nada por eso se siente como que la
+   * busqueda esta rota. */
+  const sinAcentos = (t: string) =>
+    (t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+  const logsFiltrados = useMemo(() => {
+    const q = sinAcentos(busqueda.trim());
+    if (!q) return logs;
+    return logs.filter((log: any) =>
+      sinAcentos(log.description).includes(q) ||
+      sinAcentos(log.category).includes(q) ||
+      sinAcentos(log.sector).includes(q)
+    );
+  }, [logs, busqueda]);
+
   const [isExporting, setIsExporting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -439,7 +459,7 @@ export default function BitacoraScreen() {
          * tardaba, la pantalla se quedaba en esqueletos con los datos ya
          * en memoria. El esqueleto es para cuando no hay nada, no para
          * tapar lo que ya se tiene. */
-        data={logs}
+        data={logsFiltrados}
         keyExtractor={(log, i) => log.id?.toString() ?? `pendiente_${i}`}
         /* Dibuja solo lo que cabe en pantalla. Las notas traen fotos, asi que
          * armarlas todas de golpe era lo que trababa la bitacora. */
@@ -448,7 +468,10 @@ export default function BitacoraScreen() {
         windowSize={7}
         ListEmptyComponent={
           cargando && logs.length === 0 ? <SkeletonLista filas={4} /> : (
-            <SinDatos mensaje="No hay datos para mostrar." onReintentar={fetchLogs} />
+            <SinDatos
+              mensaje={busqueda ? `Ninguna nota coincide con "${busqueda}".` : 'No hay datos para mostrar.'}
+              onReintentar={busqueda ? undefined : fetchLogs}
+            />
           )
         }
         ListHeaderComponent={
@@ -484,6 +507,23 @@ export default function BitacoraScreen() {
               ) : (
                 <><Feather name="file-text" size={14} color="#FFF" /><Text style={styles.saveButtonText}>Exportar PDF</Text></>
               )}
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Pegado al historial porque es lo que filtra. */}
+        <View style={styles.buscador}>
+          <Feather name="search" size={16} color="#64748B" />
+          <TextInput
+            style={styles.buscadorEntrada}
+            placeholder="Buscar en notas, conceptos o sector..."
+            value={busqueda}
+            onChangeText={setBusqueda}
+            placeholderTextColor="#94A3B8"
+          />
+          {busqueda.length > 0 && (
+            <TouchableOpacity onPress={() => setBusqueda('')} hitSlop={8}>
+              <Feather name="x" size={16} color="#94A3B8" />
             </TouchableOpacity>
           )}
         </View>
@@ -656,6 +696,8 @@ const styles = StyleSheet.create({
   apartados: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 14 },
   botonAgregar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2563EB', marginHorizontal: 16, marginTop: 14, paddingVertical: 13, borderRadius: 12, gap: 8 },
   botonAgregarTexto: { color: '#FFF', fontSize: 14, fontWeight: 'bold' },
+  buscador: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFF', marginTop: 10, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0' },
+  buscadorEntrada: { flex: 1, fontSize: 13, color: '#1E293B' },
   apartado: { flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: '#E2E8F0', alignItems: 'center' },
   apartadoActivo: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#2563EB' },
   apartadoTexto: { fontSize: 13, fontWeight: 'bold', color: '#64748B' },
