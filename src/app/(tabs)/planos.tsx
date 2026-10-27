@@ -46,7 +46,10 @@ export default function DocumentosScreen() {
   const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
 
   // 🟢 LISTA FIJA DE CATEGORÍAS (Sin categorías dinámicas que rompan el diseño)
-  const defaultCategories = ['Plano', 'Permiso', 'Factura', 'Contratos', 'Seguros', 'Otro'];
+  /* Expediente inicial y final son los paquetes que pide el municipio al
+   * abrir y al cerrar la obra. Van como categorias de fabrica y no como
+   * categorias propias de cada obra, porque los piden en todas. */
+  const defaultCategories = ['Plano', 'Permiso', 'Expediente Inicial', 'Expediente Final', 'Factura', 'Contratos', 'Seguros', 'Otro'];
   const filterCategories = ['Todos', ...defaultCategories];
 
   const isAdmin = profile?.role === 'admin';
@@ -346,13 +349,15 @@ export default function DocumentosScreen() {
   };
 
   const getCategoryIcon = (category: string) => {
-    const defaultCats = ['Plano', 'Permiso', 'Factura', 'Contratos', 'Seguros'];
+    const defaultCats = ['Plano', 'Permiso', 'Expediente Inicial', 'Expediente Final', 'Factura', 'Contratos', 'Seguros'];
     // Si no está en las por defecto, es un "Otro" y le ponemos icono genérico
     if (!defaultCats.includes(category)) return 'file'; 
     
     switch (category) {
       case 'Plano': return 'map';
       case 'Permiso': return 'shield';
+      case 'Expediente Inicial': return 'folder-plus';
+      case 'Expediente Final': return 'folder-minus';
       case 'Factura': return 'dollar-sign';
       case 'Contratos': return 'edit-3';
       case 'Seguros': return 'umbrella';
