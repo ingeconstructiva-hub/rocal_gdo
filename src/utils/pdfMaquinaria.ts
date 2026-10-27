@@ -18,6 +18,7 @@ export const generarPlantillaMaquinaria = (
         <td><span style="color:${esAnticipo ? '#10B981' : '#EF4444'}; font-weight:bold; font-size:10px;">${g.categoria.toUpperCase()}</span></td>
         <td>${g.concepto}</td>
         <td style="text-align:center;">${g.asistencia_dias ? `${g.asistencia_dias} hrs` : '--'}</td>
+        <td style="text-align:right;">${g.costo_tarifa ? `$${formatMXN(g.costo_tarifa)}` : '--'}</td>
         <td style="text-align:right;">${!esAnticipo ? `$${formatMXN(g.monto)}` : '--'}</td>
         <td style="text-align:right;">${esAnticipo ? `$${formatMXN(g.monto)}` : '--'}</td>
       </tr>
@@ -57,10 +58,10 @@ export const generarPlantillaMaquinaria = (
             <div class="summary-col"><div class="summary-label">Saldo Pendiente</div><div class="summary-value" style="color:${saldo > 0 ? '#DC2626' : '#059669'}">$${formatMXN(saldo)}</div></div>
         </div>
         <table>
-            <thead><tr><th>Fecha</th><th>Equipo</th><th>Tipo</th><th>Concepto</th><th>Hrs</th><th>Cargo</th><th>Abono</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Equipo</th><th>Tipo</th><th>Concepto</th><th>Hrs</th><th>Tarifa x Hr</th><th>Cargo</th><th>Abono</th></tr></thead>
             <tbody>${filas}
                 <tr class="total-row">
-                    <td colspan="5" style="text-align:right;">TOTALES:</td>
+                    <td colspan="6" style="text-align:right;">TOTALES:</td>
                     <td style="text-align:right;">$${formatMXN(totalGenerado)}</td>
                     <td style="text-align:right;">$${formatMXN(totalPagado)}</td>
                 </tr>
