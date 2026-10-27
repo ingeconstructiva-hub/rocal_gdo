@@ -17,6 +17,7 @@
     },
     "android": {
       "package": "com.LACOR.rocalapp",
+      "versionCode": 2,
       "adaptiveIcon": {
         "backgroundColor": "#20398E",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
