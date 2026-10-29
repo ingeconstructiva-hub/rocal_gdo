@@ -31,15 +31,29 @@ self.addEventListener('install', (event) => {
   );
 });
 
+/* Al activarse sobrevive SOLO el caché de la app. Todo lo demás se borra,
+ * incluidas las fotos privadas.
+ *
+ * Esas fotos son INE de trabajadores, firmas autógrafas y tickets, y se
+ * guardan por nombre de archivo para poder verlas sin internet aunque la
+ * firma de la dirección haya cambiado. Eso las hacía sobrevivir al cierre
+ * de sesión: en una laptop compartida de oficina seguían ahí para el
+ * siguiente que la usara.
+ *
+ * Borrarlas aquí es además la única forma de quitarlas de los equipos que
+ * ya las tienen guardadas: basta con desplegar. Nadie tiene que cerrar
+ * sesión ni reinstalar nada.
+ *
+ * El costo es que después de cada despliegue las fotos se vuelven a bajar
+ * la primera vez que haya señal. Barato comparado con dejarlas regadas.
+ *
+ * Es lista blanca y no lista negra a propósito: el día que se agregue otro
+ * caché, se limpia solo sin que nadie tenga que acordarse. */
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((nombres) =>
-        Promise.all(
-          nombres.filter((n) => n !== CACHE && n !== CACHE_IMAGENES).map((n) => caches.delete(n))
-        )
-      )
+      .then((nombres) => Promise.all(nombres.filter((n) => n !== CACHE).map((n) => caches.delete(n))))
       .then(() => self.clients.claim())
   );
 });

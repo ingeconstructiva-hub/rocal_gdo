@@ -176,9 +176,34 @@ export default function ProyectosScreen() {
     router.replace('/(tabs)');
   };
 
+  /* Al salir se borran los cachés del navegador, no solo la sesión.
+   *
+   * El service worker guarda fotos del almacén privado —INE, firmas,
+   * tickets— para poder verlas sin internet. signOut() no las toca, así que
+   * en una computadora compartida quedaban ahí para el siguiente.
+   *
+   * Se borra ANTES de cerrar sesión y con finally: si no hay señal,
+   * signOut() puede fallar, y es justo cuando más importa que las fotos ya
+   * no estén. El caché de la app se conserva para que la PWA siga abriendo
+   * sin internet y muestre el login en vez de un error del navegador. */
+  const limpiarCachesDelNavegador = async () => {
+    // En el APK no existe caches: sin esta guarda, el cierre de sesión truena.
+    if (Platform.OS !== 'web' || typeof caches === 'undefined') return;
+    try {
+      const nombres = await caches.keys();
+      await Promise.all(nombres.filter((n) => n !== 'rocal-pwa-v8').map((n) => caches.delete(n)));
+    } catch (e) {
+      console.log('No se pudieron limpiar los cachés al salir:', e);
+    }
+  };
+
   const cerrarSesion = async () => {
-    await supabase.auth.signOut();
-    router.replace('/login');
+    try {
+      await limpiarCachesDelNavegador();
+    } finally {
+      await supabase.auth.signOut();
+      router.replace('/login');
+    }
   };
 
   const obtenerUbicacionActual = async () => {
