@@ -35,6 +35,7 @@ import { supabase } from '../lib/supabase';
 import { limitarNumero, revisarNumeros } from '../lib/limites';
 import { mensajeDeError } from '../lib/errores';
 import { esDeHoy, eliminarRegistro } from '../lib/permisos';
+import { CORTES, Corte, corteDe, TIPOS_DE_VIAJE } from '../lib/maquinaria';
 import { SelectorHora } from '../components/SelectorHora';
 import { generarPlantillaMaquinaria } from '../utils/pdfMaquinaria';
 
@@ -66,7 +67,7 @@ interface MaquinaAgrupada {
 }
 
 // 🟢 JORNADA ESTÁNDAR DE TRABAJO EN OBRA (8 HORAS)
-const JORNADA_HORAS = 8;
+
 
 export default function GastosMaquinariaScreen() {
   const router = useRouter();
@@ -103,7 +104,9 @@ export default function GastosMaquinariaScreen() {
   const [originalMachineName, setOriginalMachineName] = useState('');
   const [equipo, setEquipo] = useState('');
   const [proveedor, setProveedor] = useState('');
-  const [modalidad, setModalidad] = useState<'hora' | 'dia' | 'semana' | 'mes'>('semana');
+  const [modalidad, setModalidad] = useState<Corte>('semana');
+  // De que fue el viaje. Solo se usa cuando el corte es por viaje.
+  const [tipoViaje, setTipoViaje] = useState<string>('Pipa');
   const [tarifaHora, setTarifaHora] = useState('');
   
   // Estados para registro operativo
@@ -209,25 +212,15 @@ export default function GastosMaquinariaScreen() {
     return Object.values(map);
   }, [gastos]);
 
-  /**
-   * 📌 NOTA: estimacionGastoPeriodo
-   * Calcula en tiempo real el costo proyectado (por día, semana o mes) 
-   * tomando como base una jornada estándar de 8 horas de operación.
+  /* El corte que se esta configurando, y el de la maquina abierta.
+   *
+   * Ya no hay nada que estimar: la tarifa es el costo de una unidad del
+   * corte. Antes se multiplicaba por una jornada de 8 horas y semanas de 6
+   * dias para inventar el costo de los demas cortes, y ese numero supuesto
+   * terminaba discutiendose con el proveedor.
    */
-  const estimacionGastoPeriodo = useMemo(() => {
-    const tarifa = Number(tarifaHora) || 0;
-    if (tarifa <= 0) return 0;
-
-    const costoDia = tarifa * JORNADA_HORAS;
-
-    // Por hora el corte es la tarifa misma: se factura una hora de operacion,
-    // sin suponer la jornada de 8 horas que usan los demas cortes.
-    if (modalidad === 'hora') return tarifa;
-    if (modalidad === 'dia') return costoDia;
-    if (modalidad === 'semana') return costoDia * 6; // 6 días laborables por semana
-    if (modalidad === 'mes') return costoDia * 30;   // Mes de 30 días
-    return 0;
-  }, [tarifaHora, modalidad]);
+  const corteEnEdicion = corteDe(modalidad);
+  const corteDeLaMaquina = corteDe(selectedMaquina?.modalidad);
 
   // Filtros reactivos para el modal de detalle
   const historialUsoActivo = useMemo(() => {
@@ -389,17 +382,38 @@ export default function GastosMaquinariaScreen() {
    * Inserta o edita un reporte de uso de horas (bitácora) calculando el costo del día (horas * tarifa).
    */
   const handleGuardarUso = async () => {
-    if (!selectedMaquina || !horasOperacion.trim()) { Aviso.alert("Faltan Horas", "Ingresa las horas de trabajo."); return; }
-    setIsSaving(true);
-    
-    const horas = Number(horasOperacion);
-    const tarifa = Number(selectedMaquina.tarifaHora) || 0;
-    const costoDia = horas * tarifa; 
+    const corte = corteDe(selectedMaquina?.modalidad);
+    const enPlural = corte.unidades.toLowerCase();
 
-    const problema = revisarNumeros([{ etiqueta: 'El costo de la jornada', valor: costoDia }]);
+    if (!selectedMaquina || !horasOperacion.trim()) {
+      Aviso.alert(`Faltan ${enPlural}`, `Anota cuántas ${enPlural} se van a facturar.`);
+      return;
+    }
+
+    /* Un viaje marcado "Otro" sin explicacion queda indistinguible de
+     * cualquier otro en la bitacora, que es justo lo que el tipo de viaje
+     * vino a resolver. Se pide antes de guardar, no despues. */
+    if (corte.valor === 'viaje' && tipoViaje === 'Otro' && !concepto.trim()) {
+      Aviso.alert('Falta decir de qué fue', 'Con "Otro" hay que anotar de qué fue el viaje; si no, en la bitácora no se distingue de los demás.');
+      return;
+    }
+
+    setIsSaving(true);
+
+    const cantidad = Number(horasOperacion);
+    const tarifa = Number(selectedMaquina.tarifaHora) || 0;
+    const costoDia = cantidad * tarifa;
+
+    const problema = revisarNumeros([{ etiqueta: 'El costo', valor: costoDia }]);
     if (problema) { Aviso.alert('Cantidad demasiado grande', problema); setIsSaving(false); return; }
 
-    const conceptoFinal = concepto.trim() || `Jornada del día (${horas} hrs)`;
+    /* En un viaje, de que fue va al frente del concepto: es lo primero que se
+     * busca al revisar la bitacora. La nota, si la hay, va despues. */
+    const nota = concepto.trim();
+    const conceptoFinal =
+      corte.valor === 'viaje'
+        ? [`Viaje de ${tipoViaje}`, nota].filter(Boolean).join(' - ')
+        : nota || `${cantidad} ${corte.corta}`;
 
     const datosPayload = {
       project_id: activeProject?.id,
@@ -408,7 +422,7 @@ export default function GastosMaquinariaScreen() {
       categoria: 'uso',
       tipo_renta: selectedMaquina.modalidad,
       costo_tarifa: tarifa,
-      asistencia_dias: horas, 
+      asistencia_dias: cantidad,
       hora_entrada: horaEntrada || null,
       hora_salida: horaSalida || null,
       concepto: conceptoFinal,
@@ -540,6 +554,7 @@ export default function GastosMaquinariaScreen() {
   const limpiarFormsSecundarios = () => {
     setHorasOperacion(''); setMontoAnticipo(''); setConcepto('');
     setHoraEntrada(''); setHoraSalida(''); setEditingRecordId(null);
+    setTipoViaje('Pipa');
   };
 
   /**
@@ -549,7 +564,7 @@ export default function GastosMaquinariaScreen() {
   const handleExportarExcel = async () => {
     if (gastos.length === 0) return;
     try {
-      const encabezados = ["Fecha", "Tipo", "Equipo", "Proveedor", "Corte por", "Tarifa x Hora ($)", "Horas Hoy", "Concepto/Detalle", "Costo Diario Generado ($)", "Anticipo Pagado ($)\n"];
+      const encabezados = ["Fecha", "Tipo", "Equipo", "Proveedor", "Corte por", "Tarifa por Unidad ($)", "Unidades Facturadas", "Concepto/Detalle", "Costo Generado ($)", "Anticipo Pagado ($)\n"];
       const filas = gastos.map(g => {
         if (g.categoria === 'config') return null; 
         const fecha = new Date(g.fecha).toLocaleDateString('es-MX');
@@ -659,8 +674,8 @@ export default function GastosMaquinariaScreen() {
                     <Text style={styles.machineDateLabel}>Alta: {new Date(maquina.fechaAlta).toLocaleDateString('es-MX')}</Text>
                   </View>
                   <View style={styles.machineBadgeBox}>
-                    <Text style={styles.machineBadgeText}>Corte x {maquina.modalidad}</Text>
-                    <Text style={styles.machineRate}>${maquina.tarifaHora}/hr</Text>
+                    <Text style={styles.machineBadgeText}>Corte {corteDe(maquina.modalidad).etiqueta.toLowerCase()}</Text>
+                    <Text style={styles.machineRate}>${maquina.tarifaHora} / {corteDe(maquina.modalidad).unidad}</Text>
                   </View>
                 </View>
 
@@ -842,28 +857,27 @@ export default function GastosMaquinariaScreen() {
               
               <Text style={styles.modalLabel}>Corte de Facturación / Modalidad</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillsContainer}>
-                <TouchableOpacity style={[styles.pillBtn, modalidad === 'hora' ? styles.pillActiveAzul : null]} onPress={() => setModalidad('hora')}><Text style={[styles.pillText, modalidad === 'hora' ? styles.pillTextActive : null]}>Por Hora</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.pillBtn, modalidad === 'dia' ? styles.pillActiveAzul : null]} onPress={() => setModalidad('dia')}><Text style={[styles.pillText, modalidad === 'dia' ? styles.pillTextActive : null]}>Por Día</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.pillBtn, modalidad === 'semana' ? styles.pillActiveAzul : null]} onPress={() => setModalidad('semana')}><Text style={[styles.pillText, modalidad === 'semana' ? styles.pillTextActive : null]}>Por Semana</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.pillBtn, modalidad === 'mes' ? styles.pillActiveAzul : null]} onPress={() => setModalidad('mes')}><Text style={[styles.pillText, modalidad === 'mes' ? styles.pillTextActive : null]}>Por Mes</Text></TouchableOpacity>
+                {CORTES.map((c) => (
+                  <TouchableOpacity
+                    key={c.valor}
+                    style={[styles.pillBtn, modalidad === c.valor ? styles.pillActiveAzul : null]}
+                    onPress={() => setModalidad(c.valor)}
+                  >
+                    <Text style={[styles.pillText, modalidad === c.valor ? styles.pillTextActive : null]}>{c.etiqueta}</Text>
+                  </TouchableOpacity>
+                ))}
               </ScrollView>
               
-              <Text style={styles.modalLabel}>Tarifa por HORA ($)</Text>
+              <Text style={styles.modalLabel}>Tarifa por {corteEnEdicion.unidad.toUpperCase()} ($)</Text>
               <TextInput style={styles.modalInput} placeholder="Ej. 1200" keyboardType="numeric" value={tarifaHora} onChangeText={(v) => setTarifaHora(limitarNumero(v))} />
               
-              {/* 🟢 GASTO ESTIMADO DINÁMICO */}
               {Number(tarifaHora) > 0 && (
                 <View style={styles.calcBox}>
                   <Text style={styles.calcLabel}>
-                    💰 Costo estimado por <Text style={{ color: '#2563EB', fontWeight: 'bold' }}>{modalidad === 'hora' ? 'Hora' : modalidad === 'dia' ? 'Día (8 hrs)' : modalidad === 'semana' ? 'Semana (6 días)' : 'Mes (30 días)'}</Text>:
+                    Se va a cobrar <Text style={{ color: '#2563EB', fontWeight: 'bold' }}>${Number(tarifaHora).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</Text> por cada <Text style={{ color: '#2563EB', fontWeight: 'bold' }}>{corteEnEdicion.unidad}</Text>.
                   </Text>
-                  <Text style={{ fontSize: 22, fontWeight: '900', color: '#10B981', marginTop: 4 }}>
-                    ${estimacionGastoPeriodo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                  </Text>
-                  <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 2, fontStyle: 'italic' }}>
-                    {modalidad === 'hora'
-                      ? 'Es la tarifa de una hora de operación.'
-                      : `Calculado con base en una jornada fija de ${JORNADA_HORAS} horas de operación diaria.`}
+                  <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 4, fontStyle: 'italic' }}>
+                    Al capturar el uso se anotan los {corteEnEdicion.unidades.toLowerCase()} y el costo sale de multiplicar.
                   </Text>
                 </View>
               )}
@@ -906,7 +920,7 @@ export default function GastosMaquinariaScreen() {
               }}
             >
               <View style={styles.calcBox}>
-                <Text style={styles.calcLabel}>Tarifa Registrada: <Text style={{color: '#1E293B'}}>${selectedMaquina?.tarifaHora}/hora</Text></Text>
+                <Text style={styles.calcLabel}>Tarifa Registrada: <Text style={{color: '#1E293B'}}>${selectedMaquina?.tarifaHora} por {corteDeLaMaquina.unidad}</Text></Text>
                 {horasOperacion ? (
                   <Text style={[styles.calcLabel, {marginTop: 6, color: '#2563EB'}]}>
                     Costo a Guardar: <Text style={{fontWeight: '900'}}>${(Number(horasOperacion) * (selectedMaquina?.tarifaHora || 0)).toLocaleString('es-MX')}</Text>
@@ -914,7 +928,7 @@ export default function GastosMaquinariaScreen() {
                 ) : null}
               </View>
               
-              <Text style={styles.modalLabel}>Horas Efectivas de Trabajo</Text>
+              <Text style={styles.modalLabel}>{corteDeLaMaquina.unidades} a Facturar</Text>
               <TextInput 
                   style={[styles.modalInput, { fontSize: 20, fontWeight: 'bold', color: '#2563EB', textAlign: 'center' }]} 
                   placeholder="0" 
@@ -923,7 +937,7 @@ export default function GastosMaquinariaScreen() {
                   onChangeText={(v) => {
                       const cleanValue = limitarNumero(v);
                       setHorasOperacion(cleanValue);
-                      recalcularHoraSalida(cleanValue, timeEntradaDate);
+                      if (corteDeLaMaquina.valor === 'hora') recalcularHoraSalida(cleanValue, timeEntradaDate);
                   }} 
                   autoFocus 
               />
@@ -946,8 +960,35 @@ export default function GastosMaquinariaScreen() {
                   />
                 </View>
               </View>
-              <Text style={styles.modalLabel}>Nota / Reporte de Falla (Opcional)</Text>
-              <TextInput style={[styles.modalInput, {height: 60, textAlignVertical: 'top'}]} placeholder="Ej. Lluvia por la tarde" multiline value={concepto} onChangeText={setConcepto} />
+              {corteDeLaMaquina.valor === 'viaje' && (
+                <>
+                  <Text style={styles.modalLabel}>¿De qué fue el viaje?</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillsContainer}>
+                    {TIPOS_DE_VIAJE.map((tipo) => (
+                      <TouchableOpacity
+                        key={tipo}
+                        style={[styles.pillBtn, tipoViaje === tipo ? styles.pillActiveAzul : null]}
+                        onPress={() => setTipoViaje(tipo)}
+                      >
+                        <Text style={[styles.pillText, tipoViaje === tipo ? styles.pillTextActive : null]}>{tipo}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
+
+              <Text style={styles.modalLabel}>
+                {corteDeLaMaquina.valor === 'viaje'
+                  ? (tipoViaje === 'Otro' ? '¿De qué fue? (obligatorio)' : 'Nota del viaje (Opcional)')
+                  : 'Nota / Reporte de Falla (Opcional)'}
+              </Text>
+              <TextInput
+                style={[styles.modalInput, {height: 60, textAlignVertical: 'top'}]}
+                placeholder={corteDeLaMaquina.valor === 'viaje' ? 'Ej. Pipa de 10 mil litros a la cisterna' : 'Ej. Lluvia por la tarde'}
+                multiline
+                value={concepto}
+                onChangeText={setConcepto}
+              />
               
               <View style={{height: 20}} />
             </ScrollView>
