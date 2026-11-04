@@ -26,7 +26,7 @@ import {
 import { useRefrescar } from '../lib/refrescar';
 import { SkeletonLista } from '../components/Skeleton';
 import { SinDatos } from '../components/SinDatos';
-import { exportarPDF, exportarTexto } from '../lib/exportar';
+import { exportarPDF, exportarReporte, exportarTexto } from '../lib/exportar';
 import { regresar } from '../lib/navegar';
 import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
@@ -35,7 +35,7 @@ import { supabase } from '../lib/supabase';
 import { limitarNumero, MAX_CANTIDAD, revisarNumeros } from '../lib/limites';
 import { mensajeDeError } from '../lib/errores';
 import { esDeHoy, eliminarRegistro, puedeExportar } from '../lib/permisos';
-import { generarPlantillaInventario } from '../utils/pdfInventario';
+import { generarReporteInventario } from '../utils/pdfInventario';
 
 interface InventoryItem {
   id: string;
@@ -542,8 +542,8 @@ export default function InventarioScreen() {
 
     setIsExporting(true);
     try {
-      const htmlContent = generarPlantillaInventario(items);
-      await exportarPDF(htmlContent, `${nombre.replace(/[^\w-]+/g, '_')}.pdf`);
+      const reporte = generarReporteInventario(items, activeProject?.name, profile?.full_name);
+      await exportarReporte(reporte, `${nombre.replace(/[^\w-]+/g, '_')}.pdf`);
     } catch (error: any) {
       console.error("Error al exportar inventario:", error);
       Aviso.alert("Error", "Ocurrió un problema al generar el documento.");

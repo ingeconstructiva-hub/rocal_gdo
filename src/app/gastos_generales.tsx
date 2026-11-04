@@ -27,7 +27,7 @@ import {
 import { useRefrescar } from '../lib/refrescar';
 import { SkeletonLista } from '../components/Skeleton';
 import { subirArchivo } from '../lib/subidas';
-import { exportarPDF, exportarTexto } from '../lib/exportar';
+import { exportarPDF, exportarReporte, exportarTexto } from '../lib/exportar';
 import { regresar } from '../lib/navegar';
 import { puedeExportar } from '../lib/permisos';
 import { firmarCampos } from '../lib/urlsFirmadas';
@@ -40,7 +40,7 @@ import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
 import { limitarNumero, revisarNumeros } from '../lib/limites';
 import { mensajeDeError } from '../lib/errores';
-import { generarPlantillaGastos } from '../utils/pdfGastosGen';
+import { generarReporteGastos } from '../utils/pdfGastosGen';
 
 interface GastoEstructural {
   id: string;
@@ -450,7 +450,7 @@ export default function GastosGeneralesScreen() {
     
     setIsExportingPDF(true);
     try {
-      const htmlContent = generarPlantillaGastos(
+      const reporte = generarReporteGastos(
         activeProject?.name || 'Obra Sin Nombre',
         totalGastado,
         totalDeuda,
@@ -458,7 +458,7 @@ export default function GastosGeneralesScreen() {
         gastosFiltrados
       );
       
-      await exportarPDF(htmlContent, 'Gastos_Generales.pdf');
+      await exportarReporte(reporte, 'Gastos_Generales.pdf');
     } catch (error: any) { 
       Aviso.alert("Error PDF", error.message); 
     } finally { 

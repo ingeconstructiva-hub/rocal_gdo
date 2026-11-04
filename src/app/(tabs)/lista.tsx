@@ -12,7 +12,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SkeletonLista } from '../../components/Skeleton';
 import { SinDatos } from '../../components/SinDatos';
-import { exportarPDF, exportarTexto } from '../../lib/exportar';
+import { exportarPDF, exportarReporte, exportarTexto } from '../../lib/exportar';
 import { regresar } from '../../lib/navegar';
 import { useRefrescar } from '../../lib/refrescar';
 import { Aviso } from '../../lib/aviso';
@@ -24,7 +24,7 @@ import { calcularTotalFinal, diasDeSemana, etiquetaSemana, inicioDeSemana, rango
 import { mensajeDeError } from '../../lib/errores';
 import { supabase } from '../../lib/supabase';
 import { limitarNumero } from '../../lib/limites';
-import { generarPlantillaHistorial, generarPlantillaNomina } from '../../utils/pdfNomina';
+import { generarReporteHistorial, generarReporteNomina } from '../../utils/pdfNomina';
 
 interface WorkerState {
   id: string;
@@ -696,8 +696,8 @@ export default function ListaScreen() {
   const imprimirSemanas = async (lista: any[], nombre: string) => {
     if (lista.length === 0) { Aviso.alert('Sin datos', 'Todavia no hay semanas guardadas.'); return; }
     try {
-      const html = generarPlantillaHistorial(lista, activeProject?.name || 'Obra');
-      await exportarPDF(html, nombre);
+      const reporte = generarReporteHistorial(lista, activeProject?.name || 'Obra');
+      await exportarReporte(reporte, nombre);
     } catch (e: any) {
       Aviso.alert('Error PDF', mensajeDeError(e, 'generar el PDF'));
     }
@@ -708,8 +708,8 @@ export default function ListaScreen() {
     if (displayedWorkers.length === 0) return;
     try {
       const weekLabel = new Date().toLocaleDateString('es-MX');
-      const htmlContent = generarPlantillaNomina(displayedWorkers, weekLabel);
-      await exportarPDF(htmlContent, 'Nomina.pdf');
+      const reporte = generarReporteNomina(displayedWorkers, weekLabel);
+      await exportarReporte(reporte, 'Nomina.pdf');
     } catch (error: any) { Aviso.alert("Error PDF", error.message); }
   };
 

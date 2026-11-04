@@ -20,6 +20,19 @@ export type CifraDeResumen = {
   color?: string;
 };
 
+/* Un bloque con su propio encabezado y su subtotal.
+ *
+ * Destajo se lee por semana: el renglon suelto no dice nada, lo que se revisa
+ * es cuanto se le debe al maestro de esa semana. Sin grupos habria que leer
+ * toda la tabla sumando de memoria.
+ */
+export type GrupoDeReporte = {
+  titulo: string;
+  filas: (string | number)[][];
+  /** El renglon de cierre del grupo, con el mismo numero de celdas. */
+  subtotal?: (string | number)[];
+};
+
 export type Reporte = {
   /** Siempre la constructora. Encabeza la hoja. */
   titulo: string;
@@ -27,7 +40,10 @@ export type Reporte = {
   subtitulo: string;
   resumen?: CifraDeResumen[];
   columnas: string[];
+  /** Tabla plana. Se ignora si vienen grupos. */
   filas: (string | number)[][];
+  /** Tabla por bloques. Manda sobre 'filas' cuando existe. */
+  grupos?: GrupoDeReporte[];
   /** El renglón de totales, ya armado, con el mismo número de celdas. */
   totales?: (string | number)[];
   /** Con muchas columnas la hoja vertical aprieta las cifras hasta encimarlas. */
@@ -72,12 +88,21 @@ export const reporteAHtml = (r: Reporte): string => {
 
   const encabezados = r.columnas.map((c) => `<th>${escapar(c)}</th>`).join('');
 
-  const filas = r.filas
-    .map(
-      (fila) =>
-        `<tr>${fila.map((celda, i) => `<td${alineacion(i)}>${escapar(celda)}</td>`).join('')}</tr>`
-    )
-    .join('');
+  const comoFila = (fila: (string | number)[], clase = '') =>
+    `<tr${clase ? ` class="${clase}"` : ''}>${fila
+      .map((celda, i) => `<td${alineacion(i)}>${escapar(celda)}</td>`)
+      .join('')}</tr>`;
+
+  const filas = r.grupos
+    ? r.grupos
+        .map(
+          (g) =>
+            `<tr><td class="grupo" colspan="${r.columnas.length}">${escapar(g.titulo)}</td></tr>` +
+            g.filas.map((f) => comoFila(f)).join('') +
+            (g.subtotal ? comoFila(g.subtotal, 'subtotal') : '')
+        )
+        .join('')
+    : r.filas.map((f) => comoFila(f)).join('');
 
   const totales = r.totales
     ? `<tr class="totales">${r.totales
@@ -104,6 +129,8 @@ export const reporteAHtml = (r: Reporte): string => {
         th { background: #0f172a; color: #fff; padding: 6px; text-align: left; font-size: 9px; text-transform: uppercase; }
         td { border: 1px solid #e2e8f0; padding: 6px; }
         .totales { background: #f1f5f9; font-weight: bold; }
+        .grupo { background: #e0e7ff; color: #1e3a8a; font-weight: bold; font-size: 10px; }
+        .subtotal { background: #f8fafc; font-weight: bold; color: #475569; }
       </style>
     </head>
     <body>
@@ -111,7 +138,7 @@ export const reporteAHtml = (r: Reporte): string => {
         <tr>
           <td>
             <div class="titulo">${escapar(r.titulo)}</div>
-            <div style="font-size:12px; color:#475569;">${escapar(r.subtitulo)}</div>
+            <div style="font-size:12px; color:#475569;">${escapar(r.subtitulo).replace(/\n/g, '<br>')}</div>
           </td>
           <td style="text-align:right;">Fecha: ${fecha}</td>
         </tr>

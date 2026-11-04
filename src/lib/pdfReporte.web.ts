@@ -41,11 +41,14 @@ export function crearPdfReporte(r: Reporte): Blob {
   doc.setTextColor(...AZUL);
   doc.text(r.titulo, margen, y);
 
-  y += 6;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(71, 85, 105);
-  doc.text(r.subtitulo, margen, y);
+
+  for (const renglon of r.subtitulo.split('\n')) {
+    y += 5;
+    doc.text(renglon, margen, y);
+  }
 
   const fecha = new Date().toLocaleDateString('es-MX', {
     year: 'numeric',
@@ -98,10 +101,36 @@ export function crearPdfReporte(r: Reporte): Blob {
     estilosPorColumna[i] = { halign: 'right' };
   });
 
+  const texto = (fila: (string | number)[]) => fila.map((celda) => String(celda ?? ''));
+
+  /* Un encabezado de grupo es una sola celda que ocupa toda la tabla. Sin el
+   * colSpan, autotable la mete en la primera columna y el titulo de la semana
+   * sale cortado a la mitad. */
+  const cuerpo: any[] = r.grupos
+    ? r.grupos.flatMap((g) => [
+        [
+          {
+            content: g.titulo,
+            colSpan: r.columnas.length,
+            styles: { fillColor: [224, 231, 255], textColor: [30, 58, 138], fontStyle: 'bold' },
+          },
+        ],
+        ...g.filas.map(texto),
+        ...(g.subtotal
+          ? [
+              texto(g.subtotal).map((celda) => ({
+                content: celda,
+                styles: { fillColor: [248, 250, 252], textColor: [71, 85, 105], fontStyle: 'bold' },
+              })),
+            ]
+          : []),
+      ])
+    : r.filas.map(texto);
+
   autoTable(doc, {
     startY: y,
     head: [r.columnas],
-    body: r.filas.map((fila) => fila.map((celda) => String(celda ?? ''))),
+    body: cuerpo,
     foot: r.totales ? [r.totales.map((celda) => String(celda ?? ''))] : undefined,
     margin: { left: margen, right: margen },
     styles: { fontSize: r.horizontal ? 7.5 : 8, cellPadding: 1.8, textColor: [30, 41, 59] },

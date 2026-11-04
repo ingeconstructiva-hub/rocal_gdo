@@ -34,7 +34,7 @@ import { SkeletonLista } from '../components/Skeleton';
 import { SinDatos } from '../components/SinDatos';
 import { guardarArchivoLocal } from '../lib/archivos';
 import { subirArchivo } from '../lib/subidas';
-import { exportarPDF, exportarTexto } from '../lib/exportar';
+import { exportarPDF, exportarReporte, exportarTexto } from '../lib/exportar';
 import { regresar } from '../lib/navegar';
 import { firmarCampos } from '../lib/urlsFirmadas';
 import { FotoSinConexion } from '../components/FotoSinConexion';
@@ -46,7 +46,7 @@ import { limitarNumero, revisarNumeros } from '../lib/limites';
 import { esDeHoy, eliminarRegistro, puedeExportar } from '../lib/permisos';
 import { mensajeDeError } from '../lib/errores';
 import { SelectorFecha } from '../components/SelectorFecha';
-import { generarPlantillaCajaChica } from '../utils/pdfCajaChica';
+import { generarReporteCajaChica } from '../utils/pdfCajaChica';
 
 interface ArticuloGasto {
   id: string;
@@ -151,7 +151,7 @@ export default function CajaChicaScreen() {
     }
     setIsExportingPDF(true);
     try {
-      const htmlContent = generarPlantillaCajaChica(
+      const reporte = generarReporteCajaChica(
         activeProject?.name || 'Obra Sin Nombre',
         saldoDisponible,
         totalIngresos,
@@ -159,7 +159,7 @@ export default function CajaChicaScreen() {
         movimientosFiltrados
       );
       
-      await exportarPDF(htmlContent, 'Caja_Chica.pdf');
+      await exportarReporte(reporte, 'Caja_Chica.pdf');
     } catch (error: any) {
       Aviso.alert("Error PDF", error.message);
     } finally {
