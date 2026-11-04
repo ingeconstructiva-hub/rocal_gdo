@@ -115,6 +115,7 @@ export default function InventarioScreen() {
   
   const [refreshing, setRefreshing] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [listaSemanasAbierta, setListaSemanasAbierta] = useState(false);
 
   /**
    * 📌 NOTA: onRefresh
@@ -126,21 +127,45 @@ export default function InventarioScreen() {
     setRefreshing(false);
   }, [activeProject, isOffline]);
 
-  /**
-   * 📌 NOTA: getWeekRange
-   * Calcula de forma dinámica el rango semanal laboral (Lunes a Viernes) 
-   * en base a la fecha actual para asignar la etiqueta de semana por defecto.
+  /* La etiqueta de una semana laboral, de lunes a viernes.
+   *
+   * El corrimiento cuenta semanas desde la de hoy: 0 es esta, -1 la
+   * pasada, 1 la que entra. Sale en MAYUSCULAS porque asi se guarda; si se
+   * generara en minusculas, la lista mostraria la misma semana dos veces,
+   * escrita distinto, y elegir la equivocada partiria la raya en dos.
    */
-  const getWeekRange = () => {
-    const today = new Date();
-    const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay(); 
-    const start = new Date(today);
-    start.setDate(today.getDate() - dayOfWeek + 1); 
-    const end = new Date(start);
-    end.setDate(start.getDate() + 4); 
-    const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    return `${start.getDate()} ${months[start.getMonth()]} - ${end.getDate()} ${months[end.getMonth()]} ${start.getFullYear()}`;
+  const etiquetaDeSemana = (corrimiento: number = 0) => {
+    const hoy = new Date();
+    const diaDeLaSemana = hoy.getDay() === 0 ? 7 : hoy.getDay();
+
+    const lunes = new Date(hoy);
+    lunes.setDate(hoy.getDate() - diaDeLaSemana + 1 + corrimiento * 7);
+
+    const viernes = new Date(lunes);
+    viernes.setDate(lunes.getDate() + 4);
+
+    return `${lunes.getDate()} ${MESES_CORTOS[lunes.getMonth()]} - ${viernes.getDate()} ${MESES_CORTOS[viernes.getMonth()]} ${lunes.getFullYear()}`;
   };
+
+  /* Las semanas que se pueden elegir.
+   *
+   * La semana era un campo de texto libre, y es justo lo que agrupa el
+   * resumen y la raya que se imprime. Un espacio de mas, un acento o "Oct"
+   * contra "OCT" partian una misma semana en dos renglones, y la raya salia
+   * incompleta sin que nadie lo notara.
+   *
+   * Van las de esta obra que YA existen, aunque no cuadren con el formato:
+   * dejarlas fuera haria que editar un registro viejo le cambiara la semana
+   * de bajo del agua.
+   */
+  const semanasParaElegir = useMemo(() => {
+    const generadas: string[] = [];
+    for (let i = 1; i >= -10; i--) generadas.push(etiquetaDeSemana(i));
+
+    const yaCapturadas = items.map((it) => it.week_label).filter(Boolean) as string[];
+
+    return [...new Set([...generadas, ...yaCapturadas])];
+  }, [items]);
 
   /**
    * 📌 NOTA: useFocusEffect
@@ -346,7 +371,7 @@ const fechaDeSemana = (etiqueta: string): number => {
     setPrice('');
     setRequestedBy('');
     setInCharge('');
-    setWeekLabelModal(getWeekRange());
+    setWeekLabelModal(etiquetaDeSemana());
     setShowSuggestions(false);
     setIsModalVisible(true);
   };
@@ -367,7 +392,7 @@ const fechaDeSemana = (etiqueta: string): number => {
     setPrice(item.unit_price.toString());
     setRequestedBy(item.requested_by || '');
     setInCharge(item.in_charge || '');
-    setWeekLabelModal(item.week_label || getWeekRange());
+    setWeekLabelModal(item.week_label || etiquetaDeSemana());
     setShowSuggestions(false);
     setIsModalVisible(true);
   };
@@ -851,11 +876,42 @@ const fechaDeSemana = (etiqueta: string): number => {
               ) : null}
 
               <Text style={styles.modalLabel}>Semana de Registro</Text>
-              <TextInput 
-                style={[styles.modalInput, { backgroundColor: '#EFF6FF', fontWeight: 'bold' }]} 
-                value={weekLabelModal} 
-                onChangeText={setWeekLabelModal} 
-              />
+              <View style={{ zIndex: 2 }}>
+                <TouchableOpacity
+                  style={[styles.modalInput, { backgroundColor: '#EFF6FF', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
+                  onPress={() => setListaSemanasAbierta(!listaSemanasAbierta)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontWeight: 'bold', color: '#111827' }}>{weekLabelModal}</Text>
+                  <Feather name={listaSemanasAbierta ? 'chevron-up' : 'chevron-down'} size={18} color="#2563EB" />
+                </TouchableOpacity>
+
+                {listaSemanasAbierta ? (
+                  <View style={styles.suggestionsContainer}>
+                    <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                      {semanasParaElegir.map((semana) => (
+                        <TouchableOpacity
+                          key={semana}
+                          style={styles.suggestionItem}
+                          onPress={() => { setWeekLabelModal(semana); setListaSemanasAbierta(false); }}
+                        >
+                          <Text
+                            style={[
+                              styles.suggestionText,
+                              semana === weekLabelModal && { color: '#2563EB', fontWeight: '900' },
+                            ]}
+                          >
+                            {semana}
+                          </Text>
+                          {semana === etiquetaDeSemana() ? (
+                            <Text style={{ fontSize: 11, color: '#94A3B8' }}>esta semana</Text>
+                          ) : null}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                ) : null}
+              </View>
 
               <Text style={styles.modalLabel}>Concepto / Actividad</Text>
               <View style={{ zIndex: 1 }}>
