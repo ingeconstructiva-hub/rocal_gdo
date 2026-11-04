@@ -43,6 +43,7 @@ interface GastoMaquinaria {
   id: string;
   equipo: string;
   concepto: string;
+  pagado_por?: string | null;
   monto: number;
   categoria: string;
   tipo_renta?: string | null;
@@ -98,6 +99,9 @@ export default function GastosMaquinariaScreen() {
   const [modalNuevaMaquina, setModalNuevaMaquina] = useState(false);
   const [modalHoras, setModalHoras] = useState(false);
   const [modalAnticipo, setModalAnticipo] = useState(false);
+  // Quien saco el dinero del pago. Va en el reporte que se coteja con el
+  // proveedor: sin esto, un abono no se puede rastrear a nadie.
+  const [pagadoPor, setPagadoPor] = useState('');
 
   // Estados para configuración de equipo
   const [editingMachineConfigId, setEditingMachineConfigId] = useState<string | null>(null);
@@ -521,6 +525,7 @@ export default function GastosMaquinariaScreen() {
       proveedor: selectedMaquina.proveedor,
       categoria: 'anticipo',
       concepto: concepto.trim() || `Anticipo a cuenta de renta`,
+      pagado_por: pagadoPor.trim() || null,
       monto: Number(montoAnticipo),
       is_active: true,
       fecha: editingRecordId ? (gastos.find(g=>g.id===editingRecordId)?.fecha || new Date().toISOString()) : new Date().toISOString()
@@ -550,6 +555,7 @@ export default function GastosMaquinariaScreen() {
     setTimeout(() => {
       setEditingRecordId(record.id);
       setConcepto(record.concepto || '');
+      setPagadoPor(record.pagado_por || '');
 
       if (record.categoria === 'uso') {
         setHorasOperacion(record.asistencia_dias?.toString() || '');
@@ -615,6 +621,7 @@ export default function GastosMaquinariaScreen() {
     setHorasOperacion(''); setMontoAnticipo(''); setConcepto('');
     setHoraEntrada(''); setHoraSalida(''); setEditingRecordId(null);
     setTipoViaje('Pipa');
+    setPagadoPor('');
   };
 
   /**
@@ -624,20 +631,21 @@ export default function GastosMaquinariaScreen() {
   const handleExportarExcel = async () => {
     if (gastos.length === 0) return;
     try {
-      const encabezados = ["Fecha", "Tipo", "Equipo", "Proveedor", "Corte por", "Tarifa por Unidad ($)", "Unidades Facturadas", "Concepto/Detalle", "Costo Generado ($)", "Anticipo Pagado ($)\n"];
+      const encabezados = ["Fecha", "Tipo", "Equipo", "Proveedor", "Corte por", "Tarifa por Unidad ($)", "Unidades Facturadas", "Concepto/Detalle", "Costo Generado ($)", "Anticipo Pagado ($)", "Quién paga\n"];
       const filas = gastos.map(g => {
         if (g.categoria === 'config') return null; 
         const fecha = new Date(g.fecha).toLocaleDateString('es-MX');
         const eqLimpio = g.equipo.replace(/,/g, ' ');
         const provLimpio = g.proveedor ? g.proveedor.replace(/,/g, ' ') : '';
         const conceptoLimpio = g.concepto ? g.concepto.replace(/,/g, ' ') : '';
+        const pagaLimpio = g.pagado_por ? g.pagado_por.replace(/,/g, ' ') : '';
         const hrs = g.asistencia_dias || '';
         const tarifaF = g.costo_tarifa || '';
         const mod = g.tipo_renta ? g.tipo_renta.toUpperCase() : '';
         const cargo = g.categoria === 'uso' ? g.monto : 0;
         const abono = g.categoria === 'anticipo' ? g.monto : 0;
         const etiqueta = g.categoria === 'uso' ? 'BITÁCORA DIARIA' : 'PAGO/ANTICIPO';
-        return `${fecha},"${etiqueta}","${eqLimpio}","${provLimpio}","${mod}",${tarifaF},${hrs},"${conceptoLimpio}",${cargo},${abono}`;
+        return `${fecha},"${etiqueta}","${eqLimpio}","${provLimpio}","${mod}",${tarifaF},${hrs},"${conceptoLimpio}",${cargo},${abono},"${pagaLimpio}"`;
       }).filter(Boolean).join("\n");
       const contenidoCSV = "\uFEFF" + encabezados.join(",") + filas;
       const nombreArchivo = `Maquinaria_${activeProject?.name?.replace(/\s+/g, '_') || 'Obra'}.csv`;
@@ -1104,6 +1112,9 @@ export default function GastosMaquinariaScreen() {
             >
               <Text style={styles.modalLabel}>Monto del Pago o Anticipo ($)</Text>
               <TextInput style={[styles.modalInput, {fontSize: 24, fontWeight: 'bold', color: '#10B981', textAlign: 'center'}]} placeholder="0.00" keyboardType="numeric" value={montoAnticipo} onChangeText={(v) => setMontoAnticipo(limitarNumero(v))} autoFocus />
+              <Text style={styles.modalLabel}>¿Quién paga?</Text>
+              <TextInput style={styles.modalInput} placeholder="Ej. Caja chica de obra, Oficina, Arq. Juan" value={pagadoPor} onChangeText={setPagadoPor} />
+
               <Text style={styles.modalLabel}>Concepto (Opcional)</Text>
               <TextInput style={[styles.modalInput, {height: 60, textAlignVertical: 'top'}]} placeholder="Ej. Pago semana 3" multiline value={concepto} onChangeText={setConcepto} />
               

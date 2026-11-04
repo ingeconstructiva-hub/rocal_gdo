@@ -16,13 +16,15 @@ export const generarPlantillaMaquinaria = (
     filas += `
       <tr>
         <td>${new Date(g.fecha).toLocaleDateString('es-MX')}</td>
-        <td><strong>${g.equipo}</strong><br><small style="color:#64748B">${g.proveedor || '--'}</small></td>
+        <td><strong>${g.equipo}</strong></td>
+        <td>${g.proveedor || '--'}</td>
         <td><span style="color:${esAnticipo ? '#10B981' : '#EF4444'}; font-weight:bold; font-size:10px;">${g.categoria.toUpperCase()}</span></td>
         <td>${g.concepto}</td>
         <td style="text-align:center;">${g.asistencia_dias ? `${g.asistencia_dias} ${corteDe(g.tipo_renta).corta}` : '--'}</td>
         <td style="text-align:right;">${g.costo_tarifa ? `${formatMXN(g.costo_tarifa)}<br><small style="color:#64748B">por ${corteDe(g.tipo_renta).unidad}</small>` : '--'}</td>
         <td style="text-align:right;">${!esAnticipo ? `$${formatMXN(g.monto)}` : '--'}</td>
-        <td style="text-align:right;">${esAnticipo ? `$${formatMXN(g.monto)}` : '--'}</td>
+        <td style="text-align:right;">${esAnticipo ? `${formatMXN(g.monto)}` : '--'}</td>
+        <td>${esAnticipo ? (g.pagado_por || '--') : '--'}</td>
       </tr>
     `;
   });
@@ -33,7 +35,10 @@ export const generarPlantillaMaquinaria = (
     <head>
         <meta charset="utf-8">
         <style>
-            body { font-family: 'Helvetica', sans-serif; padding: 30px; color: #1e293b; font-size: 11px; }
+            /* Diez columnas no caben en vertical: sin esto el reporte sale
+               con las cifras encimadas y no se puede cotejar con la factura. */
+            @page { size: A4 landscape; margin: 15mm; }
+            body { font-family: 'Helvetica', sans-serif; padding: 20px; color: #1e293b; font-size: 10px; }
             .header-table { width: 100%; margin-bottom: 25px; border-bottom: 3px solid #2563eb; padding-bottom: 15px; }
             .title { color: #2563eb; font-size: 20px; font-weight: bold; }
             .summary-box { display: flex; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 20px; }
@@ -42,8 +47,8 @@ export const generarPlantillaMaquinaria = (
             .summary-label { font-size: 9px; text-transform: uppercase; color: #64748B; font-weight: 800; }
             .summary-value { font-size: 14px; font-weight: bold; margin-top: 4px; }
             table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-            th { background: #0f172a; color: #fff; padding: 8px; text-align: left; font-size: 10px; text-transform: uppercase; }
-            td { border: 1px solid #e2e8f0; padding: 8px; }
+            th { background: #0f172a; color: #fff; padding: 6px; text-align: left; font-size: 9px; text-transform: uppercase; }
+            td { border: 1px solid #e2e8f0; padding: 6px; }
             .total-row { background: #f1f5f9; font-weight: bold; }
         </style>
     </head>
@@ -60,12 +65,13 @@ export const generarPlantillaMaquinaria = (
             <div class="summary-col"><div class="summary-label">Saldo Pendiente</div><div class="summary-value" style="color:${saldo > 0 ? '#DC2626' : '#059669'}">$${formatMXN(saldo)}</div></div>
         </div>
         <table>
-            <thead><tr><th>Fecha</th><th>Equipo</th><th>Tipo</th><th>Concepto</th><th>Cantidad</th><th>Tarifa</th><th>Cargo</th><th>Abono</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Equipo</th><th>Proveedor</th><th>Tipo</th><th>Concepto</th><th>Cantidad</th><th>Tarifa</th><th>Cargo</th><th>Abono</th><th>Quién paga</th></tr></thead>
             <tbody>${filas}
                 <tr class="total-row">
-                    <td colspan="6" style="text-align:right;">TOTALES:</td>
-                    <td style="text-align:right;">$${formatMXN(totalGenerado)}</td>
-                    <td style="text-align:right;">$${formatMXN(totalPagado)}</td>
+                    <td colspan="7" style="text-align:right;">TOTALES:</td>
+                    <td style="text-align:right;">${formatMXN(totalGenerado)}</td>
+                    <td style="text-align:right;">${formatMXN(totalPagado)}</td>
+                    <td></td>
                 </tr>
             </tbody>
         </table>
