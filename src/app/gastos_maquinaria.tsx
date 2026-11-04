@@ -347,13 +347,14 @@ export default function GastosMaquinariaScreen() {
     }
   };
 
-  /* Las horas y la hora de salida se mueven juntas, en los dos sentidos.
+  /* Horas, entrada y salida: con dos cualesquiera sale la tercera.
    *
-   * Con la entrada puesta: si se teclean las horas, sale la salida; si se
-   * elige la salida, salen las horas. Antes solo funcionaba el primer
-   * sentido, asi que quien anotaba "entro a las 7, salio a la 1" tenia que
-   * sacar la resta de cabeza y teclearla. Ahi se colaban los errores que
-   * despues no cuadraban con la factura del proveedor.
+   * El calculo arranca de la hora que la persona haya escrito. Antes, al
+   * teclear las horas sin haber puesto ninguna, se tomaba la hora ACTUAL
+   * como entrada y de ahi salia una salida inventada: capturar a las 6 de
+   * la tarde una jornada de 8 horas dejaba escrito que el equipo habia
+   * entrado a las 6 p.m. Lo que se escribe manda, y lo que no se escribio
+   * se queda vacio.
    *
    * Nada de esto aplica fuera del corte por hora: con el corte por viaje lo
    * capturado son viajes, y pisarlo con una resta de relojes seria inventar
@@ -385,14 +386,44 @@ export default function GastosMaquinariaScreen() {
     setHoraSalida(comoTexto(nuevaSalida));
   };
 
+  /** De las horas tecleadas y la salida sale la hora de entrada. */
+  const recalcularHoraEntrada = (horasStr: string, salidaDate: Date) => {
+    setHorasOperacion(horasStr);
+    const hrs = parseFloat(horasStr);
+    if (isNaN(hrs) || hrs <= 0) return;
+
+    const nuevaEntrada = new Date(salidaDate);
+    nuevaEntrada.setMinutes(nuevaEntrada.getMinutes() - Math.round(hrs * 60));
+
+    setTimeEntradaDate(nuevaEntrada);
+    setHoraEntrada(comoTexto(nuevaEntrada));
+  };
+
+  /* Lo que pasa al teclear las horas, segun lo que ya este escrito.
+   *
+   * Sin ninguna hora puesta no se toca ningun reloj: se guardan las horas y
+   * ya. Inventar una entrada a partir del momento de la captura es peor que
+   * dejarlo en blanco, porque queda en la bitacora como si alguien la
+   * hubiera anotado. */
+  const cambiarHoras = (horasStr: string) => {
+    setHorasOperacion(horasStr);
+    if (corteDeLaMaquina.valor !== 'hora') return;
+
+    if (horaEntrada) recalcularHoraSalida(horasStr, timeEntradaDate);
+    else if (horaSalida) recalcularHoraEntrada(horasStr, timeSalidaDate);
+  };
+
   /** De la hora de salida salen las horas trabajadas. */
   const recalcularHoras = (salidaDate: Date, entradaDate: Date) => {
     setTimeSalidaDate(salidaDate);
     setHoraSalida(comoTexto(salidaDate));
 
-    // Sin hora de entrada no hay de donde restar.
-    if (!horaEntrada || corteDeLaMaquina.valor !== 'hora') return;
-    setHorasOperacion(String(horasEntre(entradaDate, salidaDate)));
+    if (corteDeLaMaquina.valor !== 'hora') return;
+
+    // Con entrada puesta salen las horas; sin ella, pero con horas ya
+    // tecleadas, sale la entrada. Sin ninguna de las dos no hay que calcular.
+    if (horaEntrada) setHorasOperacion(String(horasEntre(entradaDate, salidaDate)));
+    else if (horasOperacion) recalcularHoraEntrada(horasOperacion, salidaDate);
   };
 
   /* Al mover la entrada manda lo que ya estaba puesto: si habia salida se
@@ -970,11 +1001,7 @@ export default function GastosMaquinariaScreen() {
                   placeholder="0" 
                   keyboardType="numeric" 
                   value={horasOperacion} 
-                  onChangeText={(v) => {
-                      const cleanValue = limitarNumero(v);
-                      setHorasOperacion(cleanValue);
-                      if (corteDeLaMaquina.valor === 'hora') recalcularHoraSalida(cleanValue, timeEntradaDate);
-                  }} 
+                  onChangeText={(v) => cambiarHoras(limitarNumero(v))} 
                   autoFocus 
               />
 
