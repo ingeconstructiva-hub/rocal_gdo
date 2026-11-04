@@ -35,7 +35,7 @@ import { supabase } from '../lib/supabase';
 import { limitarNumero, revisarNumeros } from '../lib/limites';
 import { mensajeDeError } from '../lib/errores';
 import { esDeHoy, eliminarRegistro } from '../lib/permisos';
-import { CORTES, Corte, corteDe, enHorasYMinutos, TIPOS_DE_VIAJE } from '../lib/maquinaria';
+import { CORTES, Corte, corteDe, enHorasYMinutos, juntarHoras, partirHoras, TIPOS_DE_VIAJE } from '../lib/maquinaria';
 import { SelectorHora } from '../components/SelectorHora';
 import { generarPlantillaMaquinaria } from '../utils/pdfMaquinaria';
 
@@ -383,6 +383,17 @@ export default function GastosMaquinariaScreen() {
 
     setTimeSalidaDate(nuevaSalida);
     setHoraSalida(comoTexto(nuevaSalida));
+  };
+
+  /* Horas y minutos son dos campos, pero por debajo siguen siendo un solo
+   * numero decimal, que es lo que se multiplica por la tarifa. */
+  const cambiarHorasMinutos = (horasStr: string, minutosStr: string) => {
+    const soloDigitos = (v: string) => Number(v.replace(/[^0-9]/g, '')) || 0;
+    const decimal = juntarHoras(soloDigitos(horasStr), soloDigitos(minutosStr));
+    const texto = decimal > 0 ? String(decimal) : '';
+
+    setHorasOperacion(texto);
+    recalcularHoraSalida(texto, timeEntradaDate);
   };
 
   /** De la hora de salida salen las horas trabajadas. */
@@ -965,29 +976,55 @@ export default function GastosMaquinariaScreen() {
               </View>
               
               <Text style={styles.modalLabel}>{corteDeLaMaquina.unidades} a Facturar</Text>
-              <TextInput 
-                  style={[styles.modalInput, { fontSize: 20, fontWeight: 'bold', color: '#2563EB', textAlign: 'center' }]} 
-                  placeholder="0" 
-                  keyboardType="numeric" 
-                  value={horasOperacion} 
-                  onChangeText={(v) => {
-                      const cleanValue = limitarNumero(v);
-                      setHorasOperacion(cleanValue);
-                      if (corteDeLaMaquina.valor === 'hora') recalcularHoraSalida(cleanValue, timeEntradaDate);
-                  }} 
-                  autoFocus 
-              />
 
-              {/* Con un numero puesto se lee en horas y minutos, que es lo que
-                  el residente puede confirmar de un vistazo: "4.97" no se
-                  parece a nada, "4 h 58 min" si. Sin numero todavia, se
-                  explica el doble sentido, que si no nadie lo descubre. */}
-              {corteDeLaMaquina.valor === 'hora' && (
-                <Text style={{ fontSize: 12, color: '#94A3B8', marginTop: -6, marginBottom: 10, fontStyle: 'italic' }}>
-                  {enHorasYMinutos(Number(horasOperacion))
-                    ? `Son ${enHorasYMinutos(Number(horasOperacion))} de operación.`
-                    : 'Pon las horas y sale la salida, o pon la salida y salen las horas.'}
-                </Text>
+              {/* Con el corte por hora se capturan horas y minutos por separado.
+                  Un solo campo obligaba a teclear "1.75", que nadie dice ni puede
+                  confirmar de un vistazo; peor aun cuando la resta de relojes
+                  devolvia cosas como 4.97. El decimal sigue existiendo por debajo
+                  porque es lo que se multiplica por la tarifa. */}
+              {corteDeLaMaquina.valor === 'hora' ? (
+                <>
+                  <View style={styles.rowGrid}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.modalLabel}>Horas</Text>
+                      <TextInput
+                        style={[styles.modalInput, { fontSize: 20, fontWeight: 'bold', color: '#2563EB', textAlign: 'center' }]}
+                        placeholder="0"
+                        keyboardType="numeric"
+                        value={horasOperacion ? String(partirHoras(Number(horasOperacion)).horas) : ''}
+                        onChangeText={(v) =>
+                          cambiarHorasMinutos(v, String(partirHoras(Number(horasOperacion)).minutos))
+                        }
+                        autoFocus
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.modalLabel}>Minutos</Text>
+                      <TextInput
+                        style={[styles.modalInput, { fontSize: 20, fontWeight: 'bold', color: '#2563EB', textAlign: 'center' }]}
+                        placeholder="0"
+                        keyboardType="numeric"
+                        value={horasOperacion ? String(partirHoras(Number(horasOperacion)).minutos) : ''}
+                        onChangeText={(v) =>
+                          cambiarHorasMinutos(String(partirHoras(Number(horasOperacion)).horas), v)
+                        }
+                      />
+                    </View>
+                  </View>
+
+                  <Text style={{ fontSize: 12, color: '#94A3B8', marginTop: 2, marginBottom: 10, fontStyle: 'italic' }}>
+                    Pon las horas y sale la salida, o pon la salida y salen las horas.
+                  </Text>
+                </>
+              ) : (
+                <TextInput
+                  style={[styles.modalInput, { fontSize: 20, fontWeight: 'bold', color: '#2563EB', textAlign: 'center' }]}
+                  placeholder="0"
+                  keyboardType="numeric"
+                  value={horasOperacion}
+                  onChangeText={(v) => setHorasOperacion(limitarNumero(v))}
+                  autoFocus
+                />
               )}
               
               <View style={styles.rowGrid}>
