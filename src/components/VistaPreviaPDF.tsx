@@ -4,7 +4,7 @@
  * al compartir o imprimir el PDF. Aquí no se dibuja nada.
  */
 
-export function mostrarVistaPrevia(_html: string, _nombreArchivo: string) {
+export function mostrarVistaPrevia(_html: string, _nombreArchivo: string, _reporte?: unknown) {
   // En nativo no se usa: exportar.ts genera el PDF y abre el menú de compartir.
 }
 

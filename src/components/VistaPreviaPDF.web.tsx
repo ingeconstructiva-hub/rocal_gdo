@@ -9,22 +9,29 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { compartirODescargar, sePuedeCompartir } from '../lib/exportar.web';
+import { crearPdfReporte } from '../lib/pdfReporte.web';
+import type { Reporte } from '../lib/reporte';
 
-type Documento = { html: string; nombre: string };
+/* El reporte viaja junto al HTML para poder armar el archivo al compartir.
+ * Sin el, lo unico que hay es el dialogo de impresion, que en iOS es un menu
+ * de impresora del que hay que adivinar como salir con un PDF. */
+type Documento = { html: string; nombre: string; reporte?: Reporte };
 
 let entregar: ((doc: Documento) => void) | null = null;
 const fila: Documento[] = [];
 
 /** La llama exportar.web.ts cuando hay que mostrar un reporte. */
-export function mostrarVistaPrevia(html: string, nombreArchivo: string) {
-  const doc = { html, nombre: nombreArchivo };
+export function mostrarVistaPrevia(html: string, nombreArchivo: string, reporte?: Reporte) {
+  const doc = { html, nombre: nombreArchivo, reporte };
   if (entregar) entregar(doc);
   else fila.push(doc);
 }
 
 export function VistaPreviaPDF() {
   const [documento, setDocumento] = useState<Documento | null>(null);
+  const [compartiendo, setCompartiendo] = useState(false);
   const marcoRef = useRef<HTMLIFrameElement | null>(null);
 
   useEffect(() => {
@@ -36,6 +43,26 @@ export function VistaPreviaPDF() {
   }, []);
 
   if (!documento) return null;
+
+  /* El boton cambia de nombre, no se esconde.
+   *
+   * En celular el sistema abre el menu de compartir; en una computadora con
+   * Chrome no existe ese menu, asi que descarga el archivo. Esconderlo en
+   * escritorio dejaba sin salida: ahi el unico camino era el dialogo de
+   * impresion, que es justo lo que estorbaba. */
+  const hayReporte = !!documento?.reporte;
+  const etiquetaAccion = sePuedeCompartir() ? 'Compartir' : 'Descargar PDF';
+
+  const compartir = async () => {
+    if (!documento?.reporte) return;
+    setCompartiendo(true);
+    try {
+      const blob = crearPdfReporte(documento.reporte);
+      await compartirODescargar(blob, documento.nombre, 'application/pdf');
+    } finally {
+      setCompartiendo(false);
+    }
+  };
 
   const imprimir = () => {
     const ventana = marcoRef.current?.contentWindow;
@@ -56,6 +83,16 @@ export function VistaPreviaPDF() {
             {documento.nombre.replace(/\.pdf$/i, '')}
           </Text>
 
+          {hayReporte ? (
+            <Pressable onPress={compartir} disabled={compartiendo} style={estilos.botonCompartir}>
+              {compartiendo ? (
+                <ActivityIndicator size="small" color="#04342C" />
+              ) : (
+                <Text style={estilos.textoCompartir}>{etiquetaAccion}</Text>
+              )}
+            </Pressable>
+          ) : null}
+
           <Pressable onPress={imprimir} style={estilos.botonImprimir}>
             <Text style={estilos.textoImprimir}>Guardar PDF</Text>
           </Pressable>
@@ -70,7 +107,9 @@ export function VistaPreviaPDF() {
 
         <View style={estilos.pie}>
           <Text style={estilos.ayuda}>
-            Para guardarlo, toca "Guardar PDF" y elige Guardar como PDF en el menú de impresión.
+            {hayReporte
+              ? `Toca "${etiquetaAccion}" para quedarte con el archivo, o "Guardar PDF" para imprimirlo.`
+              : 'Para guardarlo, toca "Guardar PDF" y elige Guardar como PDF en el menú de impresión.'}
           </Text>
         </View>
       </View>
@@ -92,6 +131,8 @@ const estilos = StyleSheet.create({
   titulo: { flex: 1, color: '#FFFFFF', fontWeight: '700', fontSize: 14, textAlign: 'center' },
   botonCerrar: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.15)' },
   textoCerrar: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
+  botonCompartir: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#2ECC71', minWidth: 86, alignItems: 'center' },
+  textoCompartir: { color: '#04342C', fontWeight: '700', fontSize: 13 },
   botonImprimir: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#FFFFFF' },
   textoImprimir: { color: '#20398E', fontWeight: '700', fontSize: 13 },
   pie: { paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#E2E8F0' },

@@ -1,6 +1,5 @@
 import { mostrarVistaPrevia } from '../components/VistaPreviaPDF';
-import { crearPdfReporte } from './pdfReporte.web';
-import type { Reporte } from './reporte';
+import { reporteAHtml, type Reporte } from './reporte';
 
 /* Exportar PDF y hojas de cálculo (versión navegador).
  *
@@ -66,10 +65,13 @@ export function sePuedeCompartir(): boolean {
   }
 }
 
-/** El reporte como PDF de verdad, listo para compartir o descargar. */
+/* El reporte se muestra primero y desde ahi se comparte.
+ *
+ * Saltarse la vista previa seria mas corto, pero nadie manda por WhatsApp un
+ * documento que no ha visto: la vista previa es donde se cacha que falto una
+ * semana o que el saldo no cuadra, antes de que lo vea el proveedor. */
 export async function exportarReporte(reporte: Reporte, nombreArchivo: string): Promise<void> {
-  const blob = crearPdfReporte(reporte);
-  await compartirODescargar(blob, nombreArchivo, 'application/pdf');
+  mostrarVistaPrevia(reporteAHtml(reporte), nombreArchivo, reporte);
 }
 
 /** Muestra el reporte dentro de la app, con botón para guardarlo como PDF. */
