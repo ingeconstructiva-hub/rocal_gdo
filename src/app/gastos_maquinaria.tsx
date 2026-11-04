@@ -170,10 +170,14 @@ export default function GastosMaquinariaScreen() {
           await Almacen.setItem(`@gastos_maquinaria_log_${pid}`, JSON.stringify(data));
         }
       }
-    } catch (error) { 
-      console.log(error); 
-    } finally { 
-      setLoading(false); 
+    } catch (error: any) {
+      /* Antes esto solo hacia console.log. Al fallar la consulta la
+       * pantalla se quedaba sin maquinas, y como los botones de Excel y PDF
+       * solo salen cuando hay al menos una, desaparecian sin explicacion:
+       * se veia igual que una obra sin equipos dados de alta. */
+      Aviso.alert('No se pudo cargar la maquinaria', mensajeDeError(error, 'traer los registros de maquinaria'));
+    } finally {
+      setLoading(false);
     }
   };
 
