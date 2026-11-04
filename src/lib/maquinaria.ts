@@ -69,23 +69,3 @@ export const enHorasYMinutos = (horas: number): string => {
   if (m === 0) return `${h} h`;
   return `${h} h ${m} min`;
 };
-
-/* El decimal partido en horas y minutos, y de vuelta.
- *
- * Nadie teclea "1.75": teclea 1 hora y 45 minutos. El decimal se queda por
- * debajo porque es lo que se multiplica por la tarifa, pero la captura se
- * hace como se dice en obra.
- */
-export const partirHoras = (decimal: number): { horas: number; minutos: number } => {
-  if (!Number.isFinite(decimal) || decimal <= 0) return { horas: 0, minutos: 0 };
-  const minutosTotales = Math.round(decimal * 60);
-  return { horas: Math.floor(minutosTotales / 60), minutos: minutosTotales % 60 };
-};
-
-/* De horas y minutos al decimal. Los minutos de mas se acomodan solos: quien
- * teclea 90 minutos obtiene una hora y media, no un numero imposible. */
-export const juntarHoras = (horas: number, minutos: number): number => {
-  const minutosTotales = (Number(horas) || 0) * 60 + (Number(minutos) || 0);
-  if (minutosTotales <= 0) return 0;
-  return Math.round((minutosTotales / 60) * 100) / 100;
-};
