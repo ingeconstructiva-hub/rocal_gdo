@@ -50,3 +50,22 @@ export const corteDe = (valor?: string | null): DefinicionDeCorte =>
  * saber cuál era la pipa de agua y cuál el acarreo de escombro.
  */
 export const TIPOS_DE_VIAJE = ['Pipa', 'Material', 'Escombro', 'Agua', 'Otro'] as const;
+
+/* "4.97" leido como 4 h 58 min.
+ *
+ * El campo guarda horas decimales porque es lo que se multiplica por la
+ * tarifa, pero nadie trabaja 4.97 horas: eso sale de restar dos relojes y no
+ * se parece a nada que el residente pueda confirmar de un vistazo. El numero
+ * decimal se queda para la cuenta; abajo se lee en horas y minutos.
+ */
+export const enHorasYMinutos = (horas: number): string => {
+  if (!Number.isFinite(horas) || horas <= 0) return '';
+
+  const minutosTotales = Math.round(horas * 60);
+  const h = Math.floor(minutosTotales / 60);
+  const m = minutosTotales % 60;
+
+  if (h === 0) return `${m} min`;
+  if (m === 0) return `${h} h`;
+  return `${h} h ${m} min`;
+};

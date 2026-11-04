@@ -35,7 +35,7 @@ import { supabase } from '../lib/supabase';
 import { limitarNumero, revisarNumeros } from '../lib/limites';
 import { mensajeDeError } from '../lib/errores';
 import { esDeHoy, eliminarRegistro } from '../lib/permisos';
-import { CORTES, Corte, corteDe, TIPOS_DE_VIAJE } from '../lib/maquinaria';
+import { CORTES, Corte, corteDe, enHorasYMinutos, TIPOS_DE_VIAJE } from '../lib/maquinaria';
 import { SelectorHora } from '../components/SelectorHora';
 import { generarPlantillaMaquinaria } from '../utils/pdfMaquinaria';
 
@@ -792,7 +792,14 @@ export default function GastosMaquinariaScreen() {
                       <Text style={styles.historyDate}>{new Date(reg.fecha).toLocaleDateString('es-MX')} • {reg.hora_entrada} a {reg.hora_salida}</Text>
                     </View>
                     <View style={styles.historyAmountBox}>
-                      <Text style={styles.historyHrs}>{reg.asistencia_dias} hrs</Text>
+                      {/* En la bitacora decia "hrs" pasara lo que pasara, asi que
+                          dos viajes se leian como dos horas. Cada renglon se lee
+                          en la unidad de su corte, y las horas con sus minutos. */}
+                      <Text style={styles.historyHrs}>
+                        {corteDe(reg.tipo_renta).valor === 'hora'
+                          ? enHorasYMinutos(Number(reg.asistencia_dias))
+                          : `${reg.asistencia_dias} ${corteDe(reg.tipo_renta).corta}`}
+                      </Text>
                       <Text style={styles.historyAmountCargo}>${Number(reg.monto).toLocaleString('es-MX')}</Text>
                     </View>
                     {isAdminOrOficina ? (
@@ -971,11 +978,15 @@ export default function GastosMaquinariaScreen() {
                   autoFocus 
               />
 
-              {/* Que el calculo no sea magia invisible: si no se dice, nadie
-                  descubre que tambien se puede capturar al reves. */}
+              {/* Con un numero puesto se lee en horas y minutos, que es lo que
+                  el residente puede confirmar de un vistazo: "4.97" no se
+                  parece a nada, "4 h 58 min" si. Sin numero todavia, se
+                  explica el doble sentido, que si no nadie lo descubre. */}
               {corteDeLaMaquina.valor === 'hora' && (
-                <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: -6, marginBottom: 10, fontStyle: 'italic' }}>
-                  Pon las horas y sale la salida, o pon la salida y salen las horas.
+                <Text style={{ fontSize: 12, color: '#94A3B8', marginTop: -6, marginBottom: 10, fontStyle: 'italic' }}>
+                  {enHorasYMinutos(Number(horasOperacion))
+                    ? `Son ${enHorasYMinutos(Number(horasOperacion))} de operación.`
+                    : 'Pon las horas y sale la salida, o pon la salida y salen las horas.'}
                 </Text>
               )}
               
