@@ -115,7 +115,7 @@ export default function CajaChicaScreen() {
    * un concepto mal teclado. Se mide con la fecha de captura ('created_at'),
    * no con 'fecha', porque esa última la puede escribir el usuario. */
   const puedeCorregirResidente = (mov: MovimientoFinanciero) =>
-    esResidente && esDeHoy(mov.created_at || mov.fecha);
+    esResidente && esDeHoy(mov.created_at);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
 
   // Cálculos reactivos de balance global de caja

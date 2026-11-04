@@ -79,13 +79,22 @@ export default function ProyectosScreen() {
   }, [isOffline, isLoadingUser, isAdmin]);
 
   const cargarResidentesDisponibles = async () => {
-    const { data } = await supabase
+    /* El error se revisa. Antes se salía por el 'if (data)' sin decir nada:
+     * si la consulta fallaba, el desplegable se quedaba con lo que tuviera
+     * —que podía ser nada, o un solo nombre— y desde la pantalla parecía
+     * que no había residentes dados de alta. */
+    const { data, error } = await supabase
       .from('profiles')
       .select('id, full_name')
       .eq('role', 'residente')
       .order('full_name', { ascending: true });
 
-    if (data) setListaResidentes(data);
+    if (error) {
+      Aviso.alert('No se pudo cargar la lista', mensajeDeError(error, 'traer los residentes'));
+      return;
+    }
+
+    setListaResidentes(data || []);
   };
 
 
