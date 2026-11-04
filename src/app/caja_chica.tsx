@@ -232,18 +232,31 @@ export default function CajaChicaScreen() {
       let listaEgresos: any[] = [];
       let listaIngresos: any[] = [];
 
-      if (isOffline) {
-        const cachedCaja = await Almacen.getItem(`@caja_chica_cache_${pid}`);
-        const cachedIngresos = await Almacen.getItem(`@ingresos_cache_${pid}`);
-        listaEgresos = cachedCaja ? JSON.parse(cachedCaja) : [];
-        listaIngresos = cachedIngresos ? JSON.parse(cachedIngresos) : [];
-      } else {
-        const { data: egresos } = await supabase.from('caja_chica').select('*').eq('project_id', pid).eq('is_active', true);
-        const { data: ingresos } = await supabase.from('ingresos_obra').select('*').eq('project_id', pid).eq('is_active', true);
-        listaEgresos = egresos || [];
-        listaIngresos = ingresos || [];
-        await Almacen.setItem(`@caja_chica_cache_${pid}`, JSON.stringify(listaEgresos));
-        await Almacen.setItem(`@ingresos_cache_${pid}`, JSON.stringify(listaIngresos));
+      /* El cache se lee siempre, no solo sin internet: es el respaldo si la
+       * consulta falla. Antes el error no se revisaba, asi que un fallo
+       * momentaneo (una sesion recien vencida al reabrir la app, por ejemplo)
+       * dejaba egresos en null, la pantalla se veia vacia Y el cache se
+       * sobreescribia con [], de modo que la obra seguia pareciendo borrada
+       * aunque ya hubiera internet. */
+      const cachedCaja = await Almacen.getItem(`@caja_chica_cache_${pid}`);
+      const cachedIngresos = await Almacen.getItem(`@ingresos_cache_${pid}`);
+      listaEgresos = cachedCaja ? JSON.parse(cachedCaja) : [];
+      listaIngresos = cachedIngresos ? JSON.parse(cachedIngresos) : [];
+
+      if (!isOffline) {
+        const { data: egresos, error: errorEgresos } = await supabase.from('caja_chica').select('*').eq('project_id', pid).eq('is_active', true);
+        const { data: ingresos, error: errorIngresos } = await supabase.from('ingresos_obra').select('*').eq('project_id', pid).eq('is_active', true);
+
+        const fallo = errorEgresos || errorIngresos;
+        if (fallo) {
+          // Se avisa y se queda lo que ya habia. Nunca se pisa el cache con [].
+          Aviso.alert('No se pudo actualizar', mensajeDeError(fallo, 'cargar los movimientos de caja'));
+        } else {
+          listaEgresos = egresos || [];
+          listaIngresos = ingresos || [];
+          await Almacen.setItem(`@caja_chica_cache_${pid}`, JSON.stringify(listaEgresos));
+          await Almacen.setItem(`@ingresos_cache_${pid}`, JSON.stringify(listaIngresos));
+        }
       }
 
       const egresosFormateados: MovimientoFinanciero[] = listaEgresos.map(e => ({

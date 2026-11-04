@@ -55,27 +55,40 @@ export default function GastosHubScreen() {
         supabase.from('gastos_generales').select('*').eq('project_id', projectId).eq('is_active', true).order('fecha', { ascending: false })
       ]);
 
-      // Guardar en las llaves de caché correspondientes
-      if (destajosRes.data) {
-        await Almacen.setItem(`@inventario_cache_${projectId}`, JSON.stringify(destajosRes.data));
-      }
-      if (cajaEgresosRes.data) {
-        await Almacen.setItem(`@caja_chica_cache_${projectId}`, JSON.stringify(cajaEgresosRes.data));
-      }
-      if (cajaIngresosRes.data) {
-        await Almacen.setItem(`@ingresos_cache_${projectId}`, JSON.stringify(cajaIngresosRes.data));
-      }
-      if (maquinariaRes.data) {
-        await Almacen.setItem(`@gastos_maquinaria_log_${projectId}`, JSON.stringify(maquinariaRes.data));
-      }
-      if (generalesRes.data) {
-        await Almacen.setItem(`@gastos_generales_log_${projectId}`, JSON.stringify(generalesRes.data));
+      /* Cada módulo se guarda solo si su consulta trajo datos, y lo que falló
+       * se nombra en el aviso. Antes decía "Sincronización Completa: todos los
+       * módulos se han actualizado" aunque alguna de las cinco consultas
+       * hubiera fallado, así que la persona se quedaba viendo el dato viejo
+       * convencida de que era el nuevo. */
+      const modulos = [
+        { nombre: 'Destajos',         res: destajosRes,     llave: `@inventario_cache_${projectId}` },
+        { nombre: 'Caja Chica',       res: cajaEgresosRes,  llave: `@caja_chica_cache_${projectId}` },
+        { nombre: 'Inversiones',      res: cajaIngresosRes, llave: `@ingresos_cache_${projectId}` },
+        { nombre: 'Maquinaria',       res: maquinariaRes,   llave: `@gastos_maquinaria_log_${projectId}` },
+        { nombre: 'Gastos Generales', res: generalesRes,    llave: `@gastos_generales_log_${projectId}` },
+      ];
+
+      const fallaron: string[] = [];
+      for (const m of modulos) {
+        if (m.res.error || !m.res.data) {
+          // No se pisa la caché: se queda lo último que sí se alcanzó a bajar.
+          fallaron.push(m.nombre);
+          continue;
+        }
+        await Almacen.setItem(m.llave, JSON.stringify(m.res.data));
       }
 
-      Aviso.alert(
-        "¡Sincronización Completa!", 
-        "Todos los módulos de gastos (Destajos, Caja Chica, Maquinaria y Gastos Generales) se han actualizado desde el servidor web."
-      );
+      if (fallaron.length === 0) {
+        Aviso.alert(
+          'Sincronización completa',
+          'Destajos, Caja Chica, Inversiones, Maquinaria y Gastos Generales quedaron al día.'
+        );
+      } else {
+        Aviso.alert(
+          'Se sincronizó a medias',
+          `No se pudo actualizar: ${fallaron.join(', ')}. Esos módulos siguen mostrando lo último que se alcanzó a guardar. Vuelve a intentarlo.`
+        );
+      }
     } catch (error: any) {
       Aviso.alert("Error de Sincronización", error.message || "No se pudo actualizar la información.");
     } finally {
