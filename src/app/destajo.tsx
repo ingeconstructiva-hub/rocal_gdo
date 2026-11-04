@@ -54,6 +54,36 @@ interface WorkerSimple {
   name: string;
 }
 
+/* Estas dos viven FUERA del componente a proposito.
+ *
+ * Estaban dentro, escritas sin sangria, lo que las hacia parecer de nivel
+ * superior sin serlo. Cualquier codigo del componente que las usara antes
+ * de su renglon tronaba con "Cannot access before initialization" y la
+ * pantalla salia en blanco, sin mensaje. No dependen de ningun estado, asi
+ * que aqui arriba no hay forma de usarlas antes de tiempo.
+ */
+/* Convierte la etiqueta de semana en una fecha para poder ordenarla.
+ *
+ * Las etiquetas son texto del estilo "28 SEP - 2 OCT 2026", asi que ordenarlas
+ * alfabeticamente pone "12 OCT" antes que "5 OCT". Se lee la fecha de cierre,
+ * que es la que trae el año.
+ *
+ * Lo que no se pueda leer se manda al final, no al principio: una etiqueta
+ * rara no debe encabezar el resumen.
+ */
+const MESES_CORTOS = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
+
+const fechaDeSemana = (etiqueta: string): number => {
+  const cierre = (etiqueta || '').split('-').pop()?.trim().toUpperCase() || '';
+  const partes = cierre.match(/^(\d{1,2})\s+([A-ZÁÉÍÓÚ]{3})\s+(\d{4})$/);
+  if (!partes) return -Infinity;
+
+  const mes = MESES_CORTOS.indexOf(partes[2]);
+  if (mes === -1) return -Infinity;
+
+  return new Date(Number(partes[3]), mes, Number(partes[1])).getTime();
+};
+
 export default function InventarioScreen() {
   const router = useRouter();
   
@@ -288,28 +318,6 @@ export default function InventarioScreen() {
       }
     }
   };
-
-/* Convierte la etiqueta de semana en una fecha para poder ordenarla.
- *
- * Las etiquetas son texto del estilo "28 SEP - 2 OCT 2026", asi que ordenarlas
- * alfabeticamente pone "12 OCT" antes que "5 OCT". Se lee la fecha de cierre,
- * que es la que trae el año.
- *
- * Lo que no se pueda leer se manda al final, no al principio: una etiqueta
- * rara no debe encabezar el resumen.
- */
-const MESES_CORTOS = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
-
-const fechaDeSemana = (etiqueta: string): number => {
-  const cierre = (etiqueta || '').split('-').pop()?.trim().toUpperCase() || '';
-  const partes = cierre.match(/^(\d{1,2})\s+([A-ZÁÉÍÓÚ]{3})\s+(\d{4})$/);
-  if (!partes) return -Infinity;
-
-  const mes = MESES_CORTOS.indexOf(partes[2]);
-  if (mes === -1) return -Infinity;
-
-  return new Date(Number(partes[3]), mes, Number(partes[1])).getTime();
-};
 
   // Filtrado reactivo por texto de búsqueda
   const filteredItems = items.filter(item => {
