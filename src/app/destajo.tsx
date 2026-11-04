@@ -34,7 +34,7 @@ import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
 import { limitarNumero, MAX_CANTIDAD, revisarNumeros } from '../lib/limites';
 import { mensajeDeError } from '../lib/errores';
-import { esDeHoy, eliminarRegistro } from '../lib/permisos';
+import { esDeHoy, eliminarRegistro, puedeExportar } from '../lib/permisos';
 import { generarPlantillaInventario } from '../utils/pdfInventario';
 
 interface InventoryItem {
@@ -660,7 +660,7 @@ export default function InventarioScreen() {
               <Text style={styles.addButtonText} adjustsFontSizeToFit numberOfLines={1}>Concepto</Text>
             </TouchableOpacity>
             
-            {isFinancialRole ? (
+            {puedeExportar() ? (
               <View style={{flexDirection: 'row', gap: 8}}>
                 <TouchableOpacity style={[styles.addButton, styles.pdfButton]} onPress={handleExportPDF} disabled={isExporting}>
                   {isExporting ? (
