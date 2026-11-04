@@ -347,34 +347,63 @@ export default function GastosMaquinariaScreen() {
     }
   };
 
-  /**
-   * 📌 NOTA: recalcularHoraSalida
-   * Calcula automáticamente la hora de salida sumando las horas de operación a la hora de entrada.
+  /* Las horas y la hora de salida se mueven juntas, en los dos sentidos.
+   *
+   * Con la entrada puesta: si se teclean las horas, sale la salida; si se
+   * elige la salida, salen las horas. Antes solo funcionaba el primer
+   * sentido, asi que quien anotaba "entro a las 7, salio a la 1" tenia que
+   * sacar la resta de cabeza y teclearla. Ahi se colaban los errores que
+   * despues no cuadraban con la factura del proveedor.
+   *
+   * Nada de esto aplica fuera del corte por hora: con el corte por viaje lo
+   * capturado son viajes, y pisarlo con una resta de relojes seria inventar
+   * un numero.
    */
+  const comoTexto = (fecha: Date) =>
+    fecha.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  /* Horas entre dos momentos del dia, con dos decimales.
+   *
+   * Una salida anterior a la entrada se lee como turno que cruzo la
+   * medianoche: es la unica lectura que da un numero positivo. */
+  const horasEntre = (entradaDate: Date, salidaDate: Date) => {
+    let minutos = (salidaDate.getTime() - entradaDate.getTime()) / 60000;
+    if (minutos < 0) minutos += 24 * 60;
+    return Math.round((minutos / 60) * 100) / 100;
+  };
+
+  /** De las horas tecleadas sale la hora de salida. */
   const recalcularHoraSalida = (horasStr: string, entradaDate: Date) => {
     setHorasOperacion(horasStr);
     const hrs = parseFloat(horasStr);
     if (isNaN(hrs) || hrs <= 0) return;
 
     const nuevaSalida = new Date(entradaDate);
-    const horasEnteras = Math.floor(hrs);
-    const minutos = (hrs - horasEnteras) * 60;
-    
-    nuevaSalida.setHours(nuevaSalida.getHours() + horasEnteras);
-    nuevaSalida.setMinutes(nuevaSalida.getMinutes() + minutos);
-    
+    nuevaSalida.setMinutes(nuevaSalida.getMinutes() + Math.round(hrs * 60));
+
     setTimeSalidaDate(nuevaSalida);
-    setHoraSalida(nuevaSalida.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
+    setHoraSalida(comoTexto(nuevaSalida));
   };
 
-  /**
-   * 📌 NOTA: handleEntradaChange
-   * Actualiza el valor de la hora de entrada y dispara el recálculo automático de la salida.
-   */
+  /** De la hora de salida salen las horas trabajadas. */
+  const recalcularHoras = (salidaDate: Date, entradaDate: Date) => {
+    setTimeSalidaDate(salidaDate);
+    setHoraSalida(comoTexto(salidaDate));
+
+    // Sin hora de entrada no hay de donde restar.
+    if (!horaEntrada || corteDeLaMaquina.valor !== 'hora') return;
+    setHorasOperacion(String(horasEntre(entradaDate, salidaDate)));
+  };
+
+  /* Al mover la entrada manda lo que ya estaba puesto: si habia salida se
+   * recalculan las horas, y si no, pero habia horas, se recalcula la salida. */
   const handleEntradaChange = (date: Date) => {
     setTimeEntradaDate(date);
-    setHoraEntrada(date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
-    if (horasOperacion) recalcularHoraSalida(horasOperacion, date);
+    setHoraEntrada(comoTexto(date));
+
+    if (corteDeLaMaquina.valor !== 'hora') return;
+    if (horaSalida) setHorasOperacion(String(horasEntre(date, timeSalidaDate)));
+    else if (horasOperacion) recalcularHoraSalida(horasOperacion, date);
   };
 
   /**
@@ -941,10 +970,18 @@ export default function GastosMaquinariaScreen() {
                   }} 
                   autoFocus 
               />
+
+              {/* Que el calculo no sea magia invisible: si no se dice, nadie
+                  descubre que tambien se puede capturar al reves. */}
+              {corteDeLaMaquina.valor === 'hora' && (
+                <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: -6, marginBottom: 10, fontStyle: 'italic' }}>
+                  Pon las horas y sale la salida, o pon la salida y salen las horas.
+                </Text>
+              )}
               
               <View style={styles.rowGrid}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.modalLabel}>Entrada (Opc.)</Text>
+                  <Text style={styles.modalLabel}>Entrada</Text>
                   <SelectorHora
                     valor={horaEntrada ? timeEntradaDate : null}
                     alCambiar={handleEntradaChange}
@@ -952,10 +989,10 @@ export default function GastosMaquinariaScreen() {
                   />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.modalLabel}>Salida (Auto)</Text>
+                  <Text style={styles.modalLabel}>Salida</Text>
                   <SelectorHora
                     valor={horaSalida ? timeSalidaDate : null}
-                    alCambiar={(d) => { setTimeSalidaDate(d); setHoraSalida(d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })); }}
+                    alCambiar={(d) => recalcularHoras(d, timeEntradaDate)}
                     textoVacio="Fin"
                   />
                 </View>
