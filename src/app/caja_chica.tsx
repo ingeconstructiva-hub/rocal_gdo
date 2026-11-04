@@ -43,7 +43,7 @@ import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
 import { limitarNumero, revisarNumeros } from '../lib/limites';
-import { esDeHoy, eliminarRegistro } from '../lib/permisos';
+import { esDeHoy, eliminarRegistro, puedeExportar } from '../lib/permisos';
 import { mensajeDeError } from '../lib/errores';
 import { SelectorFecha } from '../components/SelectorFecha';
 import { generarPlantillaCajaChica } from '../utils/pdfCajaChica';
@@ -677,7 +677,7 @@ export default function CajaChicaScreen() {
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>{filtroActivo === 'todos' ? 'Historial de Movimientos' : filtroActivo === 'ingreso' ? 'Solo Inversiones' : 'Solo Gastos'}</Text>
           
-          {isAdminOrOficina ? (
+          {puedeExportar() ? (
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <TouchableOpacity onPress={handleExportarPDF} disabled={isExportingPDF} style={[styles.excelBtnHeader, { backgroundColor: '#DC2626' }]}>
                 {isExportingPDF ? <ActivityIndicator size="small" color="#FFF" /> : (

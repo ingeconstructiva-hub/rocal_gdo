@@ -19,7 +19,7 @@ import { Aviso } from '../../lib/aviso';
 import SummaryCard from '../../components/SummaryCard';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
-import { esDeHoy } from '../../lib/permisos';
+import { esDeHoy, puedeExportar } from '../../lib/permisos';
 import { calcularTotalFinal, diasDeSemana, etiquetaSemana, inicioDeSemana, rangoSemana } from '../../lib/nomina';
 import { mensajeDeError } from '../../lib/errores';
 import { supabase } from '../../lib/supabase';
@@ -797,7 +797,7 @@ export default function ListaScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sectionTitle}>Lista de {activeCategory === 'obrero' ? 'Obreros' : 'Técnicos'}</Text>
                 </View>
-                {isFinancialRole && (
+                {puedeExportar() && (
                   <View style={styles.exportButtonsContainer}>
                     <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#DC2626'}]} onPress={handleGeneratePDF}><Feather name="file-text" size={14} color="#FFF" /><Text style={styles.exportBtnText}>PDF</Text></TouchableOpacity>
                     <TouchableOpacity style={[styles.exportBtn, {backgroundColor: '#10B981', marginLeft: 8}]} onPress={handleExportarExcel}><Feather name="grid" size={14} color="#FFF" /><Text style={styles.exportBtnText}>Excel</Text></TouchableOpacity>

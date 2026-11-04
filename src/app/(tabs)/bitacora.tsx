@@ -20,7 +20,7 @@ import { FotoSinConexion } from '../../components/FotoSinConexion';
 import { Aviso } from '../../lib/aviso';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
-import { esDeHoy } from '../../lib/permisos';
+import { esDeHoy, puedeExportar } from '../../lib/permisos';
 import { supabase } from '../../lib/supabase';
 import { generarPlantillaBitacora } from '../../utils/pdfTemplate';
 
@@ -500,7 +500,7 @@ export default function BitacoraScreen() {
 
         <View style={styles.sectionHeaderRow}>
           <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>HISTORIAL DE ENTRADAS</Text>
-          {isAdmin && (
+          {puedeExportar() && (
             <TouchableOpacity style={styles.pdfButton} onPress={handleExportPDF} disabled={isExporting}>
               {isExporting ? (
                 <ActivityIndicator size="small" color="#FFF" />

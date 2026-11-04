@@ -29,6 +29,7 @@ import { SkeletonLista } from '../components/Skeleton';
 import { subirArchivo } from '../lib/subidas';
 import { exportarPDF, exportarTexto } from '../lib/exportar';
 import { regresar } from '../lib/navegar';
+import { puedeExportar } from '../lib/permisos';
 import { firmarCampos } from '../lib/urlsFirmadas';
 import { FotoSinConexion } from '../components/FotoSinConexion';
 import { Aviso } from '../lib/aviso';
@@ -531,7 +532,7 @@ export default function GastosGeneralesScreen() {
           />
         </View>
 
-        {isAdmin ? (
+        {puedeExportar() ? (
           <View style={styles.exportContainer}>
             <TouchableOpacity style={[styles.bigExportBtn, { backgroundColor: '#DC2626' }]} onPress={handleExportarPDF} disabled={isExportingPDF}>
               {isExportingPDF ? <ActivityIndicator color="#FFF" /> : (

@@ -34,7 +34,7 @@ import { useUser } from '../context/UserContext';
 import { supabase } from '../lib/supabase';
 import { limitarNumero, revisarNumeros } from '../lib/limites';
 import { mensajeDeError } from '../lib/errores';
-import { esDeHoy, eliminarRegistro } from '../lib/permisos';
+import { esDeHoy, eliminarRegistro, puedeExportar } from '../lib/permisos';
 import { CORTES, Corte, corteDe, enHorasYMinutos, TIPOS_DE_VIAJE } from '../lib/maquinaria';
 import { SelectorHora } from '../components/SelectorHora';
 import { generarPlantillaMaquinaria } from '../utils/pdfMaquinaria';
@@ -710,7 +710,7 @@ export default function GastosMaquinariaScreen() {
           </View>
         </View>
 
-        {isAdminOrOficina && maquinasMap.length > 0 && (
+        {puedeExportar() && maquinasMap.length > 0 && (
           <View style={styles.exportContainer}>
             <TouchableOpacity style={[styles.bigExportBtn, { backgroundColor: '#10B981', flex: 1, marginRight: 10 }]} onPress={handleExportarExcel}>
               <Feather name="grid" size={20} color="#FFF" />
