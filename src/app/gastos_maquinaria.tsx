@@ -23,7 +23,7 @@ import {
 } from 'react-native';
 import { useRefrescar } from '../lib/refrescar';
 import { SkeletonLista } from '../components/Skeleton';
-import { exportarPDF, exportarTexto } from '../lib/exportar';
+import { exportarPDF, exportarReporte, exportarTexto } from '../lib/exportar';
 import { regresar } from '../lib/navegar';
 import { Aviso } from '../lib/aviso';
 
@@ -37,7 +37,7 @@ import { mensajeDeError } from '../lib/errores';
 import { esDeHoy, eliminarRegistro, puedeExportar } from '../lib/permisos';
 import { CORTES, Corte, corteDe, enHorasYMinutos, TIPOS_DE_VIAJE } from '../lib/maquinaria';
 import { SelectorHora } from '../components/SelectorHora';
-import { generarPlantillaMaquinaria } from '../utils/pdfMaquinaria';
+import { generarReporteMaquinaria } from '../utils/pdfMaquinaria';
 
 interface GastoMaquinaria {
   id: string;
@@ -667,8 +667,8 @@ export default function GastosMaquinariaScreen() {
     if (gastos.length === 0) return;
     setIsExportingPDF(true);
     try {
-      const htmlContent = generarPlantillaMaquinaria(activeProject?.name || 'Obra', globalGenerado, globalPagado, globalDeuda, gastos);
-      await exportarPDF(htmlContent, 'Gastos_Maquinaria.pdf');
+      const reporte = generarReporteMaquinaria(activeProject?.name || 'Obra', globalGenerado, globalPagado, globalDeuda, gastos);
+      await exportarReporte(reporte, 'Gastos_Maquinaria.pdf');
     } catch (error: any) { 
       Aviso.alert("Error PDF", error.message); 
     } finally { 

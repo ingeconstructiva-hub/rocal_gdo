@@ -1,37 +1,88 @@
 import { mostrarVistaPrevia } from '../components/VistaPreviaPDF';
+import { crearPdfReporte } from './pdfReporte.web';
+import type { Reporte } from './reporte';
 
 /* Exportar PDF y hojas de cálculo (versión navegador).
  *
- * PDF: se muestra dentro de la app, en una ventana con botón de cerrar y de
- * guardar. Antes se abría en otra pestaña del navegador y el usuario quedaba
- * atrapado ahí, sin forma de volver. No se usa expo-print porque en navegador
- * no devuelve ningún archivo.
+ * PDF viejo (HTML suelto): se muestra dentro de la app, en una ventana con
+ * botón de cerrar y de guardar. Antes se abría en otra pestaña y el usuario
+ * quedaba atrapado ahí, sin forma de volver.
  *
- * CSV: se arma el archivo en memoria y se dispara la descarga del navegador.
- * No se usa expo-sharing porque en web no puede compartir archivos locales.
+ * PDF nuevo (reporte con datos): se arma el archivo con jsPDF y se ofrece
+ * compartir. Es lo que destraba iOS, donde el camino de imprimir abre un menú
+ * de impresora del que hay que adivinar cómo salir con un archivo.
+ *
+ * CSV: se arma en memoria y se comparte, o se descarga si el navegador no
+ * sabe compartir archivos.
  */
 
-/** Muestra el reporte dentro de la app, con botón para guardarlo como PDF. */
-export async function exportarPDF(html: string, nombreArchivo: string): Promise<void> {
-  mostrarVistaPrevia(html, nombreArchivo);
+/* Compartir si se puede, descargar si no.
+ *
+ * El menú de compartir del sistema solo existe en celular (y en Safari de
+ * Mac). En una computadora con Chrome, `canShare` con archivos dice que no, y
+ * ahí la descarga de toda la vida es lo correcto: no tiene caso ofrecer un
+ * botón que no va a hacer nada.
+ */
+export async function compartirODescargar(
+  blob: Blob,
+  nombreArchivo: string,
+  tipo: string
+): Promise<void> {
+  const archivo = new File([blob], nombreArchivo, { type: tipo });
+
+  if (typeof navigator !== 'undefined' && navigator.canShare?.({ files: [archivo] })) {
+    try {
+      await navigator.share({ files: [archivo], title: nombreArchivo });
+      return;
+    } catch (error: any) {
+      // Cancelar no es un error: el usuario cerró el menú y ya.
+      if (error?.name === 'AbortError') return;
+      // Cualquier otra falla cae a la descarga, que siempre funciona.
+    }
+  }
+
+  descargar(blob, nombreArchivo);
 }
 
-/** Descarga un archivo de texto (CSV) desde el navegador. */
-export async function exportarTexto(
-  contenido: string,
-  nombreArchivo: string,
-  tipo = 'text/csv'
-): Promise<void> {
-  const blob = new Blob([contenido], { type: `${tipo};charset=utf-8` });
+function descargar(blob: Blob, nombreArchivo: string) {
   const url = URL.createObjectURL(blob);
-
   const enlace = document.createElement('a');
   enlace.href = url;
   enlace.download = nombreArchivo;
   document.body.appendChild(enlace);
   enlace.click();
   document.body.removeChild(enlace);
-
-  // Liberamos la memoria del archivo temporal
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** ¿Este navegador sabe abrir el menú de compartir con un archivo? */
+export function sePuedeCompartir(): boolean {
+  if (typeof navigator === 'undefined' || !navigator.canShare) return false;
+  try {
+    const prueba = new File(['x'], 'prueba.pdf', { type: 'application/pdf' });
+    return navigator.canShare({ files: [prueba] });
+  } catch {
+    return false;
+  }
+}
+
+/** El reporte como PDF de verdad, listo para compartir o descargar. */
+export async function exportarReporte(reporte: Reporte, nombreArchivo: string): Promise<void> {
+  const blob = crearPdfReporte(reporte);
+  await compartirODescargar(blob, nombreArchivo, 'application/pdf');
+}
+
+/** Muestra el reporte dentro de la app, con botón para guardarlo como PDF. */
+export async function exportarPDF(html: string, nombreArchivo: string): Promise<void> {
+  mostrarVistaPrevia(html, nombreArchivo);
+}
+
+/** Comparte o descarga un archivo de texto (CSV). */
+export async function exportarTexto(
+  contenido: string,
+  nombreArchivo: string,
+  tipo = 'text/csv'
+): Promise<void> {
+  const blob = new Blob([contenido], { type: `${tipo};charset=utf-8` });
+  await compartirODescargar(blob, nombreArchivo, tipo);
 }

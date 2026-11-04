@@ -12,11 +12,27 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { reporteAHtml, type Reporte } from './reporte';
 
 /** Genera un PDF a partir de HTML y lo ofrece para compartir o guardar. */
 export async function exportarPDF(html: string, _nombreArchivo: string): Promise<void> {
   const { uri } = await Print.printToFileAsync({ html });
   await Sharing.shareAsync(uri, { mimeType: 'application/pdf' });
+}
+
+/* El mismo reporte, por el camino que ya funciona en celular.
+ *
+ * Aquí no se usa jsPDF: expo-print imprime el HTML con el motor del sistema,
+ * que maneja acentos y saltos de página mejor, y el menú de compartir ya sale
+ * solo. jsPDF se queda para el navegador, que es donde hacía falta un archivo.
+ */
+export async function exportarReporte(reporte: Reporte, nombreArchivo: string): Promise<void> {
+  await exportarPDF(reporteAHtml(reporte), nombreArchivo);
+}
+
+/** En celular el menú de compartir siempre está. */
+export function sePuedeCompartir(): boolean {
+  return true;
 }
 
 /** Guarda un archivo de texto (CSV) y lo ofrece para compartir. */
