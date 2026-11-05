@@ -31,6 +31,7 @@ import { mensajeDeError } from '../lib/errores';
 import { exportarDocumento } from '../lib/exportar';
 import { eliminarRegistro, esDeHoy } from '../lib/permisos';
 import { subirArchivo } from '../lib/subidas';
+import { EMPRESAS } from '../lib/membretes';
 import { supabase } from '../lib/supabase';
 import { firmarVarias } from '../lib/urlsFirmadas';
 import { minutaAHtml } from '../utils/minutaHtml';
@@ -485,11 +486,11 @@ export function Minutas() {
                 onPress={() => eligiendoEmpresa && generarMinuta(eligiendoEmpresa, e.clave)}
               >
                 <Image
-                  
+                  source={{ uri: EMPRESAS[e.clave].logo }}
                   style={estilos.logoEmpresa}
                   resizeMode="contain"
+                  accessibilityLabel={`Hoja membretada de ${e.etiqueta}`}
                 />
-                <Text style={[estilos.opcionEmpresaTexto, { color: e.color }]}>{e.etiqueta}</Text>
               </TouchableOpacity>
             ))}
 
@@ -544,16 +545,14 @@ const estilos = StyleSheet.create({
   selector: { backgroundColor: '#FFF', borderRadius: 14, padding: 18, gap: 10 },
   selectorTitulo: { fontSize: 15, fontWeight: '800', color: '#0F172A', marginBottom: 4, textAlign: 'center' },
   opcionEmpresa: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     borderWidth: 1.5,
     borderRadius: 10,
-    paddingVertical: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
   },
-  logoEmpresa: { width: 74, height: 30 },
-  opcionEmpresaTexto: { fontWeight: '800', fontSize: 14 },
+  logoEmpresa: { width: '100%', height: 56 },
   cancelarSelector: { paddingVertical: 8, alignItems: 'center' },
   cancelarSelectorTexto: { color: '#64748B', fontSize: 13, fontWeight: '600' },
   tarjeta: {
