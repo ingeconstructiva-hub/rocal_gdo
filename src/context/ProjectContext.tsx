@@ -16,6 +16,12 @@ type ProjectContextType = {
   setActiveProject: (project: any) => void;
   isOffline: boolean;
   lastSync: number;
+  /* Si ya se reviso el almacen buscando la obra guardada.
+   *
+   * Hace falta para distinguir "no hay obra" de "todavia no se sabe". Sin
+   * esto, la pantalla de proyectos veria activeProject en null durante el
+   * primer parpadeo y creeria que es una instalacion nueva. */
+  obraRevisada: boolean;
 };
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -28,6 +34,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const [lastSync, setLastSync] = useState(0);
   const [pendientes, setPendientes] = useState(0);
   const [refrescando, setRefrescando] = useState(false);
+  const [obraRevisada, setObraRevisada] = useState(false);
   const [hayQueRefrescar, setHayQueRefrescar] = useState(false);
 
   // El botón solo aparece donde hay algo que recargar (en login, por ejemplo, no).
@@ -73,7 +80,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       .then((guardada) => {
         if (guardada) setActiveProjectState(JSON.parse(guardada));
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setObraRevisada(true));
   }, []);
 
   const setActiveProject = (project: any) => {
@@ -305,7 +313,7 @@ const sincronizarBandejasDeSalida = async () => {
 };
 
   return (
-    <ProjectContext.Provider value={{ activeProject, setActiveProject, isOffline, lastSync }}>
+    <ProjectContext.Provider value={{ activeProject, setActiveProject, isOffline, lastSync, obraRevisada }}>
       {children}
       
       {/* Botón de refrescar: en web la pantalla no se recarga sola al volver a

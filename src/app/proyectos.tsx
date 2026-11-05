@@ -22,7 +22,7 @@ import { firmarCampos } from '../lib/urlsFirmadas';
 
 export default function ProyectosScreen() {
   const router = useRouter();
-  const { setActiveProject, isOffline } = useProject();
+  const { activeProject, setActiveProject, isOffline, obraRevisada } = useProject();
   const { profile, isLoadingUser } = useUser();
   const isAdmin = profile?.role === 'admin';
   const [proyectos, setProyectos] = useState<any[]>([]);
@@ -180,10 +180,32 @@ export default function ProyectosScreen() {
     setIsRefreshing(false);
   };
 
-  const seleccionarProyecto = (proyectoId: string, projectName: string, userRole: string) => {
-    setActiveProject({ id: proyectoId, name: projectName, role: userRole });
+  /* Se guarda la obra COMPLETA, no solo id, nombre y rol.
+   *
+   * La ubicacion se quedaba fuera, y es lo que encabeza la minuta impresa:
+   * salia siempre vacia sin que nada avisara. Guardar el renglon entero
+   * evita volver a tropezar con el siguiente campo que haga falta. */
+  const seleccionarProyecto = (proyecto: any, userRole: string) => {
+    setActiveProject({ ...proyecto, role: userRole });
     router.replace('/(tabs)');
   };
+
+  /* Si la persona tiene una sola obra, se entra solo.
+   *
+   * Al reinstalar la app no queda nada guardado en el telefono, asi que
+   * despues de iniciar sesion caia en esta lista y la app se veia vacia
+   * hasta que elegia su obra. Lo que ya estaba subido siempre estuvo ahi;
+   * lo que faltaba era volver a pararse en la obra para verlo.
+   *
+   * Con varias obras no se decide por nadie: ahi la lista es la respuesta
+   * correcta. */
+  useEffect(() => {
+    if (!obraRevisada || activeProject || loading) return;
+    if (proyectos.length !== 1) return;
+
+    const unica = proyectos[0];
+    seleccionarProyecto(unica, unica.userRole);
+  }, [obraRevisada, activeProject, loading, proyectos]);
 
   /* Al salir se borran los cachés del navegador, no solo la sesión.
    *
@@ -719,7 +741,7 @@ export default function ProyectosScreen() {
                   style={styles.entrarBtn} 
                   onPress={(e) => {
                     e.stopPropagation(); 
-                    seleccionarProyecto(proyecto.id, proyecto.name, proyecto.userRole);
+                    seleccionarProyecto(proyecto, proyecto.userRole);
                   }}
                 >
                   <Text style={styles.entrarBtnText}>Entrar</Text>
