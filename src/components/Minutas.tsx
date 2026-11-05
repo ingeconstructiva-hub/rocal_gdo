@@ -70,6 +70,8 @@ export function Minutas() {
   const puedeBorrar = (m: Minuta) => !esResidente || esDeHoy(m.created_at);
 
   const [generando, setGenerando] = useState<string | null>(null);
+  // Cual minuta espera que se elija empresa. null = el selector esta cerrado.
+  const [eligiendoEmpresa, setEligiendoEmpresa] = useState<Minuta | null>(null);
 
   /* El número de minuta sale del orden en que se levantaron dentro de la obra.
    * No hay columna para él, así que se cuenta desde la más vieja: la lista
@@ -81,6 +83,7 @@ export function Minutas() {
   };
 
   const generarMinuta = async (m: Minuta, clave: 'rocal' | 'jd') => {
+    setEligiendoEmpresa(null);
     setGenerando(`${m.id}-${clave}`);
     try {
       const datos = {
@@ -334,24 +337,20 @@ export function Minutas() {
                     sea el contrato, y hasta ahora habia que pasarla a mano a
                     la hoja membretada que tocara. */}
                 <View style={estilos.filaEmpresas}>
-                  <Text style={estilos.filaEmpresasTexto}>Minuta en hoja de:</Text>
-                  {EMPRESAS_MINUTA.map((e) => (
-                    <TouchableOpacity
-                      key={e.clave}
-                      style={[estilos.botonEmpresa, { borderColor: e.color }]}
-                      onPress={() => generarMinuta(m, e.clave)}
-                      disabled={generando !== null}
-                    >
-                      {generando === `${m.id}-${e.clave}` ? (
-                        <ActivityIndicator size="small" color={e.color} />
-                      ) : (
-                        <>
-                          <Feather name="file-text" size={12} color={e.color} />
-                          <Text style={[estilos.botonEmpresaTexto, { color: e.color }]}>{e.etiqueta}</Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                  ))}
+                  <TouchableOpacity
+                    style={estilos.botonMinuta}
+                    onPress={() => setEligiendoEmpresa(m)}
+                    disabled={generando !== null}
+                  >
+                    {generando?.startsWith(m.id) ? (
+                      <ActivityIndicator size="small" color="#2563EB" />
+                    ) : (
+                      <>
+                        <Feather name="file-text" size={13} color="#2563EB" />
+                        <Text style={estilos.botonMinutaTexto}>Generar minuta</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
                 </View>
 
                 <View style={estilos.metaFila}>
@@ -471,6 +470,31 @@ export function Minutas() {
           </View>
         </View>
       </Modal>
+
+      {/* La empresa se elige al generar, no antes: la misma obra puede llevar
+          minutas de ROCAL y de JD segun de quien sea el contrato. */}
+      <Modal visible={!!eligiendoEmpresa} transparent animationType="fade" onRequestClose={() => setEligiendoEmpresa(null)}>
+        <Pressable style={estilos.fondoSelector} onPress={() => setEligiendoEmpresa(null)}>
+          <Pressable style={estilos.selector}>
+            <Text style={estilos.selectorTitulo}>¿En hoja de qué empresa?</Text>
+
+            {EMPRESAS_MINUTA.map((e) => (
+              <TouchableOpacity
+                key={e.clave}
+                style={[estilos.opcionEmpresa, { borderColor: e.color }]}
+                onPress={() => eligiendoEmpresa && generarMinuta(eligiendoEmpresa, e.clave)}
+              >
+                <Feather name="file-text" size={16} color={e.color} />
+                <Text style={[estilos.opcionEmpresaTexto, { color: e.color }]}>{e.etiqueta}</Text>
+              </TouchableOpacity>
+            ))}
+
+            <TouchableOpacity style={estilos.cancelarSelector} onPress={() => setEligiendoEmpresa(null)}>
+              <Text style={estilos.cancelarSelectorTexto}>Cancelar</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -499,7 +523,34 @@ const estilos = StyleSheet.create({
     padding: 3,
   },
   filaEmpresas: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' },
-  filaEmpresasTexto: { fontSize: 11, color: '#64748B' },
+  botonMinuta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#2563EB',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    minWidth: 140,
+    justifyContent: 'center',
+  },
+  botonMinutaTexto: { color: '#2563EB', fontWeight: '700', fontSize: 12 },
+  fondoSelector: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'center', padding: 28 },
+  selector: { backgroundColor: '#FFF', borderRadius: 14, padding: 18, gap: 10 },
+  selectorTitulo: { fontSize: 15, fontWeight: '800', color: '#0F172A', marginBottom: 4, textAlign: 'center' },
+  opcionEmpresa: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1.5,
+    borderRadius: 10,
+    paddingVertical: 12,
+  },
+  opcionEmpresaTexto: { fontWeight: '800', fontSize: 14 },
+  cancelarSelector: { paddingVertical: 8, alignItems: 'center' },
+  cancelarSelectorTexto: { color: '#64748B', fontSize: 13, fontWeight: '600' },
   botonEmpresa: {
     flexDirection: 'row',
     alignItems: 'center',
