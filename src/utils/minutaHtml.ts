@@ -133,3 +133,81 @@ export const minutaAHtml = (datos: DatosDeMinuta, clave: Empresa['clave']): stri
     </body></html>
   `;
 };
+
+/* El control de minutas en hoja membretada.
+ *
+ * Es lo que se lleva a la junta de avance: de un vistazo se ve qué quedó
+ * pendiente y desde cuándo. Por eso va en tabla, y lo pendiente en rojo.
+ */
+export const reporteMinutasAHtml = (
+  minutas: DatosDeMinuta[],
+  clave: Empresa['clave'],
+  proyecto: string
+): string => {
+  const empresa = EMPRESAS[clave];
+
+  const encabezado = empresa.encabezado
+    .map((r, i) =>
+      i === 0
+        ? `<div class="empresa">${escapar(r)}</div>`
+        : `<div class="dato">${escapar(r)}</div>`
+    )
+    .join('');
+
+  const pie = empresa.pie.map((r) => `<div>${escapar(r)}</div>`).join('');
+
+  const pendientes = minutas.filter((m) => m.estado !== 'atendida').length;
+
+  const filas = minutas
+    .map((m) => {
+      const pendiente = m.estado !== 'atendida';
+      return `<tr>
+        <td style="text-align:center">${escapar(m.numero)}</td>
+        <td>${fecha(m.creada)}</td>
+        <td><strong>${escapar(m.asunto)}</strong><br>${escapar(m.indicacion)}</td>
+        <td>${escapar(m.dirigidaA || '—')}</td>
+        <td>${m.plazo ? fecha(m.plazo) : '—'}</td>
+        <td style="text-align:center; ${pendiente ? "color:#b91c1c; font-weight:bold" : ""}">
+          ${pendiente ? 'Pendiente' : 'Atendida'}
+        </td>
+      </tr>`;
+    })
+    .join('');
+
+  return `
+    <!DOCTYPE html>
+    <html><head><meta charset="utf-8"><style>
+      @page { size: A4 portrait; margin: 12mm; }
+      body { font-family: 'Helvetica', sans-serif; color: #1e293b; font-size: 10px; }
+      .membrete { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; border-bottom: 3px solid #2563eb; padding-bottom: 8px; }
+      .membrete img { width: ${empresa.anchoLogo * 3.5}px; }
+      .datos-empresa { text-align: right; }
+      .empresa { font-weight: bold; font-size: 12px; }
+      .dato { font-size: 9px; color: #334155; }
+      h1 { text-align: center; font-size: 15px; letter-spacing: 1px; margin: 16px 0 4px; }
+      .sub { text-align: center; font-size: 10px; color: #475569; }
+      .cuenta { text-align: center; font-size: 9px; color: #64748b; margin-bottom: 10px; }
+      table { width: 100%; border-collapse: collapse; }
+      th { background: #0f172a; color: #fff; padding: 5px; font-size: 8px; text-align: left; }
+      td { border: 1px solid #e2e8f0; padding: 5px; vertical-align: top; }
+      .pie { margin-top: 20px; border-top: 2px solid #2563eb; padding-top: 6px; text-align: center; font-size: 8px; color: #64748b; }
+    </style></head>
+    <body>
+      <div class="membrete">
+        <img src="${empresa.logo}" alt="" />
+        <div class="datos-empresa">${encabezado}</div>
+      </div>
+
+      <h1>CONTROL DE MINUTAS</h1>
+      <div class="sub">${escapar(proyecto)}</div>
+      <div class="cuenta">${minutas.length} minutas · ${pendientes} pendientes</div>
+
+      <table>
+        <thead><tr><th>No.</th><th>Fecha</th><th>Asunto / indicación</th><th>Dirigida a</th><th>Plazo</th><th>Estado</th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+
+      <div class="pie">${pie}</div>
+    </body></html>
+  `;
+};

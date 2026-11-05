@@ -14,6 +14,7 @@ export type DatosDeMinuta = {
   numero: string;
   proyecto: string;
   ubicacion?: string | null;
+  estado?: string;
   /** Fotos de lo acordado, ya con direccion firmada. */
   evidencias?: string[];
 };
@@ -21,6 +22,14 @@ export type DatosDeMinuta = {
 export async function crearPdfMinuta(
   _datos: DatosDeMinuta,
   _clave: Empresa['clave']
+): Promise<Blob> {
+  throw new Error('Solo se usa en navegador');
+}
+
+export async function crearPdfReporteMinutas(
+  _minutas: DatosDeMinuta[],
+  _clave: Empresa['clave'],
+  _proyecto: string
 ): Promise<Blob> {
   throw new Error('Solo se usa en navegador');
 }

@@ -11,6 +11,7 @@
  */
 
 import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { EMPRESAS, type Empresa } from '../lib/membretes';
 
 const PIZARRA: [number, number, number] = [30, 41, 59];
@@ -25,6 +26,7 @@ export type DatosDeMinuta = {
   numero: string;
   proyecto: string;
   ubicacion?: string | null;
+  estado?: string;
   /** Fotos de lo acordado, ya con dirección firmada. */
   evidencias?: string[];
 };
@@ -312,3 +314,129 @@ const hora = (iso: string) => {
     ? '—'
     : d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
 };
+
+/* Todas las minutas de la obra en una hoja.
+ *
+ * Es lo que se lleva a la junta de avance: de un vistazo se ve qué quedó
+ * pendiente y desde cuándo. Por eso va en tabla y no una minuta por página,
+ * y por eso lo pendiente se marca en rojo: una lista donde todo se ve igual
+ * no sirve para decidir nada.
+ */
+export async function crearPdfReporteMinutas(
+  minutas: DatosDeMinuta[],
+  clave: Empresa['clave'],
+  proyecto: string
+): Promise<Blob> {
+  const empresa = EMPRESAS[clave];
+
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const ancho = doc.internal.pageSize.getWidth();
+  const alto = doc.internal.pageSize.getHeight();
+  const margen = 15;
+
+  const { ancho: aLogo, alto: altoLogo } = await medir(empresa.logo);
+  let y = 12;
+  let abajoDelLogo = y;
+
+  if (aLogo > 0) {
+    const w = empresa.anchoLogo;
+    const h = (altoLogo / aLogo) * w;
+    doc.addImage(empresa.logo, margen, y, w, h);
+    abajoDelLogo = y + h;
+  }
+
+  doc.setTextColor(...PIZARRA);
+  let yTexto = y + 3;
+  empresa.encabezado.forEach((renglon, i) => {
+    doc.setFont('helvetica', i === 0 ? 'bold' : 'normal');
+    doc.setFontSize(i === 0 ? 9.5 : 7.5);
+    doc.text(renglon, ancho - margen, yTexto, { align: 'right' });
+    yTexto += i === 0 ? 5 : 3.6;
+  });
+
+  y = Math.max(abajoDelLogo, yTexto) + 3;
+  doc.setDrawColor(37, 99, 235);
+  doc.setLineWidth(0.8);
+  doc.line(margen, y, ancho - margen, y);
+  y += 9;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.text('CONTROL DE MINUTAS', ancho / 2, y, { align: 'center' });
+  y += 6;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(71, 85, 105);
+  doc.text(proyecto, ancho / 2, y, { align: 'center' });
+  y += 5;
+
+  const pendientes = minutas.filter((m) => m.estado !== 'atendida').length;
+  doc.setFontSize(8);
+  doc.text(
+    `${minutas.length} minutas · ${pendientes} pendientes · al ${new Date().toLocaleDateString('es-MX')}`,
+    ancho / 2,
+    y,
+    { align: 'center' }
+  );
+  y += 6;
+
+  const altoPie = empresa.pie.length * 3.4 + 10;
+
+  autoTable(doc, {
+    startY: y,
+    head: [['No.', 'Fecha', 'Asunto / indicación', 'Dirigida a', 'Plazo', 'Estado']],
+    body: minutas.map((m) => [
+      m.numero,
+      fecha(m.creada),
+      `${m.asunto}\n${m.indicacion}`,
+      m.dirigidaA || '—',
+      m.plazo ? fecha(m.plazo) : '—',
+      m.estado === 'atendida' ? 'Atendida' : 'Pendiente',
+    ]),
+    margin: { left: margen, right: margen, bottom: altoPie + 6 },
+    styles: { fontSize: 7.5, cellPadding: 1.8, textColor: [30, 41, 59], valign: 'top' },
+    headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontSize: 7 },
+    alternateRowStyles: { fillColor: [250, 251, 252] },
+    columnStyles: {
+      0: { cellWidth: 10, halign: 'center' },
+      1: { cellWidth: 20 },
+      3: { cellWidth: 28 },
+      4: { cellWidth: 20 },
+      5: { cellWidth: 18, halign: 'center' },
+    },
+    // Lo pendiente salta a la vista: es lo unico que hay que accionar.
+    didParseCell: (d: any) => {
+      if (d.section === 'body' && d.column.index === 5 && d.cell.raw === 'Pendiente') {
+        d.cell.styles.textColor = [185, 28, 28];
+        d.cell.styles.fontStyle = 'bold';
+      }
+    },
+    rowPageBreak: 'avoid',
+  });
+
+  /* El pie membretado va en TODAS las hojas: un reporte de varias paginas
+   * que solo trae membrete en la primera deja de ser papel de la empresa en
+   * cuanto alguien separa las hojas. */
+  const paginas = doc.getNumberOfPages();
+  for (let p = 1; p <= paginas; p++) {
+    doc.setPage(p);
+    let yPie = alto - margen - altoPie + 4;
+
+    doc.setDrawColor(37, 99, 235);
+    doc.setLineWidth(0.5);
+    doc.line(margen, yPie - 3, ancho - margen, yPie - 3);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(...GRIS);
+    empresa.pie.forEach((renglon) => {
+      doc.text(renglon, ancho / 2, yPie, { align: 'center' });
+      yPie += 3.4;
+    });
+
+    doc.text(`Hoja ${p} de ${paginas}`, ancho - margen, alto - margen + 2, { align: 'right' });
+  }
+
+  return doc.output('blob');
+}
