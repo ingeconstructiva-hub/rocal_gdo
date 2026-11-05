@@ -135,69 +135,86 @@ export async function crearPdfMinuta(
   doc.line(margen, y, ancho - margen, y);
   y += 7;
 
-  // --- Temas tratados ---
+  /* Temas tratados y croquis van LADO A LADO, como en el formato de Word:
+   * lo que se acordó a la izquierda y el dibujo a la derecha, para poder
+   * señalar sobre el croquis mientras se lee el acuerdo. Apilarlos partía esa
+   * relación y dejaba el croquis en otra página.
+   */
+  const altoPie = empresa.pie.length * 3.4 + 8;
+  const altoFirmas = 6 + 5 * 7 + 12;
+  const tope = alto - margen - altoPie - altoFirmas;
+  const anchoColumna = util / 2 - 3;
+  const xCroquis = margen + util / 2 + 3;
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
+  doc.setTextColor(...PIZARRA);
   doc.text('TEMAS TRATADOS:', margen, y);
-  y += 6;
+  doc.text('CROQUIS:', xCroquis, y);
+  y += 5;
+
+  const altoCuerpo = Math.max(45, tope - y);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9.5);
-  const temas = doc.splitTextToSize(datos.indicacion || '', util);
-  doc.text(temas, margen, y, { align: 'justify', maxWidth: util });
-  y += temas.length * 4.4 + 8;
-
-  // --- Croquis ---
-  const altoPie = empresa.pie.length * 3.4 + 8;
-  const espacioFirmas = 32;
-  const tope = alto - margen - altoPie - espacioFirmas;
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.text('CROQUIS:', margen, y);
-  y += 4;
-
-  /* El croquis se dibuja a mano sobre el papel impreso. Se deja el recuadro
-   * con lo que sobre de hoja: si queda chico no sirve de nada, así que si no
-   * cabe un mínimo razonable se pasa a la hoja siguiente. */
-  if (tope - y < 40) {
-    doc.addPage();
-    y = margen;
-  }
-
+  doc.setFontSize(9);
+  const temas = doc.splitTextToSize(datos.indicacion || '', anchoColumna - 4);
   doc.setDrawColor(203, 213, 225);
   doc.setLineWidth(0.3);
-  doc.roundedRect(margen, y, util, Math.max(40, tope - y), 2, 2, 'S');
+  doc.roundedRect(margen, y, anchoColumna, altoCuerpo, 2, 2, 'S');
+  doc.text(temas, margen + 2, y + 5, { align: 'justify', maxWidth: anchoColumna - 4 });
 
-  // --- Firmas ---
-  let yFirma = alto - margen - altoPie - 18;
-  const anchoFirma = util / 2 - 14;
+  // El croquis se dibuja a mano sobre el papel impreso.
+  doc.roundedRect(xCroquis, y, anchoColumna, altoCuerpo, 2, 2, 'S');
 
-  [
-    { x: margen + 6, titulo: 'ELABORÓ' },
-    { x: margen + util / 2 + 8, titulo: 'DE ENTERADO' },
-  ].forEach(({ x, titulo }) => {
-    doc.setDrawColor(71, 85, 105);
-    doc.setLineWidth(0.3);
-    doc.line(x, yFirma, x + anchoFirma, yFirma);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(...PIZARRA);
-    doc.text(titulo, x + anchoFirma / 2, yFirma + 4, { align: 'center' });
+  y += altoCuerpo + 6;
+
+  /* La lista de asistentes, igual que en el formato: quien estuvo, con qué
+   * cargo, y su firma. Cinco renglones, que es lo que trae la plantilla. */
+  const anchos = [util * 0.42, util * 0.28, util * 0.3];
+
+  const titulos = ['NOMBRE Y APELLIDO', 'CARGO', 'FIRMA'];
+
+  doc.setFillColor(241, 245, 249);
+  doc.setDrawColor(148, 163, 184);
+  doc.setLineWidth(0.3);
+
+  let x = margen;
+  anchos.forEach((ancho) => {
+    doc.rect(x, y, ancho, 6, 'FD');
+    x += ancho;
   });
 
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(...PIZARRA);
+  x = margen;
+  titulos.forEach((titulo, i) => {
+    doc.text(titulo, x + anchos[i] / 2, y + 4, { align: 'center' });
+    x += anchos[i];
+  });
+  y += 6;
+
+  for (let fila = 0; fila < 5; fila++) {
+    x = margen;
+    for (const ancho of anchos) {
+      doc.rect(x, y, ancho, 7, 'S');
+      x += ancho;
+    }
+    y += 7;
+  }
+
   // --- Pie membretado ---
-  yFirma = alto - margen - altoPie + 2;
+  let yPie = alto - margen - altoPie + 2;
   doc.setDrawColor(37, 99, 235);
   doc.setLineWidth(0.5);
-  doc.line(margen, yFirma - 3, ancho - margen, yFirma - 3);
+  doc.line(margen, yPie - 3, ancho - margen, yPie - 3);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(...GRIS);
   empresa.pie.forEach((renglon) => {
-    doc.text(renglon, ancho / 2, yFirma, { align: 'center' });
-    yFirma += 3.4;
+    doc.text(renglon, ancho / 2, yPie, { align: 'center' });
+    yPie += 3.4;
   });
 
   return doc.output('blob');

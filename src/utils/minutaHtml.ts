@@ -75,10 +75,13 @@ export const minutaAHtml = (datos: DatosDeMinuta, clave: Empresa['clave']): stri
       .campo { width: 50%; margin-bottom: 7px; font-size: 11px; }
       .etiqueta { font-weight: bold; }
       .seccion { font-weight: bold; font-size: 12px; margin: 14px 0 6px; }
-      .temas { text-align: justify; white-space: pre-wrap; line-height: 1.5; }
-      .croquis { border: 1px solid #cbd5e1; border-radius: 4px; height: 240px; margin-top: 4px; }
-      .firmas { display: flex; justify-content: space-around; margin-top: 34px; }
-      .firma { width: 40%; text-align: center; border-top: 1px solid #475569; padding-top: 4px; font-size: 9px; font-weight: bold; }
+      .cuerpo { display: flex; gap: 10px; }
+      .mitad { width: 50%; }
+      .caja { border: 1px solid #cbd5e1; border-radius: 4px; height: 300px; padding: 6px; }
+      .temas { text-align: justify; white-space: pre-wrap; line-height: 1.45; }
+      .asistentes { width: 100%; border-collapse: collapse; margin-top: 14px; }
+      .asistentes th { background: #f1f5f9; border: 1px solid #94a3b8; padding: 4px; font-size: 8px; }
+      .asistentes td { border: 1px solid #94a3b8; height: 20px; }
       .pie { margin-top: 26px; border-top: 2px solid #2563eb; padding-top: 6px; text-align: center; font-size: 8px; color: #64748b; }
       .separador { border: none; border-top: 1px solid #e2e8f0; margin: 10px 0; }
     </style></head>
@@ -102,16 +105,21 @@ export const minutaAHtml = (datos: DatosDeMinuta, clave: Empresa['clave']): stri
 
       <hr class="separador" />
 
-      <div class="seccion">TEMAS TRATADOS:</div>
-      <div class="temas">${escapar(datos.indicacion)}</div>
-
-      <div class="seccion">CROQUIS:</div>
-      <div class="croquis"></div>
-
-      <div class="firmas">
-        <div class="firma">ELABORÓ</div>
-        <div class="firma">DE ENTERADO</div>
+      <div class="cuerpo">
+        <div class="mitad">
+          <div class="seccion">TEMAS TRATADOS:</div>
+          <div class="caja temas">${escapar(datos.indicacion)}</div>
+        </div>
+        <div class="mitad">
+          <div class="seccion">CROQUIS:</div>
+          <div class="caja"></div>
+        </div>
       </div>
+
+      <table class="asistentes">
+        <thead><tr><th>NOMBRE Y APELLIDO</th><th>CARGO</th><th>FIRMA</th></tr></thead>
+        <tbody>${'<tr><td></td><td></td><td></td></tr>'.repeat(5)}</tbody>
+      </table>
 
       <div class="pie">${pie}</div>
     </body></html>
