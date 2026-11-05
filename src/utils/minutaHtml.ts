@@ -81,7 +81,9 @@ export const minutaAHtml = (datos: DatosDeMinuta, clave: Empresa['clave']): stri
       .temas { text-align: justify; white-space: pre-wrap; line-height: 1.45; }
       .asistentes { width: 100%; border-collapse: collapse; margin-top: 14px; }
       .asistentes th { background: #f1f5f9; border: 1px solid #94a3b8; padding: 4px; font-size: 8px; }
-      .asistentes td { border: 1px solid #94a3b8; height: 20px; }
+      .asistentes td { border: 1px solid #94a3b8; height: 18px; font-size: 9px; padding: 0 4px; }
+      .evidencias { display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; }
+      .evidencias img { width: calc(50% - 2px); max-height: 140px; object-fit: contain; }
       .pie { margin-top: 26px; border-top: 2px solid #2563eb; padding-top: 6px; text-align: center; font-size: 8px; color: #64748b; }
       .separador { border: none; border-top: 1px solid #e2e8f0; margin: 10px 0; }
     </style></head>
@@ -111,14 +113,20 @@ export const minutaAHtml = (datos: DatosDeMinuta, clave: Empresa['clave']): stri
           <div class="caja temas">${escapar(datos.indicacion)}</div>
         </div>
         <div class="mitad">
-          <div class="seccion">CROQUIS:</div>
-          <div class="caja"></div>
+          <div class="seccion">EVIDENCIAS:</div>
+          <div class="caja evidencias">${(datos.evidencias || [])
+            .slice(0, 4)
+            .map((u: string) => `<img src="${escapar(u)}" />`)
+            .join('')}</div>
         </div>
       </div>
 
       <table class="asistentes">
         <thead><tr><th>NOMBRE Y APELLIDO</th><th>CARGO</th><th>FIRMA</th></tr></thead>
-        <tbody>${'<tr><td></td><td></td><td></td></tr>'.repeat(5)}</tbody>
+        <tbody>
+          <tr><td>${escapar(datos.dirigidaA || '')}</td><td></td><td></td></tr>
+          ${'<tr><td></td><td></td><td></td></tr>'.repeat(7)}
+        </tbody>
       </table>
 
       <div class="pie">${pie}</div>

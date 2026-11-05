@@ -14,6 +14,8 @@ export type DatosDeMinuta = {
   numero: string;
   proyecto: string;
   ubicacion?: string | null;
+  /** Fotos de lo acordado, ya con direccion firmada. */
+  evidencias?: string[];
 };
 
 export async function crearPdfMinuta(

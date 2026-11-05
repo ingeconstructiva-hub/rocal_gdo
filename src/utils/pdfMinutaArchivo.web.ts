@@ -25,6 +25,8 @@ export type DatosDeMinuta = {
   numero: string;
   proyecto: string;
   ubicacion?: string | null;
+  /** Fotos de lo acordado, ya con dirección firmada. */
+  evidencias?: string[];
 };
 
 function medir(dataUrl: string): Promise<{ ancho: number; alto: number }> {
@@ -34,6 +36,29 @@ function medir(dataUrl: string): Promise<{ ancho: number; alto: number }> {
     img.onerror = () => resolver({ ancho: 0, alto: 0 });
     img.src = dataUrl;
   });
+}
+
+/* Las fotos vienen como direcciones firmadas de Supabase, no como datos.
+ * jsPDF necesita los bytes, asi que hay que bajarlas. Una que falle devuelve
+ * null y se salta, sin tumbar el documento. */
+async function comoDataUrl(url?: string | null): Promise<string | null> {
+  if (!url) return null;
+  if (url.startsWith('data:')) return url;
+
+  try {
+    const respuesta = await fetch(url);
+    if (!respuesta.ok) return null;
+    const blob = await respuesta.blob();
+
+    return await new Promise<string | null>((resolver) => {
+      const lector = new FileReader();
+      lector.onload = () => resolver(String(lector.result));
+      lector.onerror = () => resolver(null);
+      lector.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
 }
 
 export async function crearPdfMinuta(
@@ -49,6 +74,13 @@ export async function crearPdfMinuta(
   const util = ancho - margen * 2;
 
   // --- Membrete ---
+  /* Las fotos se bajan antes de empezar. A media hoja ya no se puede
+   * esperar sin dejar el recuadro de evidencias vacío. Una que falle se
+   * salta: vale más una minuta con una foto de menos que ninguna. */
+  const fotos = (
+    await Promise.all((datos.evidencias || []).slice(0, 4).map(comoDataUrl))
+  ).filter(Boolean) as string[];
+
   const { ancho: aLogo, alto: altoLogo } = await medir(empresa.logo);
   let y = 12;
   let abajoDelLogo = y;
@@ -141,7 +173,8 @@ export async function crearPdfMinuta(
    * relación y dejaba el croquis en otra página.
    */
   const altoPie = empresa.pie.length * 3.4 + 8;
-  const altoFirmas = 6 + 5 * 7 + 12;
+  const RENGLONES_ENTERADO = 8;
+  const altoFirmas = 6 + RENGLONES_ENTERADO * 6.5 + 12;
   const tope = alto - margen - altoPie - altoFirmas;
   const anchoColumna = util / 2 - 3;
   const xCroquis = margen + util / 2 + 3;
@@ -150,7 +183,7 @@ export async function crearPdfMinuta(
   doc.setFontSize(10);
   doc.setTextColor(...PIZARRA);
   doc.text('TEMAS TRATADOS:', margen, y);
-  doc.text('CROQUIS:', xCroquis, y);
+  doc.text('EVIDENCIAS:', xCroquis, y);
   y += 5;
 
   const altoCuerpo = Math.max(45, tope - y);
@@ -163,8 +196,33 @@ export async function crearPdfMinuta(
   doc.roundedRect(margen, y, anchoColumna, altoCuerpo, 2, 2, 'S');
   doc.text(temas, margen + 2, y + 5, { align: 'justify', maxWidth: anchoColumna - 4 });
 
-  // El croquis se dibuja a mano sobre el papel impreso.
   doc.roundedRect(xCroquis, y, anchoColumna, altoCuerpo, 2, 2, 'S');
+
+  /* Las fotos se acomodan en dos columnas dentro del recuadro. Si no hay, el
+   * recuadro queda en blanco para anotar a mano, que es como se usaba antes. */
+  if (fotos.length > 0) {
+    const hueco = 2;
+    const porRenglon = fotos.length === 1 ? 1 : 2;
+    const anchoFoto = (anchoColumna - 6 - hueco * (porRenglon - 1)) / porRenglon;
+    const altoFoto = (altoCuerpo - 6 - hueco) / 2;
+
+    for (let i = 0; i < fotos.length; i++) {
+      const { ancho: aImg, alto: aAlt } = await medir(fotos[i]);
+      if (aImg === 0) continue;
+
+      const columna = i % porRenglon;
+      const renglon = Math.floor(i / porRenglon);
+
+      const escala = Math.min(anchoFoto / aImg, altoFoto / aAlt);
+      const w = aImg * escala;
+      const h = aAlt * escala;
+
+      const xFoto = xCroquis + 3 + columna * (anchoFoto + hueco) + (anchoFoto - w) / 2;
+      const yFoto = y + 3 + renglon * (altoFoto + hueco) + (altoFoto - h) / 2;
+
+      doc.addImage(fotos[i], xFoto, yFoto, w, h);
+    }
+  }
 
   y += altoCuerpo + 6;
 
@@ -194,13 +252,25 @@ export async function crearPdfMinuta(
   });
   y += 6;
 
-  for (let fila = 0; fila < 5; fila++) {
+  /* El primer renglón ya trae el nombre de a quién va dirigida la minuta:
+   * es quien queda enterado por definición, y escribirlo a mano cada vez
+   * invita a que se anote distinto cada semana. */
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+
+  for (let fila = 0; fila < RENGLONES_ENTERADO; fila++) {
     x = margen;
     for (const ancho of anchos) {
-      doc.rect(x, y, ancho, 7, 'S');
+      doc.rect(x, y, ancho, 6.5, 'S');
       x += ancho;
     }
-    y += 7;
+
+    if (fila === 0 && datos.dirigidaA) {
+      doc.setTextColor(...PIZARRA);
+      doc.text(datos.dirigidaA, margen + 2, y + 4.4);
+    }
+
+    y += 6.5;
   }
 
   // --- Pie membretado ---

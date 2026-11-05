@@ -12,7 +12,9 @@ import { Feather } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,7 +28,10 @@ import { useUser } from '../context/UserContext';
 import { Aviso } from '../lib/aviso';
 import { mensajeDeError } from '../lib/errores';
 import { esDeHoy, eliminarRegistro } from '../lib/permisos';
+import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
+import { subirArchivo } from '../lib/subidas';
+import { firmarVarias } from '../lib/urlsFirmadas';
 import { exportarDocumento } from '../lib/exportar';
 import { minutaAHtml } from '../utils/minutaHtml';
 import { crearPdfMinuta } from '../utils/pdfMinutaArchivo';
@@ -42,6 +47,7 @@ type Minuta = {
   plazo: string | null;
   estado: string;
   created_at: string;
+  evidencias?: string | null;
 };
 
 const fechaCorta = (iso?: string | null) => {
@@ -86,6 +92,7 @@ export function Minutas() {
         numero: numeroDeMinuta(m),
         proyecto: activeProject?.name || 'Obra sin nombre',
         ubicacion: activeProject?.location || null,
+        evidencias: fotosDe(m),
       };
 
       await exportarDocumento(
@@ -100,6 +107,19 @@ export function Minutas() {
     }
   };
 
+  /* Las fotos viven como lista JSON en una sola columna, igual que en
+   * bitácora. Si el texto quedó corrupto se devuelve vacío: una minuta sin
+   * evidencia se puede leer, una pantalla caída no. */
+  const fotosDe = (m: Minuta): string[] => {
+    if (!m.evidencias) return [];
+    try {
+      const lista = JSON.parse(m.evidencias);
+      return Array.isArray(lista) ? lista.filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  };
+
   const [minutas, setMinutas] = useState<Minuta[]>([]);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
@@ -109,6 +129,9 @@ export function Minutas() {
   const [indicacion, setIndicacion] = useState('');
   const [dirigidaA, setDirigidaA] = useState('');
   const [plazo, setPlazo] = useState<Date | null>(null);
+  // Fotos elegidas que todavía no se suben. Se suben al guardar.
+  const [evidencias, setEvidencias] = useState<string[]>([]);
+  const [subiendoFoto, setSubiendoFoto] = useState(false);
 
   const cargar = useCallback(async () => {
     const pid = activeProject?.id;
@@ -129,7 +152,18 @@ export function Minutas() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setMinutas(data || []);
+
+      /* Las direcciones guardadas son privadas: hay que firmarlas para poder
+       * verlas y para que jsPDF pueda bajarlas al armar el PDF. */
+      const conFotos = await Promise.all(
+        (data || []).map(async (m: any) => {
+          const fotos = fotosDe(m);
+          if (fotos.length === 0) return m;
+          return { ...m, evidencias: JSON.stringify(await firmarVarias(fotos)) };
+        })
+      );
+
+      setMinutas(conFotos);
     } catch (e: any) {
       console.log('Error cargando minutas:', e);
     } finally {
@@ -141,11 +175,37 @@ export function Minutas() {
     cargar();
   }, [cargar]);
 
+  const agregarFoto = async (deLaCamara: boolean) => {
+    try {
+      const permiso = deLaCamara
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      // En navegador esta llamada no concede nada y devolver aquí dejaría sin
+      // adjuntar a quien usa la PWA.
+      if (Platform.OS !== 'web' && permiso.status !== 'granted') {
+        Aviso.alert('Permiso', deLaCamara ? 'Necesitamos la cámara.' : 'Necesitamos tus fotos.');
+        return;
+      }
+
+      const resultado = deLaCamara
+        ? await ImagePicker.launchCameraAsync({ quality: 0.6 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
+
+      if (!resultado.canceled) {
+        setEvidencias((previas) => [...previas, resultado.assets[0].uri]);
+      }
+    } catch {
+      Aviso.alert('No se pudo abrir', 'Intenta con la otra opción.');
+    }
+  };
+
   const limpiar = () => {
     setAsunto('');
     setIndicacion('');
     setDirigidaA('');
     setPlazo(null);
+    setEvidencias([]);
   };
 
   const guardar = async () => {
@@ -162,6 +222,19 @@ export function Minutas() {
 
     setGuardando(true);
     try {
+      /* Las fotos se suben antes de insertar. Si una falla, se detiene todo y
+       * no se guarda la minuta: una minuta que dice tener evidencia y no la
+       * tiene es peor que no haberla capturado. */
+      let urls: string[] = [];
+      if (evidencias.length > 0) {
+        setSubiendoFoto(true);
+        urls = [];
+        for (const uri of evidencias) {
+          urls.push(await subirArchivo(uri, 'evidencias_minutas', { prefijo: 'minuta' }));
+        }
+        setSubiendoFoto(false);
+      }
+
       // Supabase devuelve { error } en vez de lanzarlo: sin revisarlo, un
       // rechazo cerraria el formulario como si se hubiera guardado.
       const { error } = await supabase.from('minutas').insert([
@@ -172,6 +245,7 @@ export function Minutas() {
           dirigida_a: dirigidaA.trim() || null,
           plazo: plazo ? plazo.toISOString().slice(0, 10) : null,
           estado: 'pendiente',
+          evidencias: urls.length > 0 ? JSON.stringify(urls) : null,
           created_by: profile?.id || null,
           is_active: true,
         },
@@ -352,9 +426,43 @@ export function Minutas() {
               <Text style={estilos.etiqueta}>Fecha compromiso</Text>
               <SelectorFecha valor={plazo} alCambiar={setPlazo} textoVacio="Sin fecha" />
 
+              {/* La evidencia es lo que vuelve a la minuta un documento que
+                  prueba algo. Sin foto, es la palabra de alguien contra la de
+                  otro cuando se revisa semanas después. */}
+              <Text style={estilos.etiqueta}>Evidencia (fotos)</Text>
+              <View style={estilos.filaFotos}>
+                <TouchableOpacity style={estilos.botonFoto} onPress={() => agregarFoto(true)}>
+                  <Feather name="camera" size={16} color="#2563EB" />
+                  <Text style={estilos.botonFotoTexto}>Cámara</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={estilos.botonFoto} onPress={() => agregarFoto(false)}>
+                  <Feather name="image" size={16} color="#2563EB" />
+                  <Text style={estilos.botonFotoTexto}>Galería</Text>
+                </TouchableOpacity>
+              </View>
+
+              {evidencias.length > 0 ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                  {evidencias.map((uri, i) => (
+                    <View key={uri + i} style={estilos.miniatura}>
+                      <Image source={{ uri }} style={estilos.miniaturaFoto} resizeMode="cover" />
+                      <TouchableOpacity
+                        style={estilos.quitarFoto}
+                        onPress={() => setEvidencias((p) => p.filter((_, n) => n !== i))}
+                      >
+                        <Feather name="x" size={12} color="#FFF" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              ) : null}
+
               <TouchableOpacity style={estilos.guardar} onPress={guardar} disabled={guardando}>
                 {guardando ? (
-                  <ActivityIndicator color="#FFF" />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <ActivityIndicator color="#FFF" />
+                    {subiendoFoto ? <Text style={estilos.guardarTexto}>Subiendo fotos…</Text> : null}
+                  </View>
                 ) : (
                   <Text style={estilos.guardarTexto}>Guardar indicación</Text>
                 )}
@@ -368,6 +476,28 @@ export function Minutas() {
 }
 
 const estilos = StyleSheet.create({
+  filaFotos: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  botonFoto: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#2563EB',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  botonFotoTexto: { color: '#2563EB', fontWeight: '700', fontSize: 12 },
+  miniatura: { width: 76, height: 76, marginRight: 8, borderRadius: 8, overflow: 'hidden' },
+  miniaturaFoto: { width: '100%', height: '100%' },
+  quitarFoto: {
+    position: 'absolute',
+    top: 3,
+    right: 3,
+    backgroundColor: '#DC2626',
+    borderRadius: 10,
+    padding: 3,
+  },
   filaEmpresas: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' },
   filaEmpresasTexto: { fontSize: 11, color: '#64748B' },
   botonEmpresa: {
