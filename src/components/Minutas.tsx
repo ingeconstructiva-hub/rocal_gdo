@@ -9,6 +9,7 @@
  */
 
 import { Feather } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -27,13 +28,11 @@ import { useProject } from '../context/ProjectContext';
 import { useUser } from '../context/UserContext';
 import { Aviso } from '../lib/aviso';
 import { mensajeDeError } from '../lib/errores';
-import { esDeHoy, eliminarRegistro } from '../lib/permisos';
-import * as ImagePicker from 'expo-image-picker';
-import { EMPRESAS } from '../lib/membretes';
-import { supabase } from '../lib/supabase';
-import { subirArchivo } from '../lib/subidas';
-import { firmarVarias } from '../lib/urlsFirmadas';
 import { exportarDocumento } from '../lib/exportar';
+import { eliminarRegistro, esDeHoy } from '../lib/permisos';
+import { subirArchivo } from '../lib/subidas';
+import { supabase } from '../lib/supabase';
+import { firmarVarias } from '../lib/urlsFirmadas';
 import { minutaAHtml } from '../utils/minutaHtml';
 import { crearPdfMinuta } from '../utils/pdfMinutaArchivo';
 import { SelectorFecha } from './SelectorFecha';
@@ -486,7 +485,7 @@ export function Minutas() {
                 onPress={() => eligiendoEmpresa && generarMinuta(eligiendoEmpresa, e.clave)}
               >
                 <Image
-                  source={{ uri: EMPRESAS[e.clave].logo }}
+                  
                   style={estilos.logoEmpresa}
                   resizeMode="contain"
                 />
