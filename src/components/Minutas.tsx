@@ -551,18 +551,6 @@ const estilos = StyleSheet.create({
   opcionEmpresaTexto: { fontWeight: '800', fontSize: 14 },
   cancelarSelector: { paddingVertical: 8, alignItems: 'center' },
   cancelarSelectorTexto: { color: '#64748B', fontSize: 13, fontWeight: '600' },
-  botonEmpresa: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    minWidth: 62,
-    justifyContent: 'center',
-  },
-  botonEmpresaTexto: { fontSize: 11, fontWeight: '700' },
   tarjeta: {
     backgroundColor: '#FFF',
     borderRadius: 16,
