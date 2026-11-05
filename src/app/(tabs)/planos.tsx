@@ -473,33 +473,42 @@ export default function DocumentosScreen() {
               </TouchableOpacity>
             </View>
             
-            <Text style={styles.label}>Nombre del Documento *</Text>
-            <TextInput style={styles.input} placeholder="Ej. Contrato de Obra..." value={docTitle} onChangeText={setDocTitle} placeholderTextColor="#6B7280" />
+          </View>
+        )}
 
-            <Text style={styles.label}>Categoría</Text>
-            <View style={{ marginBottom: 20 }}>
-              <SelectorCategoria
-                valor={docCategory}
-                alCambiar={setDocCategory}
-                modulo="planos"
-                categoriasBase={defaultCategories}
-                projectId={activeProject?.id}
-                sinConexion={isOffline}
-              />
-            </View>
+        {(archivoPdf || scannedImages.length > 0) && (
+          <View>
+              <Text style={styles.label}>Nombre del Documento *</Text>
+              <TextInput style={styles.input} placeholder="Ej. Contrato de Obra..." value={docTitle} onChangeText={setDocTitle} placeholderTextColor="#6B7280" />
 
-            <TouchableOpacity style={styles.saveButton} onPress={handleSaveToDatabase} disabled={isUploading}>
-              {isUploading ? <ActivityIndicator color="#FFF" /> : (
-                <>
-                  <Feather name="upload-cloud" size={20} color="#FFF" />
-                  <Text style={styles.saveButtonText}>{isOffline ? 'Generar y Guardar Local' : 'Generar PDF y Subir'}</Text>
-                </>
-              )}
-            </TouchableOpacity>
+              <Text style={styles.label}>Categoría</Text>
+              <View style={{ marginBottom: 20 }}>
+                <SelectorCategoria
+                  valor={docCategory}
+                  alCambiar={setDocCategory}
+                  modulo="planos"
+                  categoriasBase={defaultCategories}
+                  projectId={activeProject?.id}
+                  sinConexion={isOffline}
+                />
+              </View>
 
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setScannedImages([])} disabled={isUploading}>
-              <Text style={styles.cancelButtonText}>Descartar Todo</Text>
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.saveButton} onPress={handleSaveToDatabase} disabled={isUploading}>
+                {isUploading ? <ActivityIndicator color="#FFF" /> : (
+                  <>
+                    <Feather name="upload-cloud" size={20} color="#FFF" />
+                    <Text style={styles.saveButtonText}>{isOffline
+                      ? 'Guardar en el celular'
+                      : archivoPdf
+                        ? 'Subir el PDF'
+                        : 'Generar PDF y Subir'}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.cancelButton} onPress={() => { setScannedImages([]); setArchivoPdf(null); }} disabled={isUploading}>
+                <Text style={styles.cancelButtonText}>Descartar Todo</Text>
+              </TouchableOpacity>
           </View>
         )}
 
