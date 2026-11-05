@@ -12,7 +12,7 @@ import { useRefrescar } from '../../lib/refrescar';
 import { SkeletonLista } from '../../components/Skeleton';
 import { SinDatos } from '../../components/SinDatos';
 import { Minutas } from '../../components/Minutas';
-import { exportarPDF } from '../../lib/exportar';
+import { exportarDocumento, exportarPDF } from '../../lib/exportar';
 import { volverAlTablero } from '../../lib/navegar';
 import { firmarVarias } from '../../lib/urlsFirmadas';
 import { subirArchivo } from '../../lib/subidas';
@@ -23,6 +23,7 @@ import { useUser } from '../../context/UserContext';
 import { esDeHoy, puedeExportar } from '../../lib/permisos';
 import { supabase } from '../../lib/supabase';
 import { generarPlantillaBitacora } from '../../utils/pdfTemplate';
+import { crearPdfBitacora } from '../../utils/pdfBitacoraArchivo';
 
 export default function BitacoraScreen() {
   const router = useRouter();
@@ -374,8 +375,10 @@ export default function BitacoraScreen() {
   const ejecutarGeneracionPDF = async () => {
     setIsExporting(true);
     try {
-      const htmlContent = await generarPlantillaBitacora(logs, isOffline);
-      await exportarPDF(htmlContent, 'Bitacora.pdf');
+      const htmlContent = await generarPlantillaBitacora(logs, isOffline, activeProject?.name);
+      await exportarDocumento(htmlContent, 'Bitacora.pdf', () =>
+        crearPdfBitacora(logs, activeProject?.name)
+      );
     } catch (error) {
       console.error("Error al exportar:", error);
       Aviso.alert("Error", "Ocurrió un problema al generar el documento.");

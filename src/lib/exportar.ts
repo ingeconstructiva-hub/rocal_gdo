@@ -30,6 +30,16 @@ export async function exportarReporte(reporte: Reporte, nombreArchivo: string): 
   await exportarPDF(reporteAHtml(reporte), nombreArchivo);
 }
 
+/* En celular no hace falta armar el archivo aparte: expo-print lo genera y
+ * el sistema abre su menu de compartir. El generador se ignora. */
+export async function exportarDocumento(
+  html: string,
+  nombreArchivo: string,
+  _hacerPdf?: unknown
+): Promise<void> {
+  await exportarPDF(html, nombreArchivo);
+}
+
 /** En celular el menú de compartir siempre está. */
 export function sePuedeCompartir(): boolean {
   return true;

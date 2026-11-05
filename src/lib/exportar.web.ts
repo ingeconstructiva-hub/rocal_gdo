@@ -1,4 +1,5 @@
-import { mostrarVistaPrevia } from '../components/VistaPreviaPDF';
+import { mostrarVistaPrevia, type HacerPdf } from '../components/VistaPreviaPDF';
+import { crearPdfReporte } from './pdfReporte.web';
 import { reporteAHtml, type Reporte } from './reporte';
 
 /* Exportar PDF y hojas de cálculo (versión navegador).
@@ -71,7 +72,19 @@ export function sePuedeCompartir(): boolean {
  * documento que no ha visto: la vista previa es donde se cacha que falto una
  * semana o que el saldo no cuadra, antes de que lo vea el proveedor. */
 export async function exportarReporte(reporte: Reporte, nombreArchivo: string): Promise<void> {
-  mostrarVistaPrevia(reporteAHtml(reporte), nombreArchivo, reporte);
+  mostrarVistaPrevia(reporteAHtml(reporte), nombreArchivo, () => crearPdfReporte(reporte));
+}
+
+/* Un documento que no es tabla: la responsiva, la bitacora.
+ *
+ * Trae su HTML para verlo y quien sabe armarlo como archivo. Si no hay quien
+ * lo arme, se muestra igual y solo se puede imprimir. */
+export async function exportarDocumento(
+  html: string,
+  nombreArchivo: string,
+  hacerPdf?: HacerPdf
+): Promise<void> {
+  mostrarVistaPrevia(html, nombreArchivo, hacerPdf);
 }
 
 /** Muestra el reporte dentro de la app, con botón para guardarlo como PDF. */

@@ -11,20 +11,20 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { compartirODescargar, sePuedeCompartir } from '../lib/exportar.web';
-import { crearPdfReporte } from '../lib/pdfReporte.web';
-import type { Reporte } from '../lib/reporte';
 
-/* El reporte viaja junto al HTML para poder armar el archivo al compartir.
- * Sin el, lo unico que hay es el dialogo de impresion, que en iOS es un menu
- * de impresora del que hay que adivinar como salir con un PDF. */
-type Documento = { html: string; nombre: string; reporte?: Reporte };
+/* Junto al HTML viaja quien sabe armar el archivo. Sin el, lo unico que hay
+ * es el dialogo de impresion, que en iOS es un menu de impresora del que hay
+ * que adivinar como salir con un PDF. */
+export type HacerPdf = () => Blob | Promise<Blob>;
+
+type Documento = { html: string; nombre: string; hacerPdf?: HacerPdf };
 
 let entregar: ((doc: Documento) => void) | null = null;
 const fila: Documento[] = [];
 
 /** La llama exportar.web.ts cuando hay que mostrar un reporte. */
-export function mostrarVistaPrevia(html: string, nombreArchivo: string, reporte?: Reporte) {
-  const doc = { html, nombre: nombreArchivo, reporte };
+export function mostrarVistaPrevia(html: string, nombreArchivo: string, hacerPdf?: HacerPdf) {
+  const doc = { html, nombre: nombreArchivo, hacerPdf };
   if (entregar) entregar(doc);
   else fila.push(doc);
 }
@@ -50,14 +50,14 @@ export function VistaPreviaPDF() {
    * Chrome no existe ese menu, asi que descarga el archivo. Esconderlo en
    * escritorio dejaba sin salida: ahi el unico camino era el dialogo de
    * impresion, que es justo lo que estorbaba. */
-  const hayReporte = !!documento?.reporte;
+  const hayArchivo = !!documento?.hacerPdf;
   const etiquetaAccion = sePuedeCompartir() ? 'Compartir' : 'Descargar PDF';
 
   const compartir = async () => {
-    if (!documento?.reporte) return;
+    if (!documento?.hacerPdf) return;
     setCompartiendo(true);
     try {
-      const blob = crearPdfReporte(documento.reporte);
+      const blob = await documento.hacerPdf();
       await compartirODescargar(blob, documento.nombre, 'application/pdf');
     } finally {
       setCompartiendo(false);
@@ -83,7 +83,7 @@ export function VistaPreviaPDF() {
             {documento.nombre.replace(/\.pdf$/i, '')}
           </Text>
 
-          {hayReporte ? (
+          {hayArchivo ? (
             <Pressable onPress={compartir} disabled={compartiendo} style={estilos.botonCompartir}>
               {compartiendo ? (
                 <ActivityIndicator size="small" color="#04342C" />
@@ -107,7 +107,7 @@ export function VistaPreviaPDF() {
 
         <View style={estilos.pie}>
           <Text style={estilos.ayuda}>
-            {hayReporte
+            {hayArchivo
               ? `Toca "${etiquetaAccion}" para quedarte con el archivo, o "Guardar PDF" para imprimirlo.`
               : 'Para guardarlo, toca "Guardar PDF" y elige Guardar como PDF en el menú de impresión.'}
           </Text>

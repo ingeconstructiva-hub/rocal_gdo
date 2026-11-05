@@ -8,7 +8,7 @@ import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Modal,
 import { useRefrescar } from '../../lib/refrescar';
 import { SkeletonLista } from '../../components/Skeleton';
 import { SinDatos } from '../../components/SinDatos';
-import { exportarPDF } from '../../lib/exportar';
+import { exportarDocumento, exportarPDF } from '../../lib/exportar';
 import { regresar } from '../../lib/navegar';
 import { subirArchivo } from '../../lib/subidas';
 import { firmarCampos } from '../../lib/urlsFirmadas';
@@ -25,6 +25,7 @@ import { useUser } from '../../context/UserContext';
 import { supabase } from '../../lib/supabase';
 import { esDeHoy, eliminarRegistro } from '../../lib/permisos';
 import { generarPlantillaResponsiva } from '../../utils/pdfResponsiva';
+import { crearPdfResponsiva } from '../../utils/pdfResponsivaArchivo';
 
 interface HerramientaAlmacen {
   id: string;
@@ -334,7 +335,7 @@ export default function ResguardosScreen() {
       };
 
       const htmlContent = generarPlantillaResponsiva(valePayload);
-      await exportarPDF(htmlContent, `Responsiva_${item.codigo}.pdf`);
+      await exportarDocumento(htmlContent, `Responsiva_${item.codigo}.pdf`, () => crearPdfResponsiva(valePayload));
     } catch (error: any) {
       Aviso.alert("Error", "No se pudo generar el PDF: " + error.message);
     }
