@@ -27,6 +27,9 @@ import { Aviso } from '../lib/aviso';
 import { mensajeDeError } from '../lib/errores';
 import { esDeHoy, eliminarRegistro } from '../lib/permisos';
 import { supabase } from '../lib/supabase';
+import { exportarDocumento } from '../lib/exportar';
+import { minutaAHtml } from '../utils/minutaHtml';
+import { crearPdfMinuta } from '../utils/pdfMinutaArchivo';
 import { SelectorFecha } from './SelectorFecha';
 import { SinDatos } from './SinDatos';
 import { SkeletonLista } from './Skeleton';
@@ -48,12 +51,54 @@ const fechaCorta = (iso?: string | null) => {
   return new Date(a, m - 1, d).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
 };
 
+const EMPRESAS_MINUTA = [
+  { clave: 'rocal' as const, etiqueta: 'ROCAL', color: '#1E3A8A' },
+  { clave: 'jd' as const, etiqueta: 'JD', color: '#15803D' },
+];
+
 export function Minutas() {
   const { activeProject } = useProject();
   const { profile } = useUser();
 
   const esResidente = profile?.role === 'residente';
   const puedeBorrar = (m: Minuta) => !esResidente || esDeHoy(m.created_at);
+
+  const [generando, setGenerando] = useState<string | null>(null);
+
+  /* El número de minuta sale del orden en que se levantaron dentro de la obra.
+   * No hay columna para él, así que se cuenta desde la más vieja: la lista
+   * viene de la más nueva a la más vieja, de ahí la resta. */
+  const numeroDeMinuta = (m: Minuta) => {
+    const posicion = minutas.findIndex((x) => x.id === m.id);
+    const consecutivo = posicion === -1 ? minutas.length : minutas.length - posicion;
+    return String(consecutivo).padStart(3, '0');
+  };
+
+  const generarMinuta = async (m: Minuta, clave: 'rocal' | 'jd') => {
+    setGenerando(`${m.id}-${clave}`);
+    try {
+      const datos = {
+        asunto: m.asunto,
+        indicacion: m.indicacion,
+        dirigidaA: m.dirigida_a,
+        plazo: m.plazo,
+        creada: m.created_at,
+        numero: numeroDeMinuta(m),
+        proyecto: activeProject?.name || 'Obra sin nombre',
+        ubicacion: activeProject?.location || null,
+      };
+
+      await exportarDocumento(
+        minutaAHtml(datos, clave),
+        `Minuta_${numeroDeMinuta(m)}_${clave.toUpperCase()}.pdf`,
+        () => crearPdfMinuta(datos, clave)
+      );
+    } catch (e: any) {
+      Aviso.alert('No se pudo generar', mensajeDeError(e, 'generar la minuta'));
+    } finally {
+      setGenerando(null);
+    }
+  };
 
   const [minutas, setMinutas] = useState<Minuta[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -211,6 +256,30 @@ export function Minutas() {
 
                 <Text style={estilos.indicacion}>{m.indicacion}</Text>
 
+                {/* Una minuta se levanta para ROCAL o para JD segun de quien
+                    sea el contrato, y hasta ahora habia que pasarla a mano a
+                    la hoja membretada que tocara. */}
+                <View style={estilos.filaEmpresas}>
+                  <Text style={estilos.filaEmpresasTexto}>Minuta en hoja de:</Text>
+                  {EMPRESAS_MINUTA.map((e) => (
+                    <TouchableOpacity
+                      key={e.clave}
+                      style={[estilos.botonEmpresa, { borderColor: e.color }]}
+                      onPress={() => generarMinuta(m, e.clave)}
+                      disabled={generando !== null}
+                    >
+                      {generando === `${m.id}-${e.clave}` ? (
+                        <ActivityIndicator size="small" color={e.color} />
+                      ) : (
+                        <>
+                          <Feather name="file-text" size={12} color={e.color} />
+                          <Text style={[estilos.botonEmpresaTexto, { color: e.color }]}>{e.etiqueta}</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
                 <View style={estilos.metaFila}>
                   {m.dirigida_a ? (
                     <View style={estilos.meta}>
@@ -299,6 +368,20 @@ export function Minutas() {
 }
 
 const estilos = StyleSheet.create({
+  filaEmpresas: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' },
+  filaEmpresasTexto: { fontSize: 11, color: '#64748B' },
+  botonEmpresa: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    minWidth: 62,
+    justifyContent: 'center',
+  },
+  botonEmpresaTexto: { fontSize: 11, fontWeight: '700' },
   tarjeta: {
     backgroundColor: '#FFF',
     borderRadius: 16,
