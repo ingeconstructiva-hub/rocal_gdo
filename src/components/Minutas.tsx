@@ -29,6 +29,7 @@ import { Aviso } from '../lib/aviso';
 import { mensajeDeError } from '../lib/errores';
 import { esDeHoy, eliminarRegistro } from '../lib/permisos';
 import * as ImagePicker from 'expo-image-picker';
+import { EMPRESAS } from '../lib/membretes';
 import { supabase } from '../lib/supabase';
 import { subirArchivo } from '../lib/subidas';
 import { firmarVarias } from '../lib/urlsFirmadas';
@@ -484,7 +485,11 @@ export function Minutas() {
                 style={[estilos.opcionEmpresa, { borderColor: e.color }]}
                 onPress={() => eligiendoEmpresa && generarMinuta(eligiendoEmpresa, e.clave)}
               >
-                <Feather name="file-text" size={16} color={e.color} />
+                <Image
+                  source={{ uri: EMPRESAS[e.clave].logo }}
+                  style={estilos.logoEmpresa}
+                  resizeMode="contain"
+                />
                 <Text style={[estilos.opcionEmpresaTexto, { color: e.color }]}>{e.etiqueta}</Text>
               </TouchableOpacity>
             ))}
@@ -548,6 +553,7 @@ const estilos = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 12,
   },
+  logoEmpresa: { width: 74, height: 30 },
   opcionEmpresaTexto: { fontWeight: '800', fontSize: 14 },
   cancelarSelector: { paddingVertical: 8, alignItems: 'center' },
   cancelarSelectorTexto: { color: '#64748B', fontSize: 13, fontWeight: '600' },
