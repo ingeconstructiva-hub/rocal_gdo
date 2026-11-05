@@ -1,4 +1,10 @@
-import { calcularTotalFinal, descuentoTotal, diasFaltados, montoHorasExtra } from '../lib/nomina';
+import {
+  calcularTotalFinal,
+  descuentoTotal,
+  diasFaltados,
+  HORAS_SEMANA,
+  montoHorasExtra,
+} from '../lib/nomina';
 import type { Reporte } from '../lib/reporte';
 
 /* La raya de la semana, como datos.
@@ -16,13 +22,13 @@ const filaDeTrabajador = (w: any) => {
   const descuentos = descuentoTotal(w);
   const extra = montoHorasExtra(w);
 
-  /* El motivo del descuento y las horas extra van bajo el nombre. Sin ellos,
-   * la fila parece no cuadrar: base menos descuentos no da el total, y quien
-   * recibe su raya lo primero que hace es esa resta. */
+  /* Las extras pasaron de nota bajo el nombre a columna propia: se pagan
+   * aparte del sueldo y quien revisa la raya las busca como un numero, no
+   * dentro de una frase. El motivo si se queda abajo, porque explica. */
   const notas = [
     w.reason ? `Descuento: ${w.reason}` : '',
-    extra > 0
-      ? `+$${pesos(extra)} por ${w.extraHours} hrs extra${w.extraReason ? ` (${w.extraReason})` : ''}`
+    extra > 0 && (w.extraHours || w.extraReason)
+      ? `Extras: ${w.extraHours || '?'} hrs${w.extraReason ? ` (${w.extraReason})` : ''}`
       : '',
   ].filter(Boolean);
 
@@ -31,6 +37,7 @@ const filaDeTrabajador = (w: any) => {
     `$${pesos(w.weekly_salary)}`,
     faltas > 0 ? String(faltas) : '-',
     descuentos > 0 ? `-$${pesos(descuentos)}` : '-',
+    extra > 0 ? `+$${pesos(extra)}` : '-',
     `$${pesos(calcularTotalFinal(w))}`,
     '',
   ];
@@ -41,6 +48,7 @@ const COLUMNAS = [
   'Sueldo base',
   'Faltas',
   'Descuentos',
+  'Pago de extras',
   'Total a pagar',
   'Firma de recibido',
 ];
@@ -49,6 +57,7 @@ export const generarReporteNomina = (workers: any[], weekLabel: string): Reporte
   const totalBase = workers.reduce((s, w) => s + Number(w.weekly_salary || 0), 0);
   const totalDescuentos = workers.reduce((s, w) => s + descuentoTotal(w), 0);
   const totalFinal = workers.reduce((s, w) => s + calcularTotalFinal(w), 0);
+  const totalExtras = workers.reduce((s, w) => s + montoHorasExtra(w), 0);
 
   return {
     titulo: 'CONSTRUCTORA ROCAL',
@@ -56,12 +65,13 @@ export const generarReporteNomina = (workers: any[], weekLabel: string): Reporte
     resumen: [
       { etiqueta: 'Suma de sueldos base', valor: `$${pesos(totalBase)}`, color: '#1e293b' },
       { etiqueta: 'Descuentos', valor: `$${pesos(totalDescuentos)}`, color: '#ef4444' },
+      { etiqueta: 'Pago de extras', valor: `$${pesos(totalExtras)}`, color: '#047857' },
       { etiqueta: 'Total a pagar', valor: `$${pesos(totalFinal)}`, color: '#059669' },
     ],
     columnas: COLUMNAS,
-    columnasNumericas: [1, 3, 4],
+    columnasNumericas: [1, 3, 4, 5],
     filas: workers.map(filaDeTrabajador),
-    totales: ['', '', '', 'TOTAL A PAGAR:', `$${pesos(totalFinal)}`, ''],
+    totales: ['', '', '', 'TOTALES:', `+$${pesos(totalExtras)}`, `$${pesos(totalFinal)}`, ''],
   };
 };
 
@@ -89,9 +99,18 @@ export const generarReporteHistorial = (semanas: any[], obra: string): Reporte =
       const faltas = Number(r.days_absent || 0);
       const descuentos = Number(r.deduction_amount || 0);
 
+      /* En el historial el pago de extras no viene guardado aparte: solo las
+       * horas. Se reconstruye con la tarifa del trabajador, que es como se
+       * calculo en su momento. Sin sueldo base no hay de donde sacarlo y se
+       * deja en blanco antes que inventar una cifra. */
+      const extras =
+        Number(r.extra_hours || 0) > 0 && Number(trabajador.weekly_salary || 0) > 0
+          ? (Number(trabajador.weekly_salary) / HORAS_SEMANA) * Number(r.extra_hours)
+          : 0;
+
       const notas = [
         r.extra_hours > 0
-          ? `${r.extra_hours} hrs extra${r.extra_reason ? ` (${r.extra_reason})` : ''}`
+          ? `Extras: ${r.extra_hours} hrs${r.extra_reason ? ` (${r.extra_reason})` : ''}`
           : '',
       ].filter(Boolean);
 
@@ -102,6 +121,7 @@ export const generarReporteHistorial = (semanas: any[], obra: string): Reporte =
         `$${pesos(trabajador.weekly_salary)}`,
         faltas > 0 ? String(faltas) : '-',
         descuentos > 0 ? `-$${pesos(descuentos)}` : '-',
+        extras > 0 ? `+$${pesos(extras)}` : '-',
         `$${pesos(r.final_salary)}`,
         '',
       ];
@@ -110,7 +130,7 @@ export const generarReporteHistorial = (semanas: any[], obra: string): Reporte =
     return {
       titulo: s.etiqueta || s.semana || 'Semana sin definir',
       filas,
-      subtotal: ['', '', '', 'Subtotal de la semana:', `$${pesos(totalSemana)}`, ''],
+      subtotal: ['', '', '', '', 'Subtotal de la semana:', `$${pesos(totalSemana)}`, ''],
     };
   });
 
@@ -118,9 +138,9 @@ export const generarReporteHistorial = (semanas: any[], obra: string): Reporte =
     titulo: 'CONSTRUCTORA ROCAL',
     subtitulo: `Historial de nómina - ${obra}`,
     columnas: COLUMNAS,
-    columnasNumericas: [1, 3, 4],
+    columnasNumericas: [1, 3, 4, 5],
     filas: [],
     grupos,
-    totales: ['', '', '', 'GRAN TOTAL:', `$${pesos(granTotal)}`, ''],
+    totales: ['', '', '', '', 'GRAN TOTAL:', `$${pesos(granTotal)}`, ''],
   };
 };
