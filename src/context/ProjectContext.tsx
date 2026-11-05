@@ -4,6 +4,15 @@ import { borrarArchivoLocal } from '../lib/archivos';
 import { subirArchivo } from '../lib/subidas';
 import { dispararRefresco, escucharSiHayBoton } from '../lib/refrescar';
 import { BANDEJAS, contarPendientes, leerBandeja, reemplazarBandeja, vaciarBandeja } from '../lib/bandeja';
+import {
+  carpetaElegida,
+  cuantosTrae,
+  elegirCarpeta,
+  guardarEspejo,
+  leerEspejo,
+  restaurarEspejo,
+  sePuedeEspejar,
+} from '../lib/espejo';
 import NetInfo from '@react-native-community/netinfo';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -35,6 +44,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const [pendientes, setPendientes] = useState(0);
   const [refrescando, setRefrescando] = useState(false);
   const [obraRevisada, setObraRevisada] = useState(false);
+  const [hayCarpeta, setHayCarpeta] = useState(false);
   const [hayQueRefrescar, setHayQueRefrescar] = useState(false);
 
   // El botón solo aparece donde hay algo que recargar (en login, por ejemplo, no).
@@ -57,7 +67,11 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     const revisar = () => {
       contarPendientes()
         .then((total) => {
-          if (vivo) setPendientes(total);
+          if (!vivo) return;
+          setPendientes((antes) => {
+            if (antes !== total) guardarEspejo();
+            return total;
+          });
         })
         .catch(() => {});
     };
@@ -91,6 +105,61 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     } else {
       Almacen.removeItem(LLAVE_OBRA_ACTIVA).catch(() => {});
     }
+  };
+
+  useEffect(() => {
+    if (!sePuedeEspejar()) return;
+
+    let vivo = true;
+
+    (async () => {
+      const carpeta = await carpetaElegida();
+      if (!vivo) return;
+      setHayCarpeta(!!carpeta);
+      if (!carpeta) return;
+
+      const propios = await contarPendientes();
+      if (!vivo || propios > 0) return;
+
+      const espejo = await leerEspejo();
+      const cuantos = cuantosTrae(espejo);
+      if (!vivo || !espejo || cuantos === 0) return;
+
+      Aviso.alert(
+        'Hay capturas por recuperar',
+        `El respaldo de este teléfono tiene ${cuantos} ${cuantos === 1 ? 'registro' : 'registros'} sin subir. ¿Los recupero?`,
+        [
+          { text: 'Ahora no', style: 'cancel' },
+          {
+            text: 'Recuperar',
+            onPress: async () => {
+              const devueltos = await restaurarEspejo(espejo);
+              setPendientes(await contarPendientes());
+              Aviso.alert(
+                'Recuperado',
+                `${devueltos} ${devueltos === 1 ? 'registro vuelve' : 'registros vuelven'} a la cola. Se suben solos al tener internet.`
+              );
+            },
+          },
+        ]
+      );
+    })();
+
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  const activarRespaldo = async () => {
+    const carpeta = await elegirCarpeta();
+    if (!carpeta) return;
+
+    setHayCarpeta(true);
+    await guardarEspejo();
+    Aviso.alert(
+      'Respaldo activado',
+      'Lo que captures sin señal se copiará también a esa carpeta. Esa copia NO se borra si desinstalas la app.'
+    );
   };
 
   // 1. EL VIGILANTE DE INTERNET CON DESPERTADOR AUTOMÁTICO
@@ -350,6 +419,15 @@ const sincronizarBandejasDeSalida = async () => {
           </Text>
         </View>
       )}
+
+      {sePuedeEspejar() && !hayCarpeta && pendientes > 0 && (
+        <Pressable style={[styles.offlineBanner, styles.respaldoBanner]} onPress={activarRespaldo}>
+          <Feather name="shield" size={14} color="#FFF" style={{ marginRight: 8 }} />
+          <Text style={styles.offlineText}>
+            Proteger lo pendiente por si desinstalas - toca para elegir carpeta
+          </Text>
+        </Pressable>
+      )}
     </ProjectContext.Provider>
   );
 }
@@ -365,6 +443,7 @@ export function useProject() {
 const styles = StyleSheet.create({
   offlineBanner: { pointerEvents: 'none', position: 'absolute', top: Platform.OS === 'ios' ? 50 : 40, alignSelf: 'center', backgroundColor: '#D97706', paddingVertical: 8, paddingHorizontal: 20, borderRadius: 20, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', zIndex: 9999, elevation: 10, boxShadow: '0px 4px 5px rgba(0, 0, 0, 0.3)',    },
   offlineText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
+  respaldoBanner: { backgroundColor: '#7C3AED' },
   pendingBanner: { backgroundColor: '#1A56DB' },
   botonRefrescar: {
     position: 'absolute',
