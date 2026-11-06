@@ -2,7 +2,7 @@
   "expo": {
     "name": "ROCAL",
     "slug": "rocal-mobile",
-    "version": "1.2.1",
+    "version": "1.2.2",
     "orientation": "portrait",
     "icon": "./assets/images/icono.png",
     "scheme": "rocalmobile",
