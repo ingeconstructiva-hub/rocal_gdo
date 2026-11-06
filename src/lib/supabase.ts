@@ -2,8 +2,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import 'react-native-url-polyfill/auto';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL as string;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string;
+/* Se recortan las orillas a proposito.
+ *
+ * El .env se edita en Windows, donde las lineas terminan con retorno de
+ * carro. Al compilar, ese caracter invisible se queda PEGADO al valor: la
+ * direccion sale como '...supabase.co' y el servidor responde
+ * 'Invalid API Key', que no se parece en nada a la causa. El PWA nunca lo
+ * sufrio porque Vercel inyecta las variables limpias.
+ */
+const limpiar = (v?: string) => (v || '').trim();
+
+const supabaseUrl = limpiar(process.env.EXPO_PUBLIC_SUPABASE_URL);
+const supabaseAnonKey = limpiar(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
 
 /* Tiempo limite en cada peticion.
  *
