@@ -11,6 +11,10 @@ export default function LoginScreen() {
   const router = useRouter();
 
   const [email, setEmail] = useState('');
+  /* Poder ver la contraseña no es comodidad, es diagnóstico: una clave
+   * pegada desde WhatsApp puede traer un espacio al final, y con puntitos
+   * negros no hay forma de notarlo. */
+  const [verClave, setVerClave] = useState(false);
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -114,13 +118,21 @@ export default function LoginScreen() {
                 style={styles.input}
                 placeholder="Tu contraseña secreta"
                 placeholderTextColor="#9CA3AF"
-                secureTextEntry
+                secureTextEntry={!verClave}
                 autoCapitalize="none"
                 autoCorrect={false}
                 textContentType="password"
                 value={password}
                 onChangeText={setPassword}
               />
+              <TouchableOpacity
+                onPress={() => setVerClave((antes) => !antes)}
+                style={styles.ojo}
+                hitSlop={10}
+                accessibilityLabel={verClave ? 'Ocultar contraseña' : 'Ver contraseña'}
+              >
+                <Feather name={verClave ? 'eye-off' : 'eye'} size={20} color="#6B7280" />
+              </TouchableOpacity>
             </View>
 
             <TouchableOpacity style={styles.loginBtn} onPress={handleLogin} disabled={loading}>
@@ -210,6 +222,7 @@ const styles = StyleSheet.create({
   icon: { 
     marginRight: 10 
   },
+  ojo: { paddingHorizontal: 12, paddingVertical: 8 },
   input: { 
     flex: 1, 
     fontSize: 15, 
