@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Aviso } from '../lib/aviso';
+import { mensajeDeError } from '../lib/errores';
 import { supabase } from '../lib/supabase';
 
 export default function LoginScreen() {
@@ -30,7 +31,18 @@ export default function LoginScreen() {
       router.replace('/proyectos');
 
     } catch (error: any) {
-      Aviso.alert("Error de acceso", "Correo o contraseña incorrectos. Verifica tus datos.");
+      const detalle = String(error?.message || '');
+
+      // Lo unico que de verdad significa "revisa tus datos".
+      const sonLasCredenciales =
+        detalle.includes('Invalid login credentials') || detalle.includes('invalid_credentials');
+
+      Aviso.alert(
+        'Error de acceso',
+        sonLasCredenciales
+          ? 'Correo o contraseña incorrectos. Verifica tus datos.'
+          : mensajeDeError(error, 'iniciar sesión')
+      );
     } finally {
       setLoading(false);
     }
@@ -71,6 +83,8 @@ export default function LoginScreen() {
                 placeholderTextColor="#9CA3AF"
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="emailAddress"
                 value={email}
                 onChangeText={setEmail}
               />
@@ -84,6 +98,9 @@ export default function LoginScreen() {
                 placeholder="Tu contraseña secreta"
                 placeholderTextColor="#9CA3AF"
                 secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="password"
                 value={password}
                 onChangeText={setPassword}
               />
