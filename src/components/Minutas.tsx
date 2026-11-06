@@ -10,7 +10,7 @@
 
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -29,13 +29,13 @@ import { useUser } from '../context/UserContext';
 import { Aviso } from '../lib/aviso';
 import { mensajeDeError } from '../lib/errores';
 import { exportarDocumento } from '../lib/exportar';
+import { EMPRESAS } from '../lib/membretes';
 import { eliminarRegistro, esDeHoy } from '../lib/permisos';
 import { subirArchivo } from '../lib/subidas';
-import { EMPRESAS } from '../lib/membretes';
 import { supabase } from '../lib/supabase';
 import { firmarVarias } from '../lib/urlsFirmadas';
-import { minutaAHtml, reporteMinutasAHtml } from '../utils/minutaHtml';
-import { crearPdfMinuta, crearPdfReporteMinutas } from '../utils/pdfMinutaArchivo';
+import { minutaAHtml } from '../utils/minutaHtml';
+import { crearPdfMinuta } from '../utils/pdfMinutaArchivo';
 import { SelectorFecha } from './SelectorFecha';
 import { SinDatos } from './SinDatos';
 import { SkeletonLista } from './Skeleton';
@@ -72,10 +72,7 @@ export function Minutas() {
 
   const [generando, setGenerando] = useState<string | null>(null);
   // Cual minuta espera que se elija empresa. null = el selector esta cerrado.
-  const [eligiendoEmpresa, setEligiendoEmpresa] = useState<Minuta | { dia: string | null } | null>(null);
-  // Null = el modal de dias esta cerrado.
-  const [modalDias, setModalDias] = useState(false);
-
+  const [eligiendoEmpresa, setEligiendoEmpresa] = useState<Minuta | null>(null);
 
   /* El número de minuta sale del orden en que se levantaron dentro de la obra.
    * No hay columna para él, así que se cuenta desde la más vieja: la lista
@@ -86,51 +83,21 @@ export function Minutas() {
     return String(consecutivo).padStart(3, '0');
   };
 
-  const datosDe = (m: Minuta) => ({
-    asunto: m.asunto,
-    indicacion: m.indicacion,
-    dirigidaA: m.dirigida_a,
-    plazo: m.plazo,
-    creada: m.created_at,
-    numero: numeroDeMinuta(m),
-    proyecto: activeProject?.name || 'Obra sin nombre',
-    ubicacion: activeProject?.location || null,
-    estado: m.estado,
-    evidencias: fotosDe(m),
-  });
-
-  /* El reporte va de la mas vieja a la mas nueva, al reves de la pantalla:
-   * en papel se lee en orden de como paso, y lo que sigue pendiente desde
-   * hace semanas queda hasta arriba. */
-  const etiquetaDelReporte = (dia: string | null) => {
-    const obra = activeProject?.name || 'Obra';
-    return dia ? `${obra} · ${fechaCorta(dia)}` : obra;
-  };
-
-  const generarReporte = async (clave: 'rocal' | 'jd', dia: string | null) => {
-    setEligiendoEmpresa(null);
-    setGenerando('reporte');
-    try {
-      const deEseDia = dia ? minutas.filter((m) => (m.created_at || '').startsWith(dia)) : minutas;
-      const datos = [...deEseDia].reverse().map(datosDe);
-
-      await exportarDocumento(
-        reporteMinutasAHtml(datos, clave, etiquetaDelReporte(dia)),
-        `Minutas_${dia || 'todas'}_${clave.toUpperCase()}.pdf`,
-        () => crearPdfReporteMinutas(datos, clave, etiquetaDelReporte(dia))
-      );
-    } catch (e: any) {
-      Aviso.alert('No se pudo generar', mensajeDeError(e, 'generar el reporte'));
-    } finally {
-      setGenerando(null);
-    }
-  };
-
   const generarMinuta = async (m: Minuta, clave: 'rocal' | 'jd') => {
     setEligiendoEmpresa(null);
     setGenerando(`${m.id}-${clave}`);
     try {
-      const datos = datosDe(m);
+      const datos = {
+        asunto: m.asunto,
+        indicacion: m.indicacion,
+        dirigidaA: m.dirigida_a,
+        plazo: m.plazo,
+        creada: m.created_at,
+        numero: numeroDeMinuta(m),
+        proyecto: activeProject?.name || 'Obra sin nombre',
+        ubicacion: activeProject?.location || null,
+        evidencias: fotosDe(m),
+      };
 
       await exportarDocumento(
         minutaAHtml(datos, clave),
@@ -158,21 +125,6 @@ export function Minutas() {
   };
 
   const [minutas, setMinutas] = useState<Minuta[]>([]);
-
-  /* Las minutas agrupadas por dia, de la mas nueva a la mas vieja.
-   *
-   * Igual que las semanas en Destajos: casi nunca se quiere el historial
-   * entero, se quiere lo de la junta de ayer para mandarlo hoy. */
-  const porDia = useMemo(() => {
-    const mapa: Record<string, Minuta[]> = {};
-    for (const m of minutas) {
-      const dia = (m.created_at || '').slice(0, 10);
-      if (!dia) continue;
-      if (!mapa[dia]) mapa[dia] = [];
-      mapa[dia].push(m);
-    }
-    return Object.entries(mapa).sort(([a], [b]) => (a < b ? 1 : -1));
-  }, [minutas]);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [modal, setModal] = useState(false);
@@ -355,30 +307,10 @@ export function Minutas() {
     <View style={{ flex: 1 }}>
       {/* Arriba y con su nombre: el circulo flotante tapaba contenido y no
           decia que hacia. */}
-      <View style={estilos.filaAcciones}>
-        <TouchableOpacity style={[estilos.botonAgregar, { flex: 1 }]} onPress={() => setModal(true)}>
-          <Feather name="plus-circle" size={18} color="#FFF" />
-          <Text style={estilos.botonAgregarTexto}>Agregar indicación</Text>
-        </TouchableOpacity>
-
-        {/* El reporte solo tiene sentido con algo que reportar. */}
-        {minutas.length > 0 ? (
-          <TouchableOpacity
-            style={estilos.botonReporte}
-            onPress={() => setModalDias(true)}
-            disabled={generando !== null}
-          >
-            {generando === 'reporte' ? (
-              <ActivityIndicator size="small" color="#2563EB" />
-            ) : (
-              <>
-                <Feather name="file-text" size={16} color="#2563EB" />
-                <Text style={estilos.botonReporteTexto}>Reporte</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        ) : null}
-      </View>
+      <TouchableOpacity style={estilos.botonAgregar} onPress={() => setModal(true)}>
+        <Feather name="plus-circle" size={18} color="#FFF" />
+        <Text style={estilos.botonAgregarTexto}>Agregar indicación</Text>
+      </TouchableOpacity>
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 10, paddingBottom: 40 }}>
         {cargando ? (
@@ -540,39 +472,6 @@ export function Minutas() {
         </View>
       </Modal>
 
-      <Modal visible={modalDias} transparent animationType="fade" onRequestClose={() => setModalDias(false)}>
-        <Pressable style={estilos.fondoSelector} onPress={() => setModalDias(false)}>
-          <Pressable style={estilos.selector}>
-            <Text style={estilos.selectorTitulo}>¿De qué día?</Text>
-
-            <TouchableOpacity
-              style={estilos.opcionDia}
-              onPress={() => { setModalDias(false); setEligiendoEmpresa({ dia: null }); }}
-            >
-              <Text style={estilos.opcionDiaTexto}>Todas las minutas</Text>
-              <Text style={estilos.opcionDiaCuenta}>{minutas.length}</Text>
-            </TouchableOpacity>
-
-            <ScrollView style={{ maxHeight: 260 }}>
-              {porDia.map(([dia, lista]) => (
-                <TouchableOpacity
-                  key={dia}
-                  style={estilos.opcionDia}
-                  onPress={() => { setModalDias(false); setEligiendoEmpresa({ dia }); }}
-                >
-                  <Text style={estilos.opcionDiaTexto}>{fechaCorta(dia)}</Text>
-                  <Text style={estilos.opcionDiaCuenta}>{lista.length}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <TouchableOpacity style={estilos.cancelarSelector} onPress={() => setModalDias(false)}>
-              <Text style={estilos.cancelarSelectorTexto}>Cancelar</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
       {/* La empresa se elige al generar, no antes: la misma obra puede llevar
           minutas de ROCAL y de JD segun de quien sea el contrato. */}
       <Modal visible={!!eligiendoEmpresa} transparent animationType="fade" onRequestClose={() => setEligiendoEmpresa(null)}>
@@ -584,18 +483,14 @@ export function Minutas() {
               <TouchableOpacity
                 key={e.clave}
                 style={[estilos.opcionEmpresa, { borderColor: e.color }]}
-                onPress={() =>
-                  eligiendoEmpresa && 'dia' in eligiendoEmpresa
-                    ? generarReporte(e.clave, (eligiendoEmpresa as { dia: string | null }).dia)
-                    : eligiendoEmpresa && generarMinuta(eligiendoEmpresa, e.clave)
-                }
+                onPress={() => eligiendoEmpresa && generarMinuta(eligiendoEmpresa, e.clave)}
               >
                 <Image
                   source={{ uri: EMPRESAS[e.clave].logo }}
                   style={estilos.logoEmpresa}
                   resizeMode="contain"
-                  accessibilityLabel={`Hoja membretada de ${e.etiqueta}`}
                 />
+                <Text style={[estilos.opcionEmpresaTexto, { color: e.color }]}>{e.etiqueta}</Text>
               </TouchableOpacity>
             ))}
 
@@ -633,20 +528,6 @@ const estilos = StyleSheet.create({
     padding: 3,
   },
   filaEmpresas: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' },
-  filaAcciones: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  botonReporte: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1.5,
-    borderColor: '#2563EB',
-    borderRadius: 10,
-    paddingVertical: 11,
-    paddingHorizontal: 14,
-    minWidth: 110,
-    justifyContent: 'center',
-  },
-  botonReporteTexto: { color: '#2563EB', fontWeight: '700', fontSize: 13 },
   botonMinuta: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -660,31 +541,20 @@ const estilos = StyleSheet.create({
     justifyContent: 'center',
   },
   botonMinutaTexto: { color: '#2563EB', fontWeight: '700', fontSize: 12 },
-  opcionDia: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 10,
-    marginBottom: 8,
-  },
-  opcionDiaTexto: { fontSize: 14, color: '#0F172A', fontWeight: '600' },
-  opcionDiaCuenta: { fontSize: 12, color: '#64748B', fontWeight: '700' },
   fondoSelector: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'center', padding: 28 },
   selector: { backgroundColor: '#FFF', borderRadius: 14, padding: 18, gap: 10 },
   selectorTitulo: { fontSize: 15, fontWeight: '800', color: '#0F172A', marginBottom: 4, textAlign: 'center' },
   opcionEmpresa: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
     borderWidth: 1.5,
     borderRadius: 10,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingVertical: 12,
   },
-  logoEmpresa: { width: '100%', height: 56 },
+  logoEmpresa: { width: 74, height: 30 },
+  opcionEmpresaTexto: { fontWeight: '800', fontSize: 14 },
   cancelarSelector: { paddingVertical: 8, alignItems: 'center' },
   cancelarSelectorTexto: { color: '#64748B', fontSize: 13, fontWeight: '600' },
   tarjeta: {
