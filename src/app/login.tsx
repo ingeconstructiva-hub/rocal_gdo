@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Aviso } from '../lib/aviso';
+import { limpiarCorreo, variantesDe } from '../lib/credenciales';
 import { mensajeDeError } from '../lib/errores';
 import { supabase } from '../lib/supabase';
 
@@ -21,12 +22,28 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: password,
-      });
+      const correo = limpiarCorreo(email);
 
-      if (error) throw error;
+      let ultimoError: any = null;
+      let entro = false;
+
+      for (const clave of variantesDe(password)) {
+        const { error } = await supabase.auth.signInWithPassword({ email: correo, password: clave });
+        if (!error) {
+          entro = true;
+          break;
+        }
+        ultimoError = error;
+
+        // Solo se reintenta cuando el rechazo fue por los datos. Si no hay
+        // red, probar otra vez tarda el doble para fallar igual.
+        const detalle = String(error?.message || '');
+        if (!detalle.includes('Invalid login credentials') && !detalle.includes('invalid_credentials')) {
+          break;
+        }
+      }
+
+      if (!entro) throw ultimoError;
 
       router.replace('/proyectos');
 
