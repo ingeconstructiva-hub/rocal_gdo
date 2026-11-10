@@ -1,70 +1,41 @@
--- Vaciar las fotos de los registros, conservando lo que no es de ellos.
+-- Las fotos YA NO SE BORRAN DESDE AQUI.
 --
--- Correr DESPUES de sql/vaciar_obras.sql.
+-- Supabase bloquea el borrado directo sobre sus tablas de almacen:
+--   "Direct deletion from storage tables is not allowed. Use the Storage
+--    API instead."
 --
--- QUE SE CONSERVA:
---   El bucket 'obras' entero: la foto de cada obra. Las obras se quedan, y
---   su imagen es parte de ellas, no de lo que se capturo adentro.
+-- Hay que pasar por su API, y eso necesita la llave de servicio, que no
+-- debe andar en consultas ni en el repositorio. Por eso vive en un script
+-- que se corre en tu maquina:
 --
---   'identificaciones/perfiles/...': la foto de perfil de cada usuario.
+--   scripts/limpiar_almacen.mjs
 --
--- QUE SE BORRA:
---   Fotos de bitacora, tickets de caja chica, comprobantes de gastos,
---   documentos (planos), evidencias de minutas, y las firmas e INE de los
---   resguardos.
+-- Sin argumentos solo enseña que haria; con --borrar lo hace. Conserva el
+-- bucket 'obras' entero y la carpeta 'identificaciones/perfiles/', y se
+-- lleva todo lo demas.
 --
---   Tambien el INE de cada USUARIO, que vive en la misma carpeta que el de
---   los resguardos. Si lo quieres conservar, usa la variante del final: es
---   cambiar un delete por otro.
---
--- Esto es definitivo: el almacen no tiene papelera.
+-- Lo que si se puede hacer desde aqui es MIRAR, que no esta bloqueado.
 
--- 1) Que hay hoy, bucket por bucket.
+-- Que hay hoy, bucket por bucket.
 select bucket_id, count(*) as archivos
 from storage.objects
 group by bucket_id
 order by bucket_id;
 
--- 2) Que se va a CONSERVAR. Revisa esta lista antes de seguir: si una foto
---    no sale aqui, despues del borrado ya no habra de donde sacarla.
+-- Que se va a conservar. Revisa esta lista antes de correr el script: si
+-- una foto no sale aqui, despues no habra de donde sacarla.
 select bucket_id, name
 from storage.objects
 where bucket_id = 'obras'
    or (bucket_id = 'identificaciones' and name like 'perfiles/%')
 order by bucket_id, name;
 
--- 3) El borrado.
-begin;
-
--- Todo bucket que no sea 'obras' ni 'identificaciones' se vacia entero.
-delete from storage.objects
-where bucket_id not in ('obras', 'identificaciones');
-
--- De 'identificaciones' se queda unicamente la carpeta de perfiles.
-delete from storage.objects
-where bucket_id = 'identificaciones'
-  and name not like 'perfiles/%';
-
-commit;
-
--- 4) Como quedo. Deben salir dos renglones: 'obras' con sus fotos, e
---    'identificaciones' con tantos archivos como perfiles con foto haya.
-select bucket_id, count(*) as archivos
+-- Que se va a borrar.
+select bucket_id, count(*) as se_borran
 from storage.objects
+where not (
+  bucket_id = 'obras'
+  or (bucket_id = 'identificaciones' and name like 'perfiles/%')
+)
 group by bucket_id
 order by bucket_id;
-
-
--- ---------------------------------------------------------------------
--- SI QUIERES CONSERVAR TAMBIEN EL INE DE LOS USUARIOS
---
--- El INE de una persona vive en 'ines/' junto al de los resguardos, y se
--- distinguen por el nombre: los de resguardo empiezan con 'ine_frente_' o
--- 'ine_reverso_'. Cambia el SEGUNDO delete del paso 3 por este:
---
---   delete from storage.objects
---   where bucket_id = 'identificaciones'
---     and (name like 'firmas/%'
---          or name like 'ines/ine_frente_%'
---          or name like 'ines/ine_reverso_%');
--- ---------------------------------------------------------------------

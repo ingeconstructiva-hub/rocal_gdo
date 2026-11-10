@@ -80,10 +80,9 @@ begin
   end if;
 end $$;
 
--- Sus fotos de perfil e INE.
-delete from storage.objects o
-where o.bucket_id = 'identificaciones'
-  and exists (select 1 from a_borrar b where o.name like '%' || b.id::text || '%');
+-- Sus fotos NO se borran aqui: Supabase ya no permite borrar directo de
+-- las tablas del almacen. Las quita scripts/limpiar_almacen.mjs, que pasa
+-- por la API como el sistema exige.
 
 -- Sus asignaciones a obras.
 delete from public.project_members
