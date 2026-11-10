@@ -79,11 +79,16 @@ export const minutaAHtml = (datos: DatosDeMinuta, clave: Empresa['clave']): stri
       .mitad { width: 50%; }
       .caja { border: 1px solid #cbd5e1; border-radius: 4px; height: 300px; padding: 6px; }
       .temas { text-align: justify; white-space: pre-wrap; line-height: 1.45; }
-      .asistentes { width: 100%; border-collapse: collapse; margin-top: 14px; }
-      .asistentes th { background: #f1f5f9; border: 1px solid #94a3b8; padding: 4px; font-size: 8px; }
-      .asistentes td { border: 1px solid #94a3b8; height: 18px; font-size: 9px; padding: 0 4px; }
-      .evidencias { display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; }
-      .evidencias img { width: calc(50% - 2px); max-height: 140px; object-fit: contain; }
+      .firmas { display: flex; gap: 16px; margin-top: 34px; }
+      .firma { flex: 1; text-align: center; }
+      .quien { font-size: 9px; font-weight: bold; color: #1e293b; height: 12px; }
+      .linea { border-top: 1px solid #475569; }
+      .rotulo { font-size: 7px; color: #64748b; letter-spacing: 1px; margin-top: 3px; }
+      .evidencias { display: flex; flex-wrap: wrap; gap: 4px; align-content: stretch; justify-content: center; align-items: center; }
+      .evidencias img { object-fit: contain; flex: 1 1 auto; min-height: 0; }
+      .evidencias.una img { width: 100%; height: 100%; }
+      .evidencias.pocas img { width: 100%; max-height: 48%; }
+      .evidencias.varias img { width: calc(50% - 2px); max-height: 48%; }
       .pie { margin-top: 26px; border-top: 2px solid #2563eb; padding-top: 6px; text-align: center; font-size: 8px; color: #64748b; }
       .separador { border: none; border-top: 1px solid #e2e8f0; margin: 10px 0; }
     </style></head>
@@ -114,20 +119,33 @@ export const minutaAHtml = (datos: DatosDeMinuta, clave: Empresa['clave']): stri
         </div>
         <div class="mitad">
           <div class="seccion">EVIDENCIAS:</div>
-          <div class="caja evidencias">${(datos.evidencias || [])
+          <div class="caja evidencias ${((datos.evidencias || []).length === 1 ? 'una' : (datos.evidencias || []).length === 2 ? 'pocas' : 'varias')}">${(datos.evidencias || [])
             .slice(0, 4)
             .map((u: string) => `<img src="${escapar(u)}" />`)
             .join('')}</div>
         </div>
       </div>
 
-      <table class="asistentes">
-        <thead><tr><th>NOMBRE Y APELLIDO</th><th>CARGO</th><th>FIRMA</th></tr></thead>
-        <tbody>
-          <tr><td>${escapar(datos.dirigidaA || '')}</td><td></td><td></td></tr>
-          ${'<tr><td></td><td></td><td></td></tr>'.repeat(7)}
-        </tbody>
-      </table>
+      <div class="firmas">
+        <div class="firma">
+          <div class="quien">${escapar(datos.dirigidaA || '')}</div>
+          <div class="linea"></div>
+          <div class="rotulo">NOMBRE</div>
+          <div class="rotulo">CARGO</div>
+        </div>
+        <div class="firma">
+          <div class="quien"></div>
+          <div class="linea"></div>
+          <div class="rotulo">NOMBRE</div>
+          <div class="rotulo">CARGO</div>
+        </div>
+        <div class="firma">
+          <div class="quien"></div>
+          <div class="linea"></div>
+          <div class="rotulo">NOMBRE</div>
+          <div class="rotulo">CARGO</div>
+        </div>
+      </div>
 
       <div class="pie">${pie}</div>
     </body></html>

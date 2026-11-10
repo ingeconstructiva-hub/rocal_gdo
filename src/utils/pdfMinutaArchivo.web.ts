@@ -175,17 +175,26 @@ export async function crearPdfMinuta(
    * relación y dejaba el croquis en otra página.
    */
   const altoPie = empresa.pie.length * 3.4 + 8;
-  const RENGLONES_ENTERADO = 8;
-  const altoFirmas = 6 + RENGLONES_ENTERADO * 6.5 + 12;
+
+  /* Tres espacios de firma, no una tabla.
+   *
+   * La minuta se imprime en una portatil y se firma ahi mismo, de pie en
+   * la obra. Una tabla con ocho renglones de 6 mm deja celdas donde no cabe
+   * una firma de verdad, y ocho espacios para tres personas es papel
+   * desperdiciado. Tres lineas anchas, con el nombre y el cargo debajo para
+   * escribirlos a mano, es lo que se usa. */
+  const FIRMAS = 3;
+  const altoFirmas = 32;
+
   const tope = alto - margen - altoPie - altoFirmas;
   const anchoColumna = util / 2 - 3;
-  const xCroquis = margen + util / 2 + 3;
+  const xEvidencias = margen + util / 2 + 3;
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(...PIZARRA);
   doc.text('TEMAS TRATADOS:', margen, y);
-  doc.text('EVIDENCIAS:', xCroquis, y);
+  doc.text('EVIDENCIAS:', xEvidencias, y);
   y += 5;
 
   const altoCuerpo = Math.max(45, tope - y);
@@ -198,83 +207,72 @@ export async function crearPdfMinuta(
   doc.roundedRect(margen, y, anchoColumna, altoCuerpo, 2, 2, 'S');
   doc.text(temas, margen + 2, y + 5, { align: 'justify', maxWidth: anchoColumna - 4 });
 
-  doc.roundedRect(xCroquis, y, anchoColumna, altoCuerpo, 2, 2, 'S');
+  doc.roundedRect(xEvidencias, y, anchoColumna, altoCuerpo, 2, 2, 'S');
 
-  /* Las fotos se acomodan en dos columnas dentro del recuadro. Si no hay, el
-   * recuadro queda en blanco para anotar a mano, que es como se usaba antes. */
+  /* Las fotos se reparten el recuadro COMPLETO segun cuantas sean.
+   *
+   * Antes siempre se dividia en dos renglones, asi que con una o dos fotos
+   * quedaba media caja vacia y la evidencia salia del tamano de una estampa.
+   *
+   * El recuadro es angosto y alto, y una foto de obra es mas ancha que alta:
+   * por eso hasta dos van apiladas, usando todo el ancho. De tres en adelante
+   * ya no cabe de otra forma y van en rejilla. */
   if (fotos.length > 0) {
     const hueco = 2;
-    const porRenglon = fotos.length === 1 ? 1 : 2;
-    const anchoFoto = (anchoColumna - 6 - hueco * (porRenglon - 1)) / porRenglon;
-    const altoFoto = (altoCuerpo - 6 - hueco) / 2;
+    const relleno = 3;
+    const columnas = fotos.length <= 2 ? 1 : 2;
+    const renglones = Math.ceil(fotos.length / columnas);
+
+    const anchoFoto = (anchoColumna - relleno * 2 - hueco * (columnas - 1)) / columnas;
+    const altoFoto = (altoCuerpo - relleno * 2 - hueco * (renglones - 1)) / renglones;
 
     for (let i = 0; i < fotos.length; i++) {
       const { ancho: aImg, alto: aAlt } = await medir(fotos[i]);
       if (aImg === 0) continue;
 
-      const columna = i % porRenglon;
-      const renglon = Math.floor(i / porRenglon);
+      const columna = i % columnas;
+      const renglon = Math.floor(i / columnas);
 
       const escala = Math.min(anchoFoto / aImg, altoFoto / aAlt);
       const w = aImg * escala;
       const h = aAlt * escala;
 
-      const xFoto = xCroquis + 3 + columna * (anchoFoto + hueco) + (anchoFoto - w) / 2;
-      const yFoto = y + 3 + renglon * (altoFoto + hueco) + (altoFoto - h) / 2;
+      const xFoto = xEvidencias + relleno + columna * (anchoFoto + hueco) + (anchoFoto - w) / 2;
+      const yFoto = y + relleno + renglon * (altoFoto + hueco) + (altoFoto - h) / 2;
 
       doc.addImage(fotos[i], xFoto, yFoto, w, h);
     }
   }
 
-  y += altoCuerpo + 6;
+  y += altoCuerpo + 14;
 
-  /* La lista de asistentes, igual que en el formato: quien estuvo, con qué
-   * cargo, y su firma. Cinco renglones, que es lo que trae la plantilla. */
-  const anchos = [util * 0.42, util * 0.28, util * 0.3];
+  /* Las tres firmas, repartidas a lo ancho. La primera trae el nombre de a
+   * quien va dirigida la minuta, que es quien queda enterado por
+   * definicion; las otras dos quedan en blanco para quien haya estado. */
+  const anchoFirma = (util - 16) / FIRMAS;
 
-  const titulos = ['NOMBRE Y APELLIDO', 'CARGO', 'FIRMA'];
+  for (let i = 0; i < FIRMAS; i++) {
+    const x = margen + i * (anchoFirma + 8);
 
-  doc.setFillColor(241, 245, 249);
-  doc.setDrawColor(148, 163, 184);
-  doc.setLineWidth(0.3);
+    doc.setDrawColor(71, 85, 105);
+    doc.setLineWidth(0.3);
+    doc.line(x, y, x + anchoFirma, y);
 
-  let x = margen;
-  anchos.forEach((ancho) => {
-    doc.rect(x, y, ancho, 6, 'FD');
-    x += ancho;
-  });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(...GRIS);
+    doc.text('NOMBRE', x + anchoFirma / 2, y + 4, { align: 'center' });
+    doc.text('CARGO', x + anchoFirma / 2, y + 8.5, { align: 'center' });
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...PIZARRA);
-  x = margen;
-  titulos.forEach((titulo, i) => {
-    doc.text(titulo, x + anchos[i] / 2, y + 4, { align: 'center' });
-    x += anchos[i];
-  });
-  y += 6;
-
-  /* El primer renglón ya trae el nombre de a quién va dirigida la minuta:
-   * es quien queda enterado por definición, y escribirlo a mano cada vez
-   * invita a que se anote distinto cada semana. */
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-
-  for (let fila = 0; fila < RENGLONES_ENTERADO; fila++) {
-    x = margen;
-    for (const ancho of anchos) {
-      doc.rect(x, y, ancho, 6.5, 'S');
-      x += ancho;
-    }
-
-    if (fila === 0 && datos.dirigidaA) {
+    if (i === 0 && datos.dirigidaA) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
       doc.setTextColor(...PIZARRA);
-      doc.text(datos.dirigidaA, margen + 2, y + 4.4);
+      doc.text(datos.dirigidaA, x + anchoFirma / 2, y - 2, { align: 'center' });
     }
-
-    y += 6.5;
   }
 
+  y += 14;
   // --- Pie membretado ---
   let yPie = alto - margen - altoPie + 2;
   doc.setDrawColor(37, 99, 235);
