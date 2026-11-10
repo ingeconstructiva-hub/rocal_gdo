@@ -1,57 +1,73 @@
--- Vaciar las fotos que acompañaban a los registros borrados.
+-- Dejar SOLO las fotos de perfil. Todo lo demas se borra.
 --
--- Correr DESPUES de sql/vaciar_obras.sql. Al borrar los registros, sus fotos
--- quedan huerfanas: nadie las ve desde la app, pero siguen ocupando espacio.
+-- Correr DESPUES de sql/vaciar_obras.sql.
 --
--- OJO CON DOS BUCKETS QUE NO SE TOCAN ENTEROS:
+-- QUE SE CONSERVA:
+--   'identificaciones/perfiles/...' - la foto de perfil de cada usuario.
 --
---   'obras' guarda la foto de cada obra, y las obras se conservan.
+-- QUE SE BORRA, y vale la pena leerlo dos veces porque va mas alla de los
+-- registros que ya se vaciaron:
 --
---   'identificaciones' esta COMPARTIDO. Ahi viven las firmas y los INE de
---   los resguardos, pero tambien la foto de perfil y el INE de cada usuario.
---   Borrarlo completo dejaria a la gente sin su foto de perfil. Por eso aqui
---   solo se quitan las carpetas de resguardos.
+--   La foto de cada OBRA (bucket 'obras'). Las obras se conservan, pero se
+--   quedan sin imagen y hay que volver a subirla desde la pantalla de
+--   Proyectos.
+--
+--   El INE de cada USUARIO ('identificaciones/ines/ine_<id>...'). No es un
+--   documento de la obra sino de la persona, y se pidio dejar solo los
+--   perfiles. Si lo quieres conservar, usa la version comentada al final.
+--
+--   Las fotos de bitacora, tickets de caja chica, comprobantes de gastos,
+--   documentos, evidencias de minutas, y las firmas e INE de resguardos.
+--
+-- Esto es definitivo: el almacen no tiene papelera.
 
--- 1) Que hay hoy en cada bucket.
+-- 1) Que hay hoy, bucket por bucket.
 select bucket_id, count(*) as archivos
 from storage.objects
-where bucket_id in (
-  'foto_bitacora', 'tickets_caja_chica', 'comprobantes',
-  'planos_obras', 'evidencias_minutas', 'identificaciones', 'obras'
-)
 group by bucket_id
 order by bucket_id;
 
--- 2) Lo que se va a borrar de 'identificaciones', antes de borrarlo.
---    Deben ser solo firmas de entrega/recibo e INE de resguardos.
+-- 2) Que se va a CONSERVAR. Revisa esta lista antes de seguir: si aqui no
+--    sale la foto de alguien, despues del borrado ya no habra de donde
+--    sacarla.
 select name
 from storage.objects
-where bucket_id = 'identificaciones'
-  and (name like 'firmas/%' or name like 'ines/ine_frente_%' or name like 'ines/ine_reverso_%')
-order by name
-limit 50;
+where bucket_id = 'identificaciones' and name like 'perfiles/%'
+order by name;
 
 -- 3) El borrado.
 begin;
 
--- Buckets que son solo de registros: se vacian enteros.
+-- Todo bucket que no sea el de identificaciones se vacia entero.
 delete from storage.objects
-where bucket_id in ('foto_bitacora', 'tickets_caja_chica', 'comprobantes', 'planos_obras', 'evidencias_minutas');
+where bucket_id <> 'identificaciones';
 
--- Del compartido, solo lo de resguardos. Las carpetas 'perfiles/' y el resto
--- de 'ines/' son de los usuarios y se quedan.
+-- Del de identificaciones se queda unicamente la carpeta de perfiles.
 delete from storage.objects
 where bucket_id = 'identificaciones'
-  and (name like 'firmas/%' or name like 'ines/ine_frente_%' or name like 'ines/ine_reverso_%');
+  and name not like 'perfiles/%';
 
 commit;
 
--- 4) Como quedo. 'obras' e 'identificaciones' deben seguir con archivos.
+-- 4) Como quedo. Debe salir una sola linea: identificaciones, con tantos
+--    archivos como perfiles con foto haya.
 select bucket_id, count(*) as archivos
 from storage.objects
-where bucket_id in (
-  'foto_bitacora', 'tickets_caja_chica', 'comprobantes',
-  'planos_obras', 'evidencias_minutas', 'identificaciones', 'obras'
-)
 group by bucket_id
 order by bucket_id;
+
+
+-- ---------------------------------------------------------------------
+-- SI QUIERES CONSERVAR TAMBIEN EL INE DE LOS USUARIOS
+--
+-- El INE de una persona vive en 'ines/' junto al de los resguardos, y se
+-- distinguen por el nombre: los de resguardo empiezan con 'ine_frente_' o
+-- 'ine_reverso_'. Cambia el segundo delete del paso 3 por este:
+--
+--   delete from storage.objects
+--   where bucket_id = 'identificaciones'
+--     and name not like 'perfiles/%'
+--     and (name like 'firmas/%'
+--          or name like 'ines/ine_frente_%'
+--          or name like 'ines/ine_reverso_%');
+-- ---------------------------------------------------------------------
