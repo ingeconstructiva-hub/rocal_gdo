@@ -140,7 +140,9 @@ export const reporteAHtml = (r: Reporte): string => {
         th { background: #0f172a; color: #fff; padding: 6px; text-align: left; font-size: 9px; text-transform: uppercase; }
         td { border: 1px solid #e2e8f0; padding: 6px; }
         .totales { background: #f1f5f9; font-weight: bold; }
-        .grupo { background: #e0e7ff; color: #1e3a8a; font-weight: bold; font-size: 10px; }
+        /* Los espacios del titulo se respetan: separan "ENCARGA", el nombre y el
+           importe, y sin esto el navegador los junta en un solo renglon apretado. */
+        .grupo { background: #e0e7ff; color: #1e3a8a; font-weight: bold; font-size: 10px; white-space: pre; }
         .subtotal { background: #f8fafc; font-weight: bold; color: #475569; }
         ${membreteCss(r.empresa)}
       </style>

@@ -8,7 +8,7 @@ import type { Reporte } from '../lib/reporte';
  */
 
 const pesos = (n: number) =>
-  Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 });
+  Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export const generarReporteGastos = (
   projectName: string,

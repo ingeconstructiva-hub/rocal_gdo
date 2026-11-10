@@ -11,7 +11,7 @@ import type { Reporte } from '../lib/reporte';
  */
 
 const formatMXN = (val: number) =>
-  Number(val || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 });
+  Number(val || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export const generarReporteMaquinaria = (
   projectName: string,

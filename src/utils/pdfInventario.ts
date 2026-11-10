@@ -2,31 +2,30 @@ import type { Reporte } from '../lib/reporte';
 
 /* El reporte de destajos, como datos.
  *
- * Se lee por semana, no por renglón suelto: lo que se revisa es cuánto se le
- * debe al maestro de esa semana. Por eso va en grupos con su subtotal, igual
- * que antes, nada más que ahora cada plataforma lo dibuja por su lado.
+ * Se lee por destajista, no por semana ni por renglón suelto: lo que se
+ * revisa en obra es cuánto trabajo hizo cada maestro y cuánto se le debe por
+ * él. Así es como lo llevaban en Excel antes de la app —un bloque por
+ * persona, sus actividades debajo y su total al cierre— y es el papel que ya
+ * saben leer.
+ *
+ * Cada bloque abre con quién encargó el trabajo, quién lo hizo y cuánto
+ * suma; después van sus actividades con unidad, volumen, precio unitario e
+ * importe.
  */
 
 const pesos = (n: number) =>
-  `$${Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`;
+  `$${Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-/* Convierte una etiqueta de semana en fecha para poder ordenarla.
+/* El volumen se escribe como se capturó.
  *
- * Las etiquetas son texto del estilo "28 SEP - 2 OCT 2026", así que ordenarlas
- * alfabéticamente pone "12 OCT" antes que "5 OCT". Se lee la fecha de cierre,
- * que es la que trae el año.
+ * Son medidas de obra: 0.3675 m³ de cepa o 7.52 m² de trazo. Redondearlas a
+ * dos decimales cambiaría el importe contra el que se coteja la raya, así que
+ * se deja el número tal cual y solo se le quitan los ceros de relleno.
  */
-const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
-
-const fechaDeSemana = (etiqueta: string): number => {
-  const cierre = (etiqueta || '').split('-').pop()?.trim().toUpperCase() || '';
-  const partes = cierre.match(/^(\d{1,2})\s+([A-ZÁÉÍÓÚ]{3})\s+(\d{4})$/);
-  if (!partes) return -Infinity;
-
-  const mes = MESES.indexOf(partes[2]);
-  if (mes === -1) return -Infinity;
-
-  return new Date(Number(partes[3]), mes, Number(partes[1])).getTime();
+const volumen = (n: unknown) => {
+  const numero = Number(n ?? 0);
+  if (!Number.isFinite(numero)) return String(n ?? '');
+  return String(Number(numero.toFixed(4)));
 };
 
 export const generarReporteInventario = (
@@ -34,67 +33,78 @@ export const generarReporteInventario = (
   projectName: string = 'Obra sin nombre',
   responsable: string = ''
 ): Reporte => {
-  const porSemana: Record<string, any[]> = {};
+  /* Se agrupa por quién hizo el trabajo. Los registros sin destajista no se
+   * esconden: van juntos en su propio bloque, porque un importe sin dueño es
+   * justo lo que hay que notar al revisar. */
+  const porMaestro = new Map<string, any[]>();
   for (const item of items) {
-    const semana = item.week_label || 'Semana sin definir';
-    if (!porSemana[semana]) porSemana[semana] = [];
-    porSemana[semana].push(item);
+    const maestro = (item.in_charge || '').trim() || 'Sin destajista';
+    if (!porMaestro.has(maestro)) porMaestro.set(maestro, []);
+    porMaestro.get(maestro)!.push(item);
   }
 
   let granTotal = 0;
 
-  const grupos = Object.entries(porSemana)
-    .sort(([a], [b]) => fechaDeSemana(b) - fechaDeSemana(a))
-    .map(([semana, registros]) => {
+  const grupos = [...porMaestro.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, 'es'))
+    .map(([maestro, registros]) => {
       let subtotal = 0;
 
       const filas = registros.map((item) => {
         const importe = Number(item.quantity || 0) * Number(item.unit_price || 0);
         subtotal += importe;
 
-        /* Quién recibe y quién solicita van bajo el concepto, no en columnas
-         * propias: son nombres largos y en una hoja vertical se comen el
-         * ancho que necesitan las cifras. */
-        const personas = [
-          item.in_charge ? `Recibe: ${item.in_charge}` : '',
-          item.requested_by ? `Solicita: ${item.requested_by}` : '',
-        ]
-          .filter(Boolean)
-          .join(' | ');
-
         return [
-          personas ? `${item.name}\n${personas}` : item.name,
-          String(item.quantity ?? ''),
+          item.name || '',
           item.unit || '',
+          volumen(item.quantity),
           pesos(item.unit_price),
           pesos(importe),
-          '',
         ];
       });
 
       granTotal += subtotal;
 
+      /* Quién encargó el trabajo sale del propio registro. Si en una misma
+       * tanda lo encargaron varios, se nombran todos: el bloque es del
+       * destajista, no del que encargó. */
+      const encargados = [
+        ...new Set(registros.map((r) => (r.requested_by || '').trim()).filter(Boolean)),
+      ].join(' / ');
+
+      const titulo = [
+        encargados ? `ENCARGA: ${encargados}` : '',
+        maestro.toUpperCase(),
+        `DESTAJO: ${pesos(subtotal)}`,
+      ]
+        .filter(Boolean)
+        .join('        ');
+
       return {
-        titulo: semana,
+        titulo,
         filas,
-        subtotal: ['', '', '', `Subtotal ${semana}:`, pesos(subtotal), ''],
+        subtotal: ['', '', '', 'TOTAL:', pesos(subtotal)],
       };
     });
 
+  /* Cuando lo que se imprime es una sola semana, se dice cuál. Si la tanda
+   * trae varias, el papel es el acumulado y poner una sola fecha mentiría. */
+  const semanas = [...new Set(items.map((i) => i.week_label).filter(Boolean))];
   const encabezado = [
+    semanas.length === 1 ? `Semana: ${semanas[0]}` : '',
     responsable ? `Responsable: ${responsable}` : '',
-    `Registros: ${items.length}`,
+    `Destajistas: ${grupos.length}`,
   ]
     .filter(Boolean)
     .join('  ·  ');
 
   return {
     titulo: 'CONSTRUCTORA ROCAL',
-    subtitulo: `Control de destajos y materiales - ${projectName}${encabezado ? `\n${encabezado}` : ''}`,
-    columnas: ['Concepto / asignación', 'Cant.', 'Unid.', 'P.U.', 'Importe', 'Firma / Vo.Bo.'],
-    columnasNumericas: [3, 4],
+    subtitulo: `Control de destajos - ${projectName}${encabezado ? `\n${encabezado}` : ''}`,
+    columnas: ['Actividades', 'Un.', 'Volumen', 'P.U.', 'Importe'],
+    columnasNumericas: [2, 3, 4],
     filas: [],
     grupos,
-    totales: ['', '', '', 'GRAN TOTAL ACUMULADO:', pesos(granTotal), ''],
+    totales: ['', '', '', 'GRAN TOTAL:', pesos(granTotal)],
   };
 };
