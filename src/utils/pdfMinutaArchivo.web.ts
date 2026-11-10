@@ -258,18 +258,19 @@ export async function crearPdfMinuta(
     doc.setLineWidth(0.3);
     doc.line(x, y, x + anchoFirma, y);
 
+    const conNombre = i === 0 && !!datos.dirigidaA;
+
+    doc.setFont('helvetica', conNombre ? 'bold' : 'normal');
+    doc.setFontSize(conNombre ? 8 : 7);
+    doc.setTextColor(...(conNombre ? PIZARRA : GRIS));
+    doc.text(conNombre ? datos.dirigidaA! : 'NOMBRE', x + anchoFirma / 2, y + 4, {
+      align: 'center',
+    });
+
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(...GRIS);
-    doc.text('NOMBRE', x + anchoFirma / 2, y + 4, { align: 'center' });
     doc.text('CARGO', x + anchoFirma / 2, y + 8.5, { align: 'center' });
-
-    if (i === 0 && datos.dirigidaA) {
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(...PIZARRA);
-      doc.text(datos.dirigidaA, x + anchoFirma / 2, y - 2, { align: 'center' });
-    }
   }
 
   y += 14;
