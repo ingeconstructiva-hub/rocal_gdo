@@ -58,6 +58,16 @@ const fechaCorta = (iso?: string | null) => {
   return new Date(a, m - 1, d).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
 };
 
+/* Los tres que firman una minuta de obra. El cargo se puede cambiar antes de
+ * generarla porque no toda obra tiene los mismos puestos, y el nombre se
+ * escribe solo cuando se sabe: si se deja vacio, la raya sale limpia y se
+ * llena a mano con la impresora portatil enfrente. */
+const FIRMAS_EN_BLANCO = [
+  { cargo: 'Director', nombre: '' },
+  { cargo: 'Subdirector', nombre: '' },
+  { cargo: 'Supervisor', nombre: '' },
+];
+
 const EMPRESAS_MINUTA = [
   { clave: 'rocal' as const, etiqueta: 'ROCAL', color: '#1E3A8A' },
   { clave: 'jd' as const, etiqueta: 'JD', color: '#15803D' },
@@ -73,6 +83,14 @@ export function Minutas() {
   const [generando, setGenerando] = useState<string | null>(null);
   // Cual minuta espera que se elija empresa. null = el selector esta cerrado.
   const [eligiendoEmpresa, setEligiendoEmpresa] = useState<Minuta | null>(null);
+
+  /* Quien firma se queda entre minutas: en una obra firman siempre los
+   * mismos, y volver a teclear tres nombres en el celular cada vez es lo que
+   * hace que se dejen en blanco. */
+  const [firmas, setFirmas] = useState(FIRMAS_EN_BLANCO);
+
+  const cambiarFirma = (i: number, campo: 'cargo' | 'nombre', valor: string) =>
+    setFirmas((previas) => previas.map((f, n) => (n === i ? { ...f, [campo]: valor } : f)));
 
   /* El número de minuta sale del orden en que se levantaron dentro de la obra.
    * No hay columna para él, así que se cuenta desde la más vieja: la lista
@@ -97,6 +115,7 @@ export function Minutas() {
         proyecto: activeProject?.name || 'Obra sin nombre',
         ubicacion: activeProject?.location || null,
         evidencias: fotosDe(m),
+        firmas,
       };
 
       await exportarDocumento(
@@ -477,7 +496,32 @@ export function Minutas() {
       <Modal visible={!!eligiendoEmpresa} transparent animationType="fade" onRequestClose={() => setEligiendoEmpresa(null)}>
         <Pressable style={estilos.fondoSelector} onPress={() => setEligiendoEmpresa(null)}>
           <Pressable style={estilos.selector}>
-            <Text style={estilos.selectorTitulo}>¿En hoja de qué empresa?</Text>
+            <Text style={estilos.selectorTitulo}>¿Quién firma?</Text>
+
+            <ScrollView style={{ maxHeight: 170 }} keyboardShouldPersistTaps="handled">
+              {firmas.map((firma, i) => (
+                <View key={i} style={estilos.filaFirma}>
+                  <TextInput
+                    style={[estilos.campoFirma, { flex: 4 }]}
+                    placeholder="Cargo"
+                    value={firma.cargo}
+                    onChangeText={(v) => cambiarFirma(i, 'cargo', v)}
+                  />
+                  <TextInput
+                    style={[estilos.campoFirma, { flex: 6 }]}
+                    placeholder="Nombre (opcional)"
+                    value={firma.nombre}
+                    onChangeText={(v) => cambiarFirma(i, 'nombre', v)}
+                  />
+                </View>
+              ))}
+            </ScrollView>
+
+            <Text style={estilos.notaFirmas}>
+              El nombre que dejes vacío sale como raya en blanco para firmar a mano.
+            </Text>
+
+            <Text style={[estilos.selectorTitulo, { marginTop: 6 }]}>¿En hoja de qué empresa?</Text>
 
             {EMPRESAS_MINUTA.map((e) => (
               <TouchableOpacity
@@ -543,6 +587,18 @@ const estilos = StyleSheet.create({
   botonMinutaTexto: { color: '#2563EB', fontWeight: '700', fontSize: 12 },
   fondoSelector: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'center', padding: 28 },
   selector: { backgroundColor: '#FFF', borderRadius: 14, padding: 18, gap: 10 },
+  filaFirma: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  campoFirma: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    fontSize: 13,
+    color: '#0F172A',
+  },
+  notaFirmas: { fontSize: 11, color: '#64748B', textAlign: 'center', lineHeight: 15 },
   selectorTitulo: { fontSize: 15, fontWeight: '800', color: '#0F172A', marginBottom: 4, textAlign: 'center' },
   opcionEmpresa: {
     flexDirection: 'row',

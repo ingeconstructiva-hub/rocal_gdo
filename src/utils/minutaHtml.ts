@@ -1,5 +1,18 @@
 import { EMPRESAS, type Empresa } from '../lib/membretes';
-import type { DatosDeMinuta } from './pdfMinutaArchivo';
+import type { DatosDeMinuta, FirmaDeMinuta } from './pdfMinutaArchivo';
+
+/* Los mismos tres cargos que imprime el PDF del navegador. Se repiten aqui
+ * para no arrastrar el modulo de jsPDF al celular. */
+const CARGOS_POR_DEFECTO = ['Director', 'Subdirector', 'Supervisor'];
+
+const firmasDe = (datos: DatosDeMinuta): FirmaDeMinuta[] =>
+  CARGOS_POR_DEFECTO.map((cargo, i) => {
+    const elegida = datos.firmas?.[i];
+    return {
+      cargo: elegida?.cargo?.trim() || cargo,
+      nombre: elegida?.nombre?.trim() || '',
+    };
+  });
 
 /* La minuta dibujada como HTML.
  *
@@ -84,7 +97,9 @@ export const minutaAHtml = (datos: DatosDeMinuta, clave: Empresa['clave']): stri
       .firmas { display: flex; gap: 16px; margin-top: 46px; }
       .pie { margin-top: 10px; }
       .firma { flex: 1; text-align: center; padding-top: 34px; }
-      .quien { font-size: 9px; font-weight: bold; color: #1e293b; margin-top: 3px; }
+      /* Alto fijo: sin el, el rotulo de una firma en blanco sube y los tres
+         cargos salen a distinto nivel. */
+      .quien { font-size: 9px; font-weight: bold; color: #1e293b; margin-top: 3px; min-height: 11px; }
       .linea { border-top: 1px solid #475569; }
       .rotulo { font-size: 7px; color: #64748b; letter-spacing: 1px; margin-top: 3px; }
       .evidencias { display: flex; flex-wrap: wrap; gap: 4px; align-content: stretch; justify-content: center; align-items: center; }
@@ -130,14 +145,15 @@ export const minutaAHtml = (datos: DatosDeMinuta, clave: Empresa['clave']): stri
       </div>
 
       <div class="firmas">
-        <div class="firma">
+        ${firmasDe(datos)
+          .map(
+            (firma) => `<div class="firma">
           <div class="linea"></div>
-          <div class="quien">${escapar(datos.dirigidaA || '')}</div>
-          <div class="rotulo">RESPONSABLE</div>
-        </div>
-        <div class="firma"><div class="linea"></div></div>
-        <div class="firma"><div class="linea"></div></div>
-      </div>
+          <div class="quien">${escapar(firma.nombre || '')}</div>
+          <div class="rotulo">${escapar((firma.cargo || '').toUpperCase())}</div>
+        </div>`
+          )
+          .join('')}
       </div>
 
       <div class="pie">${pie}</div>

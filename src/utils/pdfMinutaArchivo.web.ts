@@ -17,6 +17,12 @@ import { EMPRESAS, type Empresa } from '../lib/membretes';
 const PIZARRA: [number, number, number] = [30, 41, 59];
 const GRIS: [number, number, number] = [100, 116, 139];
 
+/* Quien firma la minuta. El cargo va impreso debajo de la raya para que
+ * quien reciba la hoja sepa quien le dio la indicacion y quien lo
+ * atestigua; el nombre se escribe antes de imprimir cuando ya se sabe, y si
+ * se deja vacio la raya queda limpia para escribirlo a mano. */
+export type FirmaDeMinuta = { cargo: string; nombre?: string | null };
+
 export type DatosDeMinuta = {
   asunto: string;
   indicacion: string;
@@ -29,7 +35,23 @@ export type DatosDeMinuta = {
   estado?: string;
   /** Fotos de lo acordado, ya con dirección firmada. */
   evidencias?: string[];
+  /** Los tres espacios de firma, en el orden en que salen impresos. */
+  firmas?: FirmaDeMinuta[];
 };
+
+/* Los tres espacios, con los cargos de siempre cuando no se eligieron.
+ * El primero cae en quien recibio la indicacion, si se capturo. */
+export const CARGOS_POR_DEFECTO = ['Director', 'Subdirector', 'Supervisor'];
+
+function firmasDe(datos: DatosDeMinuta): FirmaDeMinuta[] {
+  return CARGOS_POR_DEFECTO.map((cargo, i) => {
+    const elegida = datos.firmas?.[i];
+    return {
+      cargo: elegida?.cargo?.trim() || cargo,
+      nombre: elegida?.nombre?.trim() || '',
+    };
+  });
+}
 
 function medir(dataUrl: string): Promise<{ ancho: number; alto: number }> {
   return new Promise((resolver) => {
@@ -255,27 +277,39 @@ export async function crearPdfMinuta(
 
   const anchoFirma = (util - 16) / FIRMAS;
 
+  /* Cada raya lleva su cargo rotulado; el nombre, solo si se escribio al
+   * generarla. Sin nombre la raya queda limpia y se llena a mano en obra. */
+  const firmas = firmasDe(datos);
+
   for (let i = 0; i < FIRMAS; i++) {
     const x = margen + i * (anchoFirma + 8);
+    const centro = x + anchoFirma / 2;
 
     doc.setDrawColor(71, 85, 105);
     doc.setLineWidth(0.3);
     doc.line(x, y, x + anchoFirma, y);
 
-    /* Solo el primero lleva algo escrito: es a quien se le dio la
-     * indicacion, y su nombre ya esta en la minuta. Los otros dos se
-     * quedan en blanco para que quien firme ponga el suyo. */
-    if (i !== 0 || !datos.dirigidaA) continue;
+    const firma = firmas[i];
+    if (!firma) continue;
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(...PIZARRA);
-    doc.text(datos.dirigidaA, x + anchoFirma / 2, y + 4, { align: 'center' });
+    /* El cargo siempre a la misma altura, lleve nombre o no: si sube cuando
+     * falta el nombre, los tres rotulos salen a distinto nivel. */
+    const yNombre = y + 4;
+    const yCargo = y + 8.5;
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    doc.setTextColor(...GRIS);
-    doc.text('RESPONSABLE', x + anchoFirma / 2, y + 8.5, { align: 'center' });
+    if (firma.nombre) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(...PIZARRA);
+      doc.text(firma.nombre, centro, yNombre, { align: 'center' });
+    }
+
+    if (firma.cargo) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(...GRIS);
+      doc.text(firma.cargo.toUpperCase(), centro, yCargo, { align: 'center' });
+    }
   }
   // --- Pie membretado ---
   let yPie = alto - margen - altoPie + 2;
