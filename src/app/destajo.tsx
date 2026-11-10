@@ -27,6 +27,7 @@ import { useRefrescar } from '../lib/refrescar';
 import { SkeletonLista } from '../components/Skeleton';
 import { SinDatos } from '../components/SinDatos';
 import { exportarPDF, exportarReporte, exportarTexto } from '../lib/exportar';
+import { pedirEmpresa } from '../components/SelectorEmpresa';
 import { regresar } from '../lib/navegar';
 import { Aviso } from '../lib/aviso';
 import { useProject } from '../context/ProjectContext';
@@ -542,8 +543,11 @@ export default function InventarioScreen() {
 
     setIsExporting(true);
     try {
+      const empresa = await pedirEmpresa();
+      if (!empresa) return;
+
       const reporte = generarReporteInventario(items, activeProject?.name, profile?.full_name);
-      await exportarReporte(reporte, `${nombre.replace(/[^\w-]+/g, '_')}.pdf`);
+      await exportarReporte({ ...reporte, empresa }, `${nombre.replace(/[^\w-]+/g, '_')}.pdf`);
     } catch (error: any) {
       console.error("Error al exportar inventario:", error);
       Aviso.alert("Error", "Ocurrió un problema al generar el documento.");

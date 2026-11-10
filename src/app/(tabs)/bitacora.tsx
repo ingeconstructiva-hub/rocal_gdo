@@ -13,6 +13,7 @@ import { SkeletonLista } from '../../components/Skeleton';
 import { SinDatos } from '../../components/SinDatos';
 import { Minutas } from '../../components/Minutas';
 import { exportarDocumento, exportarPDF } from '../../lib/exportar';
+import { pedirEmpresa } from '../../components/SelectorEmpresa';
 import { volverAlTablero } from '../../lib/navegar';
 import { firmarVarias } from '../../lib/urlsFirmadas';
 import { subirArchivo } from '../../lib/subidas';
@@ -375,9 +376,12 @@ export default function BitacoraScreen() {
   const ejecutarGeneracionPDF = async () => {
     setIsExporting(true);
     try {
-      const htmlContent = await generarPlantillaBitacora(logs, isOffline, activeProject?.name);
+      const empresa = await pedirEmpresa();
+      if (!empresa) return;
+
+      const htmlContent = await generarPlantillaBitacora(logs, isOffline, activeProject?.name, empresa);
       await exportarDocumento(htmlContent, 'Bitacora.pdf', () =>
-        crearPdfBitacora(logs, activeProject?.name)
+        crearPdfBitacora(logs, activeProject?.name, empresa)
       );
     } catch (error) {
       console.error("Error al exportar:", error);

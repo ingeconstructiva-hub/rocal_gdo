@@ -5,6 +5,12 @@
  * importar el mismo nombre en las dos plataformas; Metro toma la versión
  * .web.ts cuando compila para navegador.
  */
-export async function crearPdfBitacora(_logs: any[], _projectName?: string): Promise<Blob> {
+import type { ClaveEmpresa } from '../lib/membreteHtml';
+
+export async function crearPdfBitacora(
+  _logs: any[],
+  _projectName?: string,
+  _empresa?: ClaveEmpresa | null
+): Promise<Blob> {
   throw new Error('Solo se usa en navegador');
 }

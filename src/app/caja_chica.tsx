@@ -35,6 +35,7 @@ import { SinDatos } from '../components/SinDatos';
 import { guardarArchivoLocal } from '../lib/archivos';
 import { subirArchivo } from '../lib/subidas';
 import { exportarPDF, exportarReporte, exportarTexto } from '../lib/exportar';
+import { pedirEmpresa } from '../components/SelectorEmpresa';
 import { regresar } from '../lib/navegar';
 import { firmarCampos } from '../lib/urlsFirmadas';
 import { FotoSinConexion } from '../components/FotoSinConexion';
@@ -151,6 +152,9 @@ export default function CajaChicaScreen() {
     }
     setIsExportingPDF(true);
     try {
+      const empresa = await pedirEmpresa();
+      if (!empresa) return;
+
       const reporte = generarReporteCajaChica(
         activeProject?.name || 'Obra Sin Nombre',
         saldoDisponible,
@@ -159,7 +163,7 @@ export default function CajaChicaScreen() {
         movimientosFiltrados
       );
       
-      await exportarReporte(reporte, 'Caja_Chica.pdf');
+      await exportarReporte({ ...reporte, empresa }, 'Caja_Chica.pdf');
     } catch (error: any) {
       Aviso.alert("Error PDF", error.message);
     } finally {

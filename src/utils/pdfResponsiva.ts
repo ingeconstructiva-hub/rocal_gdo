@@ -1,4 +1,6 @@
-export function generarPlantillaResponsiva(vale: any) {
+import { membreteAbajo, membreteArriba, membreteCss, type ClaveEmpresa } from '../lib/membreteHtml';
+
+export function generarPlantillaResponsiva(vale: any, empresa?: ClaveEmpresa | null) {
   return `
     <!DOCTYPE html>
     <html lang="es">
@@ -23,9 +25,12 @@ export function generarPlantillaResponsiva(vale: any) {
         .signature-placeholder { height: 100px; } 
         .digital-seal { margin-top: 40px; padding: 10px; border: 1px dashed #cbd5e1; background-color: #f1f5f9; border-radius: 6px; font-size: 10px; color: #64748B; font-family: monospace; }
         .verse { text-align: center; margin-top: 50px; font-size: 11px; font-style: italic; color: #64748b; }
+        ${membreteCss(empresa)}
       </style>
     </head>
     <body>
+      ${membreteArriba(empresa)}
+
       <div class="header">
         ${vale.fecha_prestamo}<br>
         San Pablo del Monte, Tlaxcala<br>
@@ -98,6 +103,7 @@ export function generarPlantillaResponsiva(vale: any) {
       <div class="verse">
         "Porque toda casa tiene su constructor, pero el constructor de todo es Dios." - Hebreos 3:4
       </div>
+      ${membreteAbajo(empresa)}
     </body>
     </html>
   `;

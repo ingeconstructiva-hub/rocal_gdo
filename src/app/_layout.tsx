@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ProjectProvider } from '../context/ProjectContext'; // <-- Ajusta la ruta si tus context están en /src/context
 import { UserProvider } from '../context/UserContext';
 import { TirarParaRefrescar } from '../components/TirarParaRefrescar';
+import { SelectorEmpresa } from '../components/SelectorEmpresa';
 import { VistaPreviaPDF } from '../components/VistaPreviaPDF';
 import { ContenedorDeAvisos } from '../lib/aviso';
 import { supabase } from '../lib/supabase';
@@ -85,6 +86,7 @@ export default function RootLayout() {
 
         {/* Vista previa de reportes en web. En nativo no dibuja nada. */}
         <VistaPreviaPDF />
+        <SelectorEmpresa />
 
         {/* Deslizar hacia abajo para actualizar (solo web). */}
         <TirarParaRefrescar />

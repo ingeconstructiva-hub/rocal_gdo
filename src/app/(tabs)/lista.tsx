@@ -13,6 +13,7 @@ import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platfo
 import { SkeletonLista } from '../../components/Skeleton';
 import { SinDatos } from '../../components/SinDatos';
 import { exportarPDF, exportarReporte, exportarTexto } from '../../lib/exportar';
+import { pedirEmpresa } from '../../components/SelectorEmpresa';
 import { regresar } from '../../lib/navegar';
 import { useRefrescar } from '../../lib/refrescar';
 import { Aviso } from '../../lib/aviso';
@@ -696,8 +697,11 @@ export default function ListaScreen() {
   const imprimirSemanas = async (lista: any[], nombre: string) => {
     if (lista.length === 0) { Aviso.alert('Sin datos', 'Todavia no hay semanas guardadas.'); return; }
     try {
+      const empresa = await pedirEmpresa();
+      if (!empresa) return;
+
       const reporte = generarReporteHistorial(lista, activeProject?.name || 'Obra');
-      await exportarReporte(reporte, nombre);
+      await exportarReporte({ ...reporte, empresa }, nombre);
     } catch (e: any) {
       Aviso.alert('Error PDF', mensajeDeError(e, 'generar el PDF'));
     }
@@ -707,9 +711,12 @@ export default function ListaScreen() {
 
     if (displayedWorkers.length === 0) return;
     try {
+      const empresa = await pedirEmpresa();
+      if (!empresa) return;
+
       const weekLabel = new Date().toLocaleDateString('es-MX');
       const reporte = generarReporteNomina(displayedWorkers, weekLabel);
-      await exportarReporte(reporte, 'Nomina.pdf');
+      await exportarReporte({ ...reporte, empresa }, 'Nomina.pdf');
     } catch (error: any) { Aviso.alert("Error PDF", error.message); }
   };
 

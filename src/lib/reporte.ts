@@ -12,6 +12,8 @@
  * mandar por WhatsApp.
  */
 
+import { membreteAbajo, membreteArriba, membreteCss, type ClaveEmpresa } from './membreteHtml';
+
 /** Una cifra del encabezado: "Saldo pendiente: $4,673.00". */
 export type CifraDeResumen = {
   etiqueta: string;
@@ -50,6 +52,10 @@ export type Reporte = {
   horizontal?: boolean;
   /** Qué columnas son cifras, para alinearlas a la derecha. */
   columnasNumericas?: number[];
+  /* En hoja de qué empresa se imprime. Se elige al generarlo, no se guarda
+   * con los datos: la misma obra factura por ROCAL o por JD segun de quien
+   * sea el contrato. Sin empresa sale la hoja pelona de antes. */
+  empresa?: ClaveEmpresa | null;
 };
 
 const AZUL = '#2563eb';
@@ -72,6 +78,11 @@ export const reporteAHtml = (r: Reporte): string => {
     month: 'long',
     day: 'numeric',
   });
+
+  /* Mismo trato que en el PDF: con membrete, el titulo es lo que el
+   * documento es y no el nombre de la empresa, que ya va arriba. */
+  const renglones = r.subtitulo.split('\n');
+  const titulo = r.empresa ? renglones.shift() || r.titulo : r.titulo;
 
   const alaDerecha = new Set(r.columnasNumericas || []);
   const alineacion = (i: number) => (alaDerecha.has(i) ? ' style="text-align:right;"' : '');
@@ -131,14 +142,16 @@ export const reporteAHtml = (r: Reporte): string => {
         .totales { background: #f1f5f9; font-weight: bold; }
         .grupo { background: #e0e7ff; color: #1e3a8a; font-weight: bold; font-size: 10px; }
         .subtotal { background: #f8fafc; font-weight: bold; color: #475569; }
+        ${membreteCss(r.empresa)}
       </style>
     </head>
     <body>
+      ${membreteArriba(r.empresa)}
       <table class="encabezado">
         <tr>
           <td>
-            <div class="titulo">${escapar(r.titulo)}</div>
-            <div style="font-size:12px; color:#475569;">${escapar(r.subtitulo).replace(/\n/g, '<br>')}</div>
+            <div class="titulo">${escapar(titulo)}</div>
+            <div style="font-size:12px; color:#475569;">${renglones.map(escapar).join('<br>')}</div>
           </td>
           <td style="text-align:right;">Fecha: ${fecha}</td>
         </tr>
@@ -148,6 +161,7 @@ export const reporteAHtml = (r: Reporte): string => {
         <thead><tr>${encabezados}</tr></thead>
         <tbody>${filas}${totales}</tbody>
       </table>
+      ${membreteAbajo(r.empresa)}
     </body>
     </html>
   `;

@@ -11,6 +11,7 @@
 
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { altoDelPie, dibujarMembrete, dibujarPieMembrete } from './membretePdf.web';
 import type { Reporte } from './reporte';
 
 const AZUL: [number, number, number] = [37, 99, 235];
@@ -34,18 +35,28 @@ export function crearPdfReporte(r: Reporte): Blob {
 
   const ancho = doc.internal.pageSize.getWidth();
   const margen = 12;
-  let y = margen + 4;
+
+  /* El membrete manda sobre todo lo demas: el titulo y la fecha arrancan
+   * debajo de el. Sin empresa, la hoja empieza donde empezaba antes. */
+  let y = r.empresa ? dibujarMembrete(doc, r.empresa, margen, margen) : margen + 4;
+  const yTitulo = y;
+
+  /* Con membrete el nombre de la empresa ya esta arriba: repetirlo en el
+   * titulo sobra, y en hoja de JD seria falso. Ahi el titulo pasa a ser lo
+   * que el documento es, que es el primer renglon del subtitulo. */
+  const renglones = r.subtitulo.split('\n');
+  const titulo = r.empresa ? renglones.shift() || r.titulo : r.titulo;
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.setTextColor(...AZUL);
-  doc.text(r.titulo, margen, y);
+  doc.text(titulo, margen, y);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(71, 85, 105);
 
-  for (const renglon of r.subtitulo.split('\n')) {
+  for (const renglon of renglones) {
     y += 5;
     doc.text(renglon, margen, y);
   }
@@ -56,7 +67,7 @@ export function crearPdfReporte(r: Reporte): Blob {
     day: 'numeric',
   });
   doc.setFontSize(9);
-  doc.text(`Fecha: ${fecha}`, ancho - margen, margen + 4, { align: 'right' });
+  doc.text(`Fecha: ${fecha}`, ancho - margen, yTitulo, { align: 'right' });
 
   y += 3;
   doc.setDrawColor(...AZUL);
@@ -132,7 +143,9 @@ export function crearPdfReporte(r: Reporte): Blob {
     head: [r.columnas],
     body: cuerpo,
     foot: r.totales ? [r.totales.map((celda) => String(celda ?? ''))] : undefined,
-    margin: { left: margen, right: margen },
+    margin: { left: margen, right: margen, bottom: margen + altoDelPie(r.empresa) },
+    // El pie va en todas las hojas, no solo en la primera.
+    didDrawPage: () => dibujarPieMembrete(doc, r.empresa, margen),
     styles: { fontSize: r.horizontal ? 7.5 : 8, cellPadding: 1.8, textColor: [30, 41, 59] },
     headStyles: { fillColor: PIZARRA, textColor: [255, 255, 255], fontSize: 7, fontStyle: 'bold' },
     footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' },

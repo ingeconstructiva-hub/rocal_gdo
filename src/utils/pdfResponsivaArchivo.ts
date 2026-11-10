@@ -5,6 +5,11 @@
  * puedan importar el mismo nombre en las dos plataformas; Metro toma la
  * versión .web.ts cuando compila para navegador.
  */
-export async function crearPdfResponsiva(_vale: any): Promise<Blob> {
+import type { ClaveEmpresa } from '../lib/membreteHtml';
+
+export async function crearPdfResponsiva(
+  _vale: any,
+  _empresa?: ClaveEmpresa | null
+): Promise<Blob> {
   throw new Error('Solo se usa en navegador');
 }

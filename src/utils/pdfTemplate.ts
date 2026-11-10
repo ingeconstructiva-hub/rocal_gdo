@@ -19,7 +19,9 @@ const urlToBase64 = async (url: string, isOffline: boolean) => {
   }
 };
 
-export const generarPlantillaBitacora = async (logs: any[], isOffline: boolean = false, projectName: string = 'Obra sin nombre') => {
+import { membreteAbajo, membreteArriba, membreteCss, type ClaveEmpresa } from '../lib/membreteHtml';
+
+export const generarPlantillaBitacora = async (logs: any[], isOffline: boolean = false, projectName: string = 'Obra sin nombre', empresa?: ClaveEmpresa | null) => {
   let rowsHtml = '';
 
   for (const log of logs) {
@@ -106,6 +108,7 @@ export const generarPlantillaBitacora = async (logs: any[], isOffline: boolean =
           .report-title { font-size: 14px; color: #00AEEF; font-weight: 800; text-transform: uppercase; margin-top: 5px; letter-spacing: 0.5px; }
           .project-info { text-align: right; color: #475569; line-height: 1.5; font-size: 11px;}
           .project-name { font-size: 14px; font-weight: bold; color: #0f172a; }
+          ${membreteCss(empresa)}
 
           /* TARJETAS DE BITÁCORA */
           .log-entry { 
@@ -161,9 +164,11 @@ export const generarPlantillaBitacora = async (logs: any[], isOffline: boolean =
       </head>
       <body>
 
+        ${membreteArriba(empresa)}
+
         <div class="header-container">
             <div>
-                <div class="company-title">ROCAL</div>
+                ${empresa ? '' : '<div class="company-title">ROCAL</div>'}
                 <div class="report-title">Bitácora de Obra y Avances</div>
             </div>
             <div class="project-info">
@@ -177,6 +182,8 @@ export const generarPlantillaBitacora = async (logs: any[], isOffline: boolean =
         <div>
           ${rowsHtml}
         </div>
+
+        ${membreteAbajo(empresa)}
 
       </body>
     </html>

@@ -24,6 +24,7 @@ import {
 import { useRefrescar } from '../lib/refrescar';
 import { SkeletonLista } from '../components/Skeleton';
 import { exportarPDF, exportarReporte, exportarTexto } from '../lib/exportar';
+import { pedirEmpresa } from '../components/SelectorEmpresa';
 import { regresar } from '../lib/navegar';
 import { Aviso } from '../lib/aviso';
 
@@ -667,8 +668,11 @@ export default function GastosMaquinariaScreen() {
     if (gastos.length === 0) return;
     setIsExportingPDF(true);
     try {
+      const empresa = await pedirEmpresa();
+      if (!empresa) return;
+
       const reporte = generarReporteMaquinaria(activeProject?.name || 'Obra', globalGenerado, globalPagado, globalDeuda, gastos);
-      await exportarReporte(reporte, 'Gastos_Maquinaria.pdf');
+      await exportarReporte({ ...reporte, empresa }, 'Gastos_Maquinaria.pdf');
     } catch (error: any) { 
       Aviso.alert("Error PDF", error.message); 
     } finally { 

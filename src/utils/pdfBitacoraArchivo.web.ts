@@ -7,6 +7,8 @@
  */
 
 import { jsPDF } from 'jspdf';
+import { altoDelPie, dibujarMembrete, dibujarPieMembrete } from '../lib/membretePdf.web';
+import type { ClaveEmpresa } from '../lib/membreteHtml';
 
 const AZUL: [number, number, number] = [37, 99, 235];
 const PIZARRA: [number, number, number] = [30, 41, 59];
@@ -62,7 +64,8 @@ function urlsDeFotos(log: any): string[] {
 
 export async function crearPdfBitacora(
   logs: any[],
-  projectName: string = 'Obra sin nombre'
+  projectName: string = 'Obra sin nombre',
+  empresa?: ClaveEmpresa | null
 ): Promise<Blob> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const ancho = doc.internal.pageSize.getWidth();
@@ -81,17 +84,25 @@ export async function crearPdfBitacora(
     })
   );
 
+  /* La franja de contacto se dibuja en la hoja que se deja atras, antes de
+   * abrir la siguiente: si se dejara para el final solo saldria en la ultima. */
   const asegurar = (milimetros: number) => {
-    if (y + milimetros > alto - margen) {
+    if (y + milimetros > alto - margen - altoDelPie(empresa)) {
+      dibujarPieMembrete(doc, empresa, margen);
       doc.addPage();
       y = margen;
     }
   };
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.setTextColor(...AZUL);
-  doc.text('CONSTRUCTORA ROCAL', margen, y + 4);
+  // Con membrete, el nombre de la empresa ya va arriba: repetirlo sobraria.
+  y = dibujarMembrete(doc, empresa, margen, margen);
+
+  if (!empresa) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.setTextColor(...AZUL);
+    doc.text('CONSTRUCTORA ROCAL', margen, y + 4);
+  }
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
@@ -193,6 +204,9 @@ export async function crearPdfBitacora(
     doc.line(margen, y, ancho - margen, y);
     y += 6;
   }
+
+  // La ultima hoja tambien lleva su franja de contacto.
+  dibujarPieMembrete(doc, empresa, margen);
 
   return doc.output('blob');
 }

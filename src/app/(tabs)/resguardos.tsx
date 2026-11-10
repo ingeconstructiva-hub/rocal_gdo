@@ -9,6 +9,7 @@ import { useRefrescar } from '../../lib/refrescar';
 import { SkeletonLista } from '../../components/Skeleton';
 import { SinDatos } from '../../components/SinDatos';
 import { exportarDocumento, exportarPDF } from '../../lib/exportar';
+import { pedirEmpresa } from '../../components/SelectorEmpresa';
 import { regresar } from '../../lib/navegar';
 import { subirArchivo } from '../../lib/subidas';
 import { firmarCampos } from '../../lib/urlsFirmadas';
@@ -334,8 +335,13 @@ export default function ResguardosScreen() {
         ine_reverso_url: conFirmas?.ine_reverso_url || null
       };
 
-      const htmlContent = generarPlantillaResponsiva(valePayload);
-      await exportarDocumento(htmlContent, `Responsiva_${item.codigo}.pdf`, () => crearPdfResponsiva(valePayload));
+      const empresa = await pedirEmpresa();
+      if (!empresa) return;
+
+      const htmlContent = generarPlantillaResponsiva(valePayload, empresa);
+      await exportarDocumento(htmlContent, `Responsiva_${item.codigo}.pdf`, () =>
+        crearPdfResponsiva(valePayload, empresa)
+      );
     } catch (error: any) {
       Aviso.alert("Error", "No se pudo generar el PDF: " + error.message);
     }

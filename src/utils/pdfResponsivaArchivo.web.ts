@@ -7,6 +7,8 @@
  */
 
 import { jsPDF } from 'jspdf';
+import { altoDelPie, dibujarMembrete, dibujarPieMembrete } from '../lib/membretePdf.web';
+import type { ClaveEmpresa } from '../lib/membreteHtml';
 
 const PIZARRA: [number, number, number] = [30, 41, 59];
 const GRIS: [number, number, number] = [100, 116, 139];
@@ -45,7 +47,10 @@ async function comoDataUrl(url?: string | null): Promise<string | null> {
   }
 }
 
-export async function crearPdfResponsiva(vale: any): Promise<Blob> {
+export async function crearPdfResponsiva(
+  vale: any,
+  empresa?: ClaveEmpresa | null
+): Promise<Blob> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const ancho = doc.internal.pageSize.getWidth();
   const alto = doc.internal.pageSize.getHeight();
@@ -73,12 +78,17 @@ export async function crearPdfResponsiva(vale: any): Promise<Blob> {
   };
 
   /** Deja espacio o pasa de hoja si lo que sigue no cabe. */
+  /* La franja de contacto se dibuja en la hoja que se deja atras, antes de
+   * abrir la siguiente: si se dejara para el final solo saldria en la ultima. */
   const asegurar = (milimetros: number) => {
-    if (y + milimetros > alto - margen) {
+    if (y + milimetros > alto - margen - altoDelPie(empresa)) {
+      dibujarPieMembrete(doc, empresa, margen);
       doc.addPage();
       y = margen;
     }
   };
+
+  y = dibujarMembrete(doc, empresa, margen, margen);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
@@ -261,6 +271,9 @@ export async function crearPdfResponsiva(vale: any): Promise<Blob> {
     y,
     { align: 'center' }
   );
+
+  // La ultima hoja tambien lleva su franja de contacto.
+  dibujarPieMembrete(doc, empresa, margen);
 
   return doc.output('blob');
 }
