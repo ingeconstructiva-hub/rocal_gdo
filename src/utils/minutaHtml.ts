@@ -64,7 +64,9 @@ export const minutaAHtml = (datos: DatosDeMinuta, clave: Empresa['clave']): stri
     <!DOCTYPE html>
     <html><head><meta charset="utf-8"><style>
       @page { size: A4 portrait; margin: 14mm; }
-      body { font-family: 'Helvetica', sans-serif; color: #1e293b; font-size: 11px; }
+      html, body { height: 100%; }
+      body { font-family: 'Helvetica', sans-serif; color: #1e293b; font-size: 11px;
+             margin: 0; display: flex; flex-direction: column; min-height: 100vh; }
       .membrete { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; border-bottom: 3px solid #2563eb; padding-bottom: 8px; }
       .membrete img { width: ${empresa.anchoLogo * 3.5}px; }
       .datos-empresa { text-align: right; }
@@ -75,11 +77,12 @@ export const minutaAHtml = (datos: DatosDeMinuta, clave: Empresa['clave']): stri
       .campo { width: 50%; margin-bottom: 7px; font-size: 11px; }
       .etiqueta { font-weight: bold; }
       .seccion { font-weight: bold; font-size: 12px; margin: 14px 0 6px; }
-      .cuerpo { display: flex; gap: 10px; }
-      .mitad { width: 50%; }
-      .caja { border: 1px solid #cbd5e1; border-radius: 4px; height: 300px; padding: 6px; }
+      .cuerpo { display: flex; gap: 10px; flex: 1; min-height: 0; }
+      .mitad { width: 50%; display: flex; flex-direction: column; }
+      .caja { border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px; flex: 1; min-height: 160px; }
       .temas { text-align: justify; white-space: pre-wrap; line-height: 1.45; }
       .firmas { display: flex; gap: 16px; margin-top: 46px; }
+      .pie { margin-top: 10px; }
       .firma { flex: 1; text-align: center; padding-top: 34px; }
       .quien { font-size: 9px; font-weight: bold; color: #1e293b; margin-top: 3px; }
       .linea { border-top: 1px solid #475569; }
