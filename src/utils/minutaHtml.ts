@@ -79,8 +79,8 @@ export const minutaAHtml = (datos: DatosDeMinuta, clave: Empresa['clave']): stri
       .mitad { width: 50%; }
       .caja { border: 1px solid #cbd5e1; border-radius: 4px; height: 300px; padding: 6px; }
       .temas { text-align: justify; white-space: pre-wrap; line-height: 1.45; }
-      .firmas { display: flex; gap: 16px; margin-top: 34px; }
-      .firma { flex: 1; text-align: center; padding-top: 22px; }
+      .firmas { display: flex; gap: 16px; margin-top: 46px; }
+      .firma { flex: 1; text-align: center; padding-top: 34px; }
       .quien { font-size: 9px; font-weight: bold; color: #1e293b; margin-top: 3px; }
       .linea { border-top: 1px solid #475569; }
       .rotulo { font-size: 7px; color: #64748b; letter-spacing: 1px; margin-top: 3px; }
@@ -129,19 +129,12 @@ export const minutaAHtml = (datos: DatosDeMinuta, clave: Empresa['clave']): stri
       <div class="firmas">
         <div class="firma">
           <div class="linea"></div>
-          <div class="quien">${escapar(datos.dirigidaA || 'NOMBRE')}</div>
-          <div class="rotulo">CARGO</div>
+          <div class="quien">${escapar(datos.dirigidaA || '')}</div>
+          <div class="rotulo">RESPONSABLE</div>
         </div>
-        <div class="firma">
-          <div class="linea"></div>
-          <div class="rotulo">NOMBRE</div>
-          <div class="rotulo">CARGO</div>
-        </div>
-        <div class="firma">
-          <div class="linea"></div>
-          <div class="rotulo">NOMBRE</div>
-          <div class="rotulo">CARGO</div>
-        </div>
+        <div class="firma"><div class="linea"></div></div>
+        <div class="firma"><div class="linea"></div></div>
+      </div>
       </div>
 
       <div class="pie">${pie}</div>

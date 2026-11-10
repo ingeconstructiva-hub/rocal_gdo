@@ -244,11 +244,15 @@ export async function crearPdfMinuta(
     }
   }
 
-  y += altoCuerpo + 14;
+  /* Las firmas se pegan al pie, no al recuadro.
+   *
+   * Se calculan desde abajo para que siempre queden a la misma altura
+   * aunque el cuerpo crezca o se encoja. Lo que sobra entre el recuadro y
+   * la raya es el espacio para firmar, y conviene que sea amplio: se firma
+   * de pie, con la hoja sobre lo que haya.
+   */
+  y = alto - margen - altoPie - 16;
 
-  /* Las tres firmas, repartidas a lo ancho. La primera trae el nombre de a
-   * quien va dirigida la minuta, que es quien queda enterado por
-   * definicion; las otras dos quedan en blanco para quien haya estado. */
   const anchoFirma = (util - 16) / FIRMAS;
 
   for (let i = 0; i < FIRMAS; i++) {
@@ -258,22 +262,21 @@ export async function crearPdfMinuta(
     doc.setLineWidth(0.3);
     doc.line(x, y, x + anchoFirma, y);
 
-    const conNombre = i === 0 && !!datos.dirigidaA;
+    /* Solo el primero lleva algo escrito: es a quien se le dio la
+     * indicacion, y su nombre ya esta en la minuta. Los otros dos se
+     * quedan en blanco para que quien firme ponga el suyo. */
+    if (i !== 0 || !datos.dirigidaA) continue;
 
-    doc.setFont('helvetica', conNombre ? 'bold' : 'normal');
-    doc.setFontSize(conNombre ? 8 : 7);
-    doc.setTextColor(...(conNombre ? PIZARRA : GRIS));
-    doc.text(conNombre ? datos.dirigidaA! : 'NOMBRE', x + anchoFirma / 2, y + 4, {
-      align: 'center',
-    });
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(...PIZARRA);
+    doc.text(datos.dirigidaA, x + anchoFirma / 2, y + 4, { align: 'center' });
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(...GRIS);
-    doc.text('CARGO', x + anchoFirma / 2, y + 8.5, { align: 'center' });
+    doc.text('RESPONSABLE', x + anchoFirma / 2, y + 8.5, { align: 'center' });
   }
-
-  y += 14;
   // --- Pie membretado ---
   let yPie = alto - margen - altoPie + 2;
   doc.setDrawColor(37, 99, 235);
