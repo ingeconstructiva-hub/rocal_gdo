@@ -38,6 +38,10 @@ export default function DocumentosScreen() {
   const [customCategory, setCustomCategory] = useState('');
 
   const [isUploading, setIsUploading] = useState(false);
+  /* Armar el PDF y subirlo tardan, y cada uno tarda por su cuenta. Sin decir
+   * en cual va, un rato largo sin respuesta se lee como que la app se trabo,
+   * y la gente vuelve a tocar el boton. */
+  const [paso, setPaso] = useState('');
   const [documentosList, setDocumentosList] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -234,6 +238,7 @@ export default function DocumentosScreen() {
     setIsUploading(true);
     try {
       // Si el usuario subió un PDF, se usa tal cual. Si no, se arma con las fotos.
+      setPaso(archivoPdf ? 'Preparando el archivo…' : 'Armando el PDF…');
       const pdf = archivoPdf ? archivoPdf.uri : await crearPdfDesdeImagenes(scannedImages);
 
       if (isOffline) {
@@ -263,6 +268,7 @@ export default function DocumentosScreen() {
         return;
       }
 
+      setPaso('Subiendo…');
       const urlPdf = await subirArchivo(pdf, 'planos_obras', {
         prefijo: 'doc',
         extension: 'pdf',
@@ -287,6 +293,7 @@ export default function DocumentosScreen() {
       Aviso.alert("Error", mensajeDeError(error, 'guardar el documento'));
     } finally {
       setIsUploading(false);
+      setPaso('');
     }
   };
 
@@ -494,7 +501,12 @@ export default function DocumentosScreen() {
               </View>
 
               <TouchableOpacity style={styles.saveButton} onPress={handleSaveToDatabase} disabled={isUploading}>
-                {isUploading ? <ActivityIndicator color="#FFF" /> : (
+                {isUploading ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <ActivityIndicator color="#FFF" />
+                  {paso ? <Text style={styles.saveButtonText}>{paso}</Text> : null}
+                </View>
+              ) : (
                   <>
                     <Feather name="upload-cloud" size={20} color="#FFF" />
                     <Text style={styles.saveButtonText}>{isOffline

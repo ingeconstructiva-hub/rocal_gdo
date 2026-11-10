@@ -10,11 +10,19 @@
 
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
+import { comprimirImagen } from './comprimir';
 
 export async function crearPdfDesdeImagenes(imagenes: string[]): Promise<string> {
+  /* Cada foto se reduce ANTES de volverse texto.
+   *
+   * Una foto de camara pesa varios megas y en base64 crece un tercio mas.
+   * Todas juntas iban a dar a una sola cadena de HTML: con tres paginas eran
+   * unos 15 MB, y al imprimir eso el telefono se quedaba pegado sin dar
+   * ninguna senal. Reducidas, las mismas tres paginas pesan menos de 1 MB. */
   let paginas = '';
   for (const uri of imagenes) {
-    const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+    const reducida = await comprimirImagen(uri);
+    const base64 = await FileSystem.readAsStringAsync(reducida, { encoding: 'base64' });
     paginas += `<div class="page"><img src="data:image/jpeg;base64,${base64}" /></div>`;
   }
 
