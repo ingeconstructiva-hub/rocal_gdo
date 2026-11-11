@@ -12,7 +12,7 @@ import { exportarDocumento, exportarPDF } from '../../lib/exportar';
 import { pedirEmpresa } from '../../components/SelectorEmpresa';
 import { regresar } from '../../lib/navegar';
 import { subirArchivo } from '../../lib/subidas';
-import { firmarCampos } from '../../lib/urlsFirmadas';
+import { firmarCampos, firmarVarias } from '../../lib/urlsFirmadas';
 import { mensajeDeError } from '../../lib/errores';
 import Almacen from '../../lib/almacen';
 import { FotoSinConexion } from '../../components/FotoSinConexion';
@@ -46,7 +46,9 @@ interface HerramientaAlmacen {
   nombre_entrega?: string | null;
   firma_recibe_url?: string | null;
   fecha_entrega?: string | null;   
-  fecha_devolucion?: string | null; 
+  fecha_devolucion?: string | null;
+  /** Fotos del estado en que salio el equipo, como lista JSON. */
+  fotos_entrega?: string | null;
   created_at?: string;
 }
 
@@ -88,6 +90,10 @@ export default function ResguardosScreen() {
   const [nombreResponsableSign, setNombreResponsableSign] = useState('');
   const [ineLocalUri, setIneLocalUri] = useState<string | null>(null); 
   const [ineReversoLocalUri, setIneReversoLocalUri] = useState<string | null>(null);
+  /* Como sale el equipo. Son varias a proposito: una de la maquina completa
+   * y las que hagan falta de los golpes que ya traia. Cuando regresa rayada,
+   * esto es lo unico que distingue un daño nuevo de uno viejo. */
+  const [fotosEntrega, setFotosEntrega] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [editingTool, setEditingTool] = useState<HerramientaAlmacen | null>(null);
 
@@ -156,7 +162,7 @@ export default function ResguardosScreen() {
 
   const abrirModalFirma = (item: HerramientaAlmacen) => {
     setSelectedItemForSign(item);
-    setIneLocalUri(null); setIneReversoLocalUri(null); 
+    setIneLocalUri(null); setIneReversoLocalUri(null); setFotosEntrega([]); 
     setFirmaEntregaBase64(null);
     setItemsAdicionales([]); 
     setNuevoItemNombre('');
@@ -192,7 +198,7 @@ export default function ResguardosScreen() {
     if (isOffline) {
       try {
         const guardado = await Almacen.getItem(llaveCache);
-        if (guardado) setHerramientas(await firmarCampos(JSON.parse(guardado), ['ine_url', 'ine_reverso_url', 'firma_entrega_url', 'firma_recibe_url']));
+        if (guardado) setHerramientas(await conFotosFirmadas(await firmarCampos(JSON.parse(guardado), ['ine_url', 'ine_reverso_url', 'firma_entrega_url', 'firma_recibe_url'])));
       } catch (error) {
         console.log('Error leyendo el almacén guardado:', error);
       } finally {
@@ -215,7 +221,7 @@ export default function ResguardosScreen() {
         // Las direcciones guardadas se firman al cargar: así el bucket puede ser
         // privado sin que las pantallas ni los PDFs tengan que cambiar.
         const conUrls = await firmarCampos(data, ['ine_url', 'ine_reverso_url', 'firma_entrega_url', 'firma_recibe_url']);
-        setHerramientas(conUrls);
+        setHerramientas(await conFotosFirmadas(conUrls));
         /* Se guarda la fila CRUDA, no la firmada. Una direccion firmada
          * caduca a las 8 horas y la copia local vive mucho mas: al leerla
          * al dia siguiente todas las fotos salian rotas, y bastaba refrescar
@@ -226,11 +232,36 @@ export default function ResguardosScreen() {
       console.log("Error loading warehouse inventory:", error);
       // Si falló la red, al menos mostramos lo último que se guardó.
       const guardado = await Almacen.getItem(llaveCache);
-      if (guardado) setHerramientas(await firmarCampos(JSON.parse(guardado), ['ine_url', 'ine_reverso_url', 'firma_entrega_url', 'firma_recibe_url']));
+      if (guardado) setHerramientas(await conFotosFirmadas(await firmarCampos(JSON.parse(guardado), ['ine_url', 'ine_reverso_url', 'firma_entrega_url', 'firma_recibe_url'])));
     } finally {
       setLoading(false);
     }
   };
+
+  /* Las fotos viven como lista JSON en una sola columna, igual que en
+   * bitacora y minutas. Si el texto quedo corrupto se devuelve vacio: un
+   * resguardo sin fotos se puede leer, una pantalla caida no. */
+  const fotosDe = (item: any): string[] => {
+    if (!item?.fotos_entrega) return [];
+    try {
+      const lista = JSON.parse(item.fotos_entrega);
+      return Array.isArray(lista) ? lista.filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  /* Las direcciones guardadas son privadas: hay que firmarlas para poder
+   * verlas. Se firman al cargar, nunca se guardan firmadas en la copia
+   * local, porque caducan a las ocho horas. */
+  const conFotosFirmadas = async (filas: any[]) =>
+    Promise.all(
+      filas.map(async (fila) => {
+        const fotos = fotosDe(fila);
+        if (fotos.length === 0) return fila;
+        return { ...fila, fotos_entrega: JSON.stringify(await firmarVarias(fotos)) };
+      })
+    );
 
   const handlePickIneImage = async (lado: 'frente' | 'reverso' = 'frente') => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -248,6 +279,33 @@ export default function ResguardosScreen() {
     if (!result.canceled && result.assets && result.assets.length > 0) {
       if (lado === 'reverso') setIneReversoLocalUri(result.assets[0].uri);
       else setIneLocalUri(result.assets[0].uri);
+    }
+  };
+
+  /* Camara o galeria. La galeria importa: en la PWA la camara del navegador
+   * no siempre abre, y ahi lo que hay son fotos ya tomadas. */
+  const agregarFotoEntrega = async (deLaCamara: boolean) => {
+    try {
+      const permiso = deLaCamara
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      // En navegador esta llamada no concede nada y devolver aqui dejaria sin
+      // fotos a quien usa la PWA.
+      if (Platform.OS !== 'web' && permiso.status !== 'granted') {
+        Aviso.alert('Permiso', deLaCamara ? 'Necesitamos la camara.' : 'Necesitamos tus fotos.');
+        return;
+      }
+
+      const resultado = deLaCamara
+        ? await ImagePicker.launchCameraAsync({ quality: 0.6 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
+
+      if (!resultado.canceled && resultado.assets?.length) {
+        setFotosEntrega((previas) => [...previas, resultado.assets[0].uri]);
+      }
+    } catch {
+      Aviso.alert('No se pudo abrir', 'Intenta con la otra opcion.');
     }
   };
 
@@ -411,6 +469,19 @@ export default function ResguardosScreen() {
         prefijo: `ine_reverso_${selectedItemForSign.id}`,
       });
 
+      /* Las fotos del estado del equipo van a su propio bucket. Se suben una
+       * por una y si alguna falla se detiene todo: un resguardo que dice
+       * tener fotos y no las tiene es peor que uno sin fotos. */
+      const urlsFotos: string[] = [];
+      for (const uri of fotosEntrega) {
+        urlsFotos.push(
+          await subirArchivo(uri, 'almacen', {
+            carpeta: 'entregas',
+            prefijo: `entrega_${selectedItemForSign.id}`,
+          })
+        );
+      }
+
       const tokenGenerado = `TS-${timestampId}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
       const timestampActual = new Date().toLocaleString('es-MX');
 
@@ -429,6 +500,7 @@ export default function ResguardosScreen() {
         ine_reverso_url: finalIneReversoUrl,
         firma_entrega_url: urlEntrega,
         firma_recibe_url: urlRecibe,
+        fotos_entrega: urlsFotos.length > 0 ? JSON.stringify(urlsFotos) : null,
         fecha_entrega: timestampActual, 
         fecha_devolucion: null,
         /* Quien entrega se guarda aqui y no se deduce al imprimir.
@@ -471,7 +543,7 @@ export default function ResguardosScreen() {
 
       setModalFirmaVisible(false);
       setNombreResponsableSign('');
-      setIneLocalUri(null); setIneReversoLocalUri(null);
+      setIneLocalUri(null); setIneReversoLocalUri(null); setFotosEntrega([]);
       setFirmaEntregaBase64(null);
       setItemsAdicionales([]);
       setSugerenciasFiltradas([]);
@@ -665,6 +737,20 @@ export default function ResguardosScreen() {
                   <Text style={styles.responsibleText}>Resguardo: <Text style={{fontWeight: '700'}}>{item.asignado_a}</Text></Text>
                 </View>
 
+                {fotosDe(item).length > 0 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                    {fotosDe(item).map((uri, i) => (
+                      <TouchableOpacity
+                        key={uri + i}
+                        style={styles.miniaturaEntrega}
+                        onPress={() => setSelectedIneUrl(uri)}
+                      >
+                        <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )}
+
                 {item.ine_url && (
                   <TouchableOpacity style={styles.viewIneBadgeBtn} onPress={() => setSelectedIneUrl(item.ine_url || null)}>
                     <Feather name="eye" size={11} color="#2563EB" />
@@ -745,6 +831,47 @@ export default function ResguardosScreen() {
                         )}
                       </TouchableOpacity>
                     </View>
+
+                    {/* Como sale el equipo. Van varias: la maquina completa
+                        y los golpes que ya traia, que es lo que se reclama
+                        cuando regresa. */}
+                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, alignItems: 'center' }}>
+                      <TouchableOpacity
+                        style={[styles.ineCapturePlaceholder, { flex: 1, height: 55, marginVertical: 0 }]}
+                        onPress={() => agregarFotoEntrega(true)}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Feather name="camera" size={14} color="#2563EB" />
+                          <Text style={{ color: '#2563EB', fontSize: 11, fontWeight: 'bold' }}>Foto del equipo</Text>
+                        </View>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.ineCapturePlaceholder, { flex: 1, height: 55, marginVertical: 0 }]}
+                        onPress={() => agregarFotoEntrega(false)}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Feather name="image" size={14} color="#2563EB" />
+                          <Text style={{ color: '#2563EB', fontSize: 11, fontWeight: 'bold' }}>Galeria</Text>
+                        </View>
+                      </TouchableOpacity>
+                    </View>
+
+                    {fotosEntrega.length > 0 && (
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                        {fotosEntrega.map((uri, i) => (
+                          <View key={uri + i} style={styles.miniaturaEntrega}>
+                            <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                            <TouchableOpacity
+                              style={styles.quitarMiniatura}
+                              onPress={() => setFotosEntrega((p) => p.filter((_, n) => n !== i))}
+                            >
+                              <Feather name="x" size={11} color="#FFF" />
+                            </TouchableOpacity>
+                          </View>
+                        ))}
+                      </ScrollView>
+                    )}
 
                     {/* PANEL MULTI-MATERIAL COMPACTADO */}
                     <View style={[styles.multiItemBox, { marginTop: 10, padding: 8 }]}>
@@ -915,6 +1042,22 @@ const styles = StyleSheet.create({
   staticAddBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2563EB', marginHorizontal: 15, marginTop: 12, paddingVertical: 12, borderRadius: 12, gap: 8 },
   staticAddBtnText: { color: '#FFF', fontSize: 13, fontWeight: 'bold' },
   body: { padding: 15, paddingBottom: 120 },
+  miniaturaEntrega: {
+    width: 64,
+    height: 64,
+    marginRight: 8,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#E2E8F0',
+  },
+  quitarMiniatura: {
+    position: 'absolute',
+    top: 3,
+    right: 3,
+    backgroundColor: '#DC2626',
+    borderRadius: 9,
+    padding: 2,
+  },
   toolCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
   metaLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   codeText: { fontSize: 11, fontWeight: '800', color: '#2563EB', backgroundColor: '#EFF6FF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
