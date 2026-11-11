@@ -13,6 +13,7 @@ import { decode } from 'base64-arraybuffer';
 import { leerComoBase64 } from './archivos';
 import { comprimirImagen } from './comprimir';
 import { supabase } from './supabase';
+import { partirUrlDeAlmacen } from './urlsFirmadas';
 
 type Opciones = {
   /** Extensión del archivo resultante. Por defecto jpg. */
@@ -47,4 +48,34 @@ export async function subirArchivo(
   if (error) throw error;
 
   return supabase.storage.from(bucket).getPublicUrl(ruta).data.publicUrl;
+}
+
+/* La direccion tal como se guarda en la base.
+ *
+ * Las pantallas firman las direcciones al cargar, y una firmada trae un token
+ * que caduca a las ocho horas. Si esa se vuelve a guardar, la foto deja de
+ * verse al dia siguiente y ya no hay forma de recuperar la buena. Por eso,
+ * antes de escribir, se vuelve a la direccion publica, que no caduca.
+ */
+export function urlPublicaDe(url: string): string {
+  const partes = partirUrlDeAlmacen(url);
+  if (!partes) return url;
+  return supabase.storage.from(partes.bucket).getPublicUrl(partes.ruta).data.publicUrl;
+}
+
+/* Borra un archivo del almacen a partir de su direccion.
+ *
+ * No lanza si falla: el dato de la ficha ya se quito, y dejar un archivo
+ * huerfano es menos grave que cortar el guardado a la mitad por una foto que
+ * ya nadie mira. Devuelve si se pudo, por si quien llama quiere saberlo.
+ */
+export async function borrarArchivo(url: string | null | undefined): Promise<boolean> {
+  if (!url) return false;
+
+  const partes = partirUrlDeAlmacen(url);
+  if (!partes) return false;
+
+  const { error } = await supabase.storage.from(partes.bucket).remove([partes.ruta]);
+  if (error) console.log('No se pudo borrar del almacen:', error.message);
+  return !error;
 }

@@ -24,7 +24,7 @@ import { useUser } from '../../context/UserContext';
 import { esDeHoy, puedeExportar } from '../../lib/permisos';
 import { calcularTotalFinal, diasDeSemana, etiquetaSemana, inicioDeSemana, rangoSemana } from '../../lib/nomina';
 import { mensajeDeError } from '../../lib/errores';
-import { subirArchivo } from '../../lib/subidas';
+import { borrarArchivo, subirArchivo, urlPublicaDe } from '../../lib/subidas';
 import { supabase } from '../../lib/supabase';
 import { firmarCampos } from '../../lib/urlsFirmadas';
 import { limitarNumero } from '../../lib/limites';
@@ -184,6 +184,10 @@ export default function ListaScreen() {
   const [ineFrente, setIneFrente] = useState<string | null>(null);
   const [ineReverso, setIneReverso] = useState<string | null>(null);
   const [ineGrande, setIneGrande] = useState<string | null>(null);
+  const [ineOriginal, setIneOriginal] = useState<{ frente: string | null; reverso: string | null }>({
+    frente: null,
+    reverso: null,
+  });
   const [editRole, setEditRole] = useState('');
   const [editSalary, setEditSalary] = useState('');
 
@@ -523,9 +527,12 @@ export default function ListaScreen() {
     setEditName(worker.name_worker);
     setEditRole(worker.role);
     setEditSalary(String(worker.weekly_salary));
-    // Lo guardado se muestra tal cual; solo se sube lo que se vuelva a tomar.
+    /* Lo guardado se muestra tal cual; solo se sube lo que se vuelva a
+     * tomar. Se recuerda aparte lo que habia al abrir, para saber al guardar
+     * cual archivo quedo sin dueño y hay que borrar del almacen. */
     setIneFrente(worker.ine_url || null);
     setIneReverso(worker.ine_reverso_url || null);
+    setIneOriginal({ frente: worker.ine_url || null, reverso: worker.ine_reverso_url || null });
     setIsEditModalOpen(true);
   }, []);
 
@@ -538,7 +545,7 @@ export default function ListaScreen() {
        * copia del mismo papel cada vez que se corrige el sueldo. */
       const subirSiEsNueva = async (uri: string | null, lado: string) => {
         if (!uri) return null;
-        if (uri.startsWith('http')) return uri;
+        if (uri.startsWith('http')) return urlPublicaDe(uri);
         return subirArchivo(uri, 'identificaciones', {
           carpeta: 'trabajadores',
           prefijo: `ine_${lado}_${editWorkerId}`,
@@ -560,6 +567,15 @@ export default function ListaScreen() {
         .eq('id', editWorkerId);
 
       if (error) throw error;
+
+      /* La foto vieja se borra DESPUES de que la ficha ya apunta a otra
+       * parte: si se borrara antes y el guardado fallara, la ficha quedaria
+       * apuntando a un archivo que ya no existe. */
+      const quedoSinDuenio = (antes: string | null, ahora: string | null) =>
+        !!antes && urlPublicaDe(antes) !== (ahora || '');
+
+      if (quedoSinDuenio(ineOriginal.frente, urlFrente)) await borrarArchivo(ineOriginal.frente);
+      if (quedoSinDuenio(ineOriginal.reverso, urlReverso)) await borrarArchivo(ineOriginal.reverso);
 
       setHasChanges(true); 
       setAllWorkers(prev => prev.map(w => w.id === editWorkerId ? { ...w, name_worker: editName, role: editRole, weekly_salary: Number(editSalary), ine_url: urlFrente, ine_reverso_url: urlReverso } : w));
@@ -1042,7 +1058,17 @@ export default function ListaScreen() {
                 return (
                   <TouchableOpacity key={lado} style={styles.ineCaja} onPress={() => capturarIne(lado)}>
                     {uri ? (
-                      <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                      <>
+                        <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                        {/* Quitar la foto no borra nada todavia: el archivo se
+                            va del almacen hasta que se guardan los cambios. */}
+                        <TouchableOpacity
+                          style={styles.quitarIne}
+                          onPress={() => (lado === 'reverso' ? setIneReverso(null) : setIneFrente(null))}
+                        >
+                          <Feather name="x" size={12} color="#FFF" />
+                        </TouchableOpacity>
+                      </>
                     ) : (
                       <>
                         <Feather name="camera" size={16} color="#2563EB" />
@@ -1141,6 +1167,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   ineCajaTexto: { color: '#2563EB', fontSize: 11, fontWeight: '700' },
+  quitarIne: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#DC2626',
+    borderRadius: 10,
+    padding: 3,
+  },
   visorFondo: { flex: 1, backgroundColor: 'rgba(15,23,42,0.92)', alignItems: 'center', justifyContent: 'center', padding: 16 },
   visorFoto: { width: '100%', height: '80%' },
   visorPie: { color: '#94A3B8', fontSize: 12, marginTop: 12 },
