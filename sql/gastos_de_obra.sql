@@ -1,5 +1,8 @@
 -- Gastos de obra capturados en el Excel "GASTOS DE OBRA.xlsx".
 --
+-- Una hoja por obra. POZOS PAPALOTLA se omite a proposito: esa obra no se
+-- da de alta, asi que sus tres gastos no entran.
+--
 -- Una hoja por obra. Lo que va aqui es tal cual lo que trae el archivo:
 -- fecha, importe y motivo. Todos entran como PAGADOS, porque son salidas que
 -- ya ocurrieron: el archivo lleva la cuenta de lo gastado, no de lo que se
@@ -23,11 +26,10 @@
 with mapa (hoja, obra) as (values
   ('AMPLIACION C2', 'AMPLIACION C2'),
   ('DRENAJE PAPALOTLA', 'DRENAJE PAPALOTLA'),
-  ('OBRA 2 PAPALOTLA', 'OBRA 2 PAPALOTLA'),
+  ('OBRA 2 PAPALOTLA', 'OBRA 2 DE PAPALOTLA'),
   ('AGUA POTABLE EL CRISTO', 'AGUA POTABLE EL CRISTO'),
   ('OBRAS TOTOLAC', 'OBRAS TOTOLAC'),
-  ('POZOS PAPALOTLA', 'POZOS PAPALOTLA'),
-  ('PROY TEPEYANCO', 'PROY TEPEYANCO')
+  ('PROY TEPEYANCO', 'PROYECTO EJECUTIVO TEPEYANCO')
 ),
 obras as (
   select m.hoja, p.id as project_id
@@ -168,9 +170,6 @@ gastos (hoja, fecha, monto, categoria, concepto) as (values
   ('OBRAS TOTOLAC', date '2026-11-05', 732.00::numeric, 'burocrata', 'Compra de refrescos y botella para Inauguración, Totolac'),
   ('OBRAS TOTOLAC', date '2026-11-09', 7000.00::numeric, 'material', 'Renta de día de retroexcavadora y pago de 4 viajes de escombro en TOTOLAC'),
   ('OBRAS TOTOLAC', date '2026-11-10', 9000.00::numeric, 'material', 'CAJA CHICA ARQ. SANTIAGO PAGO DE RETRO Y CAMIONES DE VIAJE DE ESCOMBRO -10 DE NOVIEMBRE 2026'),
-  ('POZOS PAPALOTLA', date '2026-01-14', 97773.00::numeric, 'burocrata', '(10%) Apoyo Social a Presidente Municipal de Papalotla'),
-  ('POZOS PAPALOTLA', date '2026-01-14', 20000.00::numeric, 'burocrata', '(2%) Apoyo Social a Dirección de Obras de Papalotla'),
-  ('POZOS PAPALOTLA', date '2026-01-23', 7000.00::numeric, 'burocrata', 'Apoyo Social al Arq. Ángel Tello (supervisor del programa)'),
   ('PROY TEPEYANCO', date '2026-09-02', 3600.00::numeric, 'asesoria', 'PAGO TOPOGRAFÍA PROYECTO ALBERCA SEMIOLIMPICA TEPEYANCO (ING FRANCISCO)'),
   ('PROY TEPEYANCO', date '2026-09-04', 6500.00::numeric, 'asesoria', 'ANTICIPO ING. ANDRES Mecanica de Suelos PROY EJECUTIVO TEPEYANCO'),
   ('PROY TEPEYANCO', date '2026-09-16', 7000.00::numeric, 'asesoria', 'Finiquito Mecánica de Suelos Ing. Andres')
