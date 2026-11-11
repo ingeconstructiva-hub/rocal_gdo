@@ -4,27 +4,25 @@ import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { useRefrescar } from '../../lib/refrescar';
-import { SkeletonLista } from '../../components/Skeleton';
-import { SinDatos } from '../../components/SinDatos';
-import { exportarDocumento, exportarPDF } from '../../lib/exportar';
+import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Firma, FirmaRef } from '../../components/Firma';
+import { FotoSinConexion } from '../../components/FotoSinConexion';
 import { pedirEmpresa } from '../../components/SelectorEmpresa';
+import { SinDatos } from '../../components/SinDatos';
+import { SkeletonLista } from '../../components/Skeleton';
+import Almacen from '../../lib/almacen';
+import { Aviso } from '../../lib/aviso';
+import { mensajeDeError } from '../../lib/errores';
+import { exportarDocumento } from '../../lib/exportar';
 import { regresar } from '../../lib/navegar';
+import { useRefrescar } from '../../lib/refrescar';
 import { subirArchivo } from '../../lib/subidas';
 import { firmarCampos, firmarVarias } from '../../lib/urlsFirmadas';
-import { mensajeDeError } from '../../lib/errores';
-import Almacen from '../../lib/almacen';
-import { FotoSinConexion } from '../../components/FotoSinConexion';
-import { Aviso } from '../../lib/aviso';
-import { Firma, FirmaRef } from '../../components/Firma';
 
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import { useProject } from '../../context/ProjectContext';
 import { useUser } from '../../context/UserContext';
+import { eliminarRegistro, esDeHoy } from '../../lib/permisos';
 import { supabase } from '../../lib/supabase';
-import { esDeHoy, eliminarRegistro } from '../../lib/permisos';
 import { generarPlantillaResponsiva } from '../../utils/pdfResponsiva';
 import { crearPdfResponsiva } from '../../utils/pdfResponsivaArchivo';
 
@@ -835,6 +833,7 @@ export default function ResguardosScreen() {
                     {/* Como sale el equipo. Van varias: la maquina completa
                         y los golpes que ya traia, que es lo que se reclama
                         cuando regresa. */}
+                        <text style={styles.label}>Fotos del estado del equipo al momento de la entrega</text>
                     <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, alignItems: 'center' }}>
                       <TouchableOpacity
                         style={[styles.ineCapturePlaceholder, { flex: 1, height: 55, marginVertical: 0 }]}
