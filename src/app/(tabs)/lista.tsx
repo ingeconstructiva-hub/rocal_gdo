@@ -75,7 +75,7 @@ type PropsTarjeta = {
   onBorrar: (worker: WorkerState) => void;
   onExtras: (worker: WorkerState) => void;
   onDescuento: (worker: WorkerState) => void;
-  onVerIne: (url: string) => void;
+  onVerIne: (worker: WorkerState) => void;
 };
 
 const TarjetaTrabajador = memo(function TarjetaTrabajador({
@@ -90,8 +90,8 @@ const TarjetaTrabajador = memo(function TarjetaTrabajador({
 
           {/* Solo aparece si ya tiene identificacion guardada: en la lista de
               asistencia lo que importa son los dias, no el papeleo. */}
-          {worker.ine_url ? (
-            <TouchableOpacity style={styles.verIneBtn} onPress={() => onVerIne(worker.ine_url!)}>
+          {worker.ine_url || worker.ine_reverso_url ? (
+            <TouchableOpacity style={styles.verIneBtn} onPress={() => onVerIne(worker)}>
               <Feather name="credit-card" size={11} color="#2563EB" />
               <Text style={styles.verIneTexto}>Ver INE</Text>
             </TouchableOpacity>
@@ -183,7 +183,7 @@ export default function ListaScreen() {
    * se llenaria de fotos que ninguna ficha reclama. */
   const [ineFrente, setIneFrente] = useState<string | null>(null);
   const [ineReverso, setIneReverso] = useState<string | null>(null);
-  const [ineGrande, setIneGrande] = useState<string | null>(null);
+  const [ineGrande, setIneGrande] = useState<WorkerState | null>(null);
   const [ineOriginal, setIneOriginal] = useState<{ frente: string | null; reverso: string | null }>({
     frente: null,
     reverso: null,
@@ -1090,7 +1090,19 @@ export default function ListaScreen() {
           se consulta justo para cotejar un nombre o un numero. */}
       <Modal visible={!!ineGrande} transparent animationType="fade" onRequestClose={() => setIneGrande(null)}>
         <Pressable style={styles.visorFondo} onPress={() => setIneGrande(null)}>
-          {ineGrande ? <Image source={{ uri: ineGrande }} style={styles.visorFoto} resizeMode="contain" /> : null}
+          {/* Las dos caras, una debajo de otra: el frente tiene la foto y
+              el nombre, el reverso la clave de elector. Se ve la que haya. */}
+          {([
+            ['Frente', ineGrande?.ine_url],
+            ['Reverso', ineGrande?.ine_reverso_url],
+          ] as const)
+            .filter(([, uri]) => !!uri)
+            .map(([lado, uri]) => (
+              <View key={lado} style={styles.visorCara}>
+                <Text style={styles.visorLado}>{lado}</Text>
+                <Image source={{ uri: uri! }} style={styles.visorFoto} resizeMode="contain" />
+              </View>
+            ))}
           <Text style={styles.visorPie}>Toca para cerrar</Text>
         </Pressable>
       </Modal>
@@ -1176,7 +1188,9 @@ const styles = StyleSheet.create({
     padding: 3,
   },
   visorFondo: { flex: 1, backgroundColor: 'rgba(15,23,42,0.92)', alignItems: 'center', justifyContent: 'center', padding: 16 },
-  visorFoto: { width: '100%', height: '80%' },
+  visorCara: { width: '100%', flex: 1, alignItems: 'center', justifyContent: 'center' },
+  visorLado: { color: '#94A3B8', fontSize: 10, letterSpacing: 1, marginBottom: 4 },
+  visorFoto: { width: '100%', flex: 1 },
   visorPie: { color: '#94A3B8', fontSize: 12, marginTop: 12 },
   workerCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 12, marginBottom: 10, boxShadow: '0px 2px 6px rgba(15, 23, 42, 0.1)', elevation: 2 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' },
