@@ -8,6 +8,7 @@
  * de generar el archivo.
  */
 
+import { Feather } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { compartirODescargar, sePuedeCompartir } from '../lib/exportar.web';
@@ -75,8 +76,8 @@ export function VistaPreviaPDF() {
     <Modal visible transparent={false} animationType="slide" onRequestClose={() => setDocumento(null)}>
       <View style={estilos.contenedor}>
         <View style={estilos.barra}>
-          <Pressable onPress={() => setDocumento(null)} style={estilos.botonCerrar} accessibilityLabel="Cerrar vista previa">
-            <Text style={estilos.textoCerrar}>✕  Cerrar</Text>
+          <Pressable onPress={() => setDocumento(null)} style={estilos.boton} accessibilityLabel="Cerrar vista previa">
+            <Feather name="x" size={18} color="#FFFFFF" />
           </Pressable>
 
           <Text style={estilos.titulo} numberOfLines={1}>
@@ -84,17 +85,25 @@ export function VistaPreviaPDF() {
           </Text>
 
           {hayArchivo ? (
-            <Pressable onPress={compartir} disabled={compartiendo} style={estilos.botonCompartir}>
+            <Pressable
+              onPress={compartir}
+              disabled={compartiendo}
+              style={estilos.botonCompartir}
+              accessibilityLabel={etiquetaAccion}
+            >
               {compartiendo ? (
                 <ActivityIndicator size="small" color="#04342C" />
               ) : (
-                <Text style={estilos.textoCompartir}>{etiquetaAccion}</Text>
+                <Feather name={sePuedeCompartir() ? 'share-2' : 'download'} size={18} color="#04342C" />
               )}
             </Pressable>
           ) : null}
 
-          <Pressable onPress={imprimir} style={estilos.botonImprimir}>
-            <Text style={estilos.textoImprimir}>Guardar PDF</Text>
+          {/* Es la impresora, no un disquete: por aqui se manda a la
+              impresora portatil y tambien se guarda como PDF, que es lo que
+              el navegador ofrece en el mismo cuadro. */}
+          <Pressable onPress={imprimir} style={estilos.botonImprimir} accessibilityLabel="Imprimir">
+            <Feather name="printer" size={18} color="#20398E" />
           </Pressable>
         </View>
 
@@ -108,8 +117,8 @@ export function VistaPreviaPDF() {
         <View style={estilos.pie}>
           <Text style={estilos.ayuda}>
             {hayArchivo
-              ? `Toca "${etiquetaAccion}" para quedarte con el archivo, o "Guardar PDF" para imprimirlo.`
-              : 'Para guardarlo, toca "Guardar PDF" y elige Guardar como PDF en el menú de impresión.'}
+              ? `${etiquetaAccion} con el primer botón; la impresora manda a imprimir o a guardar como PDF.`
+              : 'La impresora manda a imprimir, o a guardar como PDF desde el mismo cuadro.'}
           </Text>
         </View>
       </View>
@@ -129,12 +138,11 @@ const estilos = StyleSheet.create({
     backgroundColor: '#20398E',
   },
   titulo: { flex: 1, color: '#FFFFFF', fontWeight: '700', fontSize: 14, textAlign: 'center' },
-  botonCerrar: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.15)' },
-  textoCerrar: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
-  botonCompartir: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#2ECC71', minWidth: 86, alignItems: 'center' },
-  textoCompartir: { color: '#04342C', fontWeight: '700', fontSize: 13 },
-  botonImprimir: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#FFFFFF' },
-  textoImprimir: { color: '#20398E', fontWeight: '700', fontSize: 13 },
+  /* Cuadrados del mismo tamaño: son blancos de dedo, y uno mas chico que
+   * otro se falla en obra con la mano sucia o con guante. */
+  boton: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.15)' },
+  botonCompartir: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#2ECC71' },
+  botonImprimir: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF' },
   pie: { paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#E2E8F0' },
   ayuda: { fontSize: 11, color: '#64748B', textAlign: 'center' },
 });

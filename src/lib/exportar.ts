@@ -12,12 +12,50 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { Aviso } from './aviso';
+import { mensajeDeError } from './errores';
 import { reporteAHtml, type Reporte } from './reporte';
 
-/** Genera un PDF a partir de HTML y lo ofrece para compartir o guardar. */
+/* Compartir o imprimir: las dos cosas se hacen con el papel.
+ *
+ * Compartir manda el archivo por WhatsApp, que es como viaja a la oficina.
+ * Imprimir abre el cuadro de impresion de Android con la lista de
+ * impresoras: hace falta desde que firman las minutas en obra con la
+ * impresora portatil, porque llegar a ella desde el menu de compartir
+ * significa cazarla entre todas las apps del telefono.
+ */
 export async function exportarPDF(html: string, _nombreArchivo: string): Promise<void> {
-  const { uri } = await Print.printToFileAsync({ html });
-  await Sharing.shareAsync(uri, { mimeType: 'application/pdf' });
+  return new Promise((listo) => {
+    Aviso.alert('Documento listo', '¿Qué quieres hacer con él?', [
+      {
+        text: 'Imprimir',
+        onPress: async () => {
+          try {
+            await Print.printAsync({ html });
+          } catch (e: any) {
+            // Cancelar el cuadro de impresion no es un error que avisar.
+            if (!/cancel/i.test(e?.message || '')) {
+              Aviso.alert('No se pudo imprimir', mensajeDeError(e, 'imprimir el documento'));
+            }
+          }
+          listo();
+        },
+      },
+      {
+        text: 'Compartir',
+        onPress: async () => {
+          try {
+            const { uri } = await Print.printToFileAsync({ html });
+            await Sharing.shareAsync(uri, { mimeType: 'application/pdf' });
+          } catch (e: any) {
+            Aviso.alert('No se pudo compartir', mensajeDeError(e, 'compartir el documento'));
+          }
+          listo();
+        },
+      },
+      { text: 'Cancelar', style: 'cancel', onPress: () => listo() },
+    ]);
+  });
 }
 
 /* El mismo reporte, por el camino que ya funciona en celular.
