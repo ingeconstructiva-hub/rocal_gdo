@@ -1,6 +1,7 @@
 'use client';
 
 import { Feather } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import Almacen from '../../lib/almacen';
 import * as Crypto from 'expo-crypto';
 import { BANDEJAS, guardarEnBandeja, leerBandeja, reemplazarBandeja } from '../../lib/bandeja';
@@ -9,7 +10,7 @@ import * as Print from 'expo-print';
 import { useNavigation, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SkeletonLista } from '../../components/Skeleton';
 import { SinDatos } from '../../components/SinDatos';
 import { exportarPDF, exportarReporte, exportarTexto } from '../../lib/exportar';
@@ -23,7 +24,9 @@ import { useUser } from '../../context/UserContext';
 import { esDeHoy, puedeExportar } from '../../lib/permisos';
 import { calcularTotalFinal, diasDeSemana, etiquetaSemana, inicioDeSemana, rangoSemana } from '../../lib/nomina';
 import { mensajeDeError } from '../../lib/errores';
+import { subirArchivo } from '../../lib/subidas';
 import { supabase } from '../../lib/supabase';
+import { firmarCampos } from '../../lib/urlsFirmadas';
 import { limitarNumero } from '../../lib/limites';
 import { generarReporteHistorial, generarReporteNomina } from '../../utils/pdfNomina';
 
@@ -38,6 +41,10 @@ interface WorkerState {
   discount: string;
   reason: string;
   categoria: string;
+  /* La identificacion del trabajador, una sola vez por persona. La del
+   * resguardo es otra: esa queda pegada a la herramienta que recibio. */
+  ine_url?: string | null;
+  ine_reverso_url?: string | null;
   created_at?: string;
 }
 
@@ -68,10 +75,11 @@ type PropsTarjeta = {
   onBorrar: (worker: WorkerState) => void;
   onExtras: (worker: WorkerState) => void;
   onDescuento: (worker: WorkerState) => void;
+  onVerIne: (url: string) => void;
 };
 
 const TarjetaTrabajador = memo(function TarjetaTrabajador({
-  worker, isAdmin, isFinancialRole, puedeCorregir, dias, onToggle, onEditar, onBorrar, onExtras, onDescuento,
+  worker, isAdmin, isFinancialRole, puedeCorregir, dias, onToggle, onEditar, onBorrar, onExtras, onDescuento, onVerIne,
 }: PropsTarjeta) {
   return (
     <View style={styles.workerCard}>
@@ -79,6 +87,15 @@ const TarjetaTrabajador = memo(function TarjetaTrabajador({
         <View style={{flex: 1}}>
           <Text style={styles.workerName}>{worker.name_worker}</Text>
           <Text style={styles.workerRole}>{worker.role}{isFinancialRole && <Text style={{color: '#64748B', fontWeight: 'normal'}}> • S. Hora: ${(worker.weekly_salary / 45).toFixed(1)}</Text>}</Text>
+
+          {/* Solo aparece si ya tiene identificacion guardada: en la lista de
+              asistencia lo que importa son los dias, no el papeleo. */}
+          {worker.ine_url ? (
+            <TouchableOpacity style={styles.verIneBtn} onPress={() => onVerIne(worker.ine_url!)}>
+              <Feather name="credit-card" size={11} color="#2563EB" />
+              <Text style={styles.verIneTexto}>Ver INE</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
         {isAdmin ? (
           <View style={styles.adminActionIconsRow}>
@@ -161,6 +178,12 @@ export default function ListaScreen() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editWorkerId, setEditWorkerId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  /* Las dos caras de la INE. Se quedan como direccion local hasta que se
+   * guarda: si se subieran al tomarlas y luego cierran el cuadro, el almacen
+   * se llenaria de fotos que ninguna ficha reclama. */
+  const [ineFrente, setIneFrente] = useState<string | null>(null);
+  const [ineReverso, setIneReverso] = useState<string | null>(null);
+  const [ineGrande, setIneGrande] = useState<string | null>(null);
   const [editRole, setEditRole] = useState('');
   const [editSalary, setEditSalary] = useState('');
 
@@ -282,7 +305,7 @@ export default function ListaScreen() {
     }
 
     try {
-      const { data, error } = await supabase
+      const { data: crudos, error } = await supabase
         .from('workers')
         .select('*')
         .eq('project_id', pid)
@@ -290,6 +313,10 @@ export default function ListaScreen() {
         .order('name_worker', { ascending: true });
 
       if (error) throw error;
+
+      /* El bucket es privado: la direccion guardada no sirve tal cual, hay
+       * que firmarla para poder ver la foto. */
+      const data = await firmarCampos(crudos || [], ['ine_url', 'ine_reverso_url']);
 
       const initialUI = data.map(w => ({
         id: w.id,
@@ -302,6 +329,8 @@ export default function ListaScreen() {
         discount: '0',
         reason: '',
         categoria: w.categoria || 'obrero',
+        ine_url: w.ine_url || null,
+        ine_reverso_url: w.ine_reverso_url || null,
         created_at: w.created_at
       }));
 
@@ -460,11 +489,43 @@ export default function ListaScreen() {
     }
   };
 
+  /* En celular se abre la camara, que es como se captura una INE parado
+   * frente al trabajador. En navegador la camara no siempre existe, asi que
+   * ahi se usa el selector de archivos. */
+  const capturarIne = async (lado: 'frente' | 'reverso') => {
+    try {
+      const enCelular = Platform.OS !== 'web';
+
+      if (enCelular) {
+        const permiso = await ImagePicker.requestCameraPermissionsAsync();
+        if (permiso.status !== 'granted') {
+          Aviso.alert('Permiso', 'Necesitamos la camara para capturar la INE.');
+          return;
+        }
+      }
+
+      const resultado = enCelular
+        ? await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.6 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.6 });
+
+      if (!resultado.canceled && resultado.assets?.length) {
+        const uri = resultado.assets[0].uri;
+        if (lado === 'reverso') setIneReverso(uri);
+        else setIneFrente(uri);
+      }
+    } catch {
+      Aviso.alert('No se pudo abrir', 'Intenta de nuevo.');
+    }
+  };
+
   const openEditWorkerModal = useCallback((worker: WorkerState) => {
     setEditWorkerId(worker.id);
     setEditName(worker.name_worker);
     setEditRole(worker.role);
     setEditSalary(String(worker.weekly_salary));
+    // Lo guardado se muestra tal cual; solo se sube lo que se vuelva a tomar.
+    setIneFrente(worker.ine_url || null);
+    setIneReverso(worker.ine_reverso_url || null);
     setIsEditModalOpen(true);
   }, []);
 
@@ -472,19 +533,36 @@ export default function ListaScreen() {
     if (!editWorkerId || !editName || !editSalary) return;
     setIsSaving(true);
     try {
+      /* Solo se sube lo que se acaba de tomar. Lo que ya estaba guardado
+       * llega aqui como direccion http, y volver a subirlo dejaria una
+       * copia del mismo papel cada vez que se corrige el sueldo. */
+      const subirSiEsNueva = async (uri: string | null, lado: string) => {
+        if (!uri) return null;
+        if (uri.startsWith('http')) return uri;
+        return subirArchivo(uri, 'identificaciones', {
+          carpeta: 'trabajadores',
+          prefijo: `ine_${lado}_${editWorkerId}`,
+        });
+      };
+
+      const urlFrente = await subirSiEsNueva(ineFrente, 'frente');
+      const urlReverso = await subirSiEsNueva(ineReverso, 'reverso');
+
       const { error } = await supabase
         .from('workers')
         .update({
           name_worker: editName,
           role: editRole,
-          weekly_salary: Number(editSalary)
+          weekly_salary: Number(editSalary),
+          ine_url: urlFrente,
+          ine_reverso_url: urlReverso
         })
         .eq('id', editWorkerId);
 
       if (error) throw error;
 
       setHasChanges(true); 
-      setAllWorkers(prev => prev.map(w => w.id === editWorkerId ? { ...w, name_worker: editName, role: editRole, weekly_salary: Number(editSalary) } : w));
+      setAllWorkers(prev => prev.map(w => w.id === editWorkerId ? { ...w, name_worker: editName, role: editRole, weekly_salary: Number(editSalary), ine_url: urlFrente, ine_reverso_url: urlReverso } : w));
       setIsEditModalOpen(false);
       setEditWorkerId(null);
     } catch (e: any) {
@@ -857,6 +935,7 @@ export default function ListaScreen() {
               onBorrar={handleDeleteWorker}
               onExtras={openExtrasModal}
               onDescuento={openDiscountModal}
+              onVerIne={setIneGrande}
             />
           )}
         />
@@ -952,10 +1031,42 @@ export default function ListaScreen() {
             <TextInput style={styles.modalInput} value={editRole} onChangeText={setEditRole} />
             <Text style={styles.subModalLabel}>Sueldo Base Semanal ($):</Text>
             <TextInput style={styles.modalInput} keyboardType="numeric" value={editSalary} onChangeText={(v) => setEditSalary(limitarNumero(v))} />
+
+            {/* La identificacion se guarda una vez por persona y sirve para
+                todas las semanas. La del resguardo es otra cosa: esa queda
+                pegada a la herramienta que recibio. */}
+            <Text style={styles.subModalLabel}>Identificación (INE):</Text>
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+              {(['frente', 'reverso'] as const).map((lado) => {
+                const uri = lado === 'frente' ? ineFrente : ineReverso;
+                return (
+                  <TouchableOpacity key={lado} style={styles.ineCaja} onPress={() => capturarIne(lado)}>
+                    {uri ? (
+                      <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                    ) : (
+                      <>
+                        <Feather name="camera" size={16} color="#2563EB" />
+                        <Text style={styles.ineCajaTexto}>INE {lado}</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
             <TouchableOpacity style={styles.saveBtn} onPress={handleUpdateWorker} disabled={isSaving}>{isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>Guardar Cambios</Text>}</TouchableOpacity>
             </ScrollView>
           </View>
         </View>
+      </Modal>
+
+      {/* La INE en grande. Una credencial en miniatura no se puede leer, y
+          se consulta justo para cotejar un nombre o un numero. */}
+      <Modal visible={!!ineGrande} transparent animationType="fade" onRequestClose={() => setIneGrande(null)}>
+        <Pressable style={styles.visorFondo} onPress={() => setIneGrande(null)}>
+          {ineGrande ? <Image source={{ uri: ineGrande }} style={styles.visorFoto} resizeMode="contain" /> : null}
+          <Text style={styles.visorPie}>Toca para cerrar</Text>
+        </Pressable>
       </Modal>
 
       {/* MODAL EXTRAS */}
@@ -1014,6 +1125,25 @@ const styles = StyleSheet.create({
   exportButtonsContainer: { flexDirection: 'row' },
   exportBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5, paddingHorizontal: 10, borderRadius: 6 },
   exportBtnText: { color: '#FFF', fontSize: 11, fontWeight: 'bold', marginLeft: 4 },
+  verIneBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 5 },
+  verIneTexto: { color: '#2563EB', fontSize: 11, fontWeight: '700' },
+  ineCaja: {
+    flex: 1,
+    height: 78,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#93C5FD',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    overflow: 'hidden',
+    backgroundColor: '#F8FAFC',
+  },
+  ineCajaTexto: { color: '#2563EB', fontSize: 11, fontWeight: '700' },
+  visorFondo: { flex: 1, backgroundColor: 'rgba(15,23,42,0.92)', alignItems: 'center', justifyContent: 'center', padding: 16 },
+  visorFoto: { width: '100%', height: '80%' },
+  visorPie: { color: '#94A3B8', fontSize: 12, marginTop: 12 },
   workerCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 12, marginBottom: 10, boxShadow: '0px 2px 6px rgba(15, 23, 42, 0.1)', elevation: 2 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' },
   workerName: { fontSize: 15, fontWeight: 'bold', color: '#1E293B' },
