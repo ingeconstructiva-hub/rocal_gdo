@@ -1,0 +1,128 @@
+-- Los movimientos que el Excel marca "Por revisar". NO se cargaron.
+--
+-- Cada uno trae por que esta aqui: gasto personal, entrega de efectivo sin
+-- destino, o posible duplicado. Hay que decidirlos uno por uno; cuando sepan
+-- a que obra y modulo van, se cargan como los demas.
+--
+-- Esto es una lista, no un query: no inserta ni borra nada.
+--
+-- Fila 30  2026-01-19  $62,000  [DRENAJE TEPEXCO / Gastos de Maquinaria]
+--   2da parte de 2do anticipo renta de maquinaria y agregados (1 mes de retro+7 v de arena+ 1/2 v grava+ 4 v de cacahuatillo) (Rafa Galán)
+--   ¿Por que? Mixto: renta de maquinaria y agregados (arena, grava); no hay desglose, se dejó en Maquinaria
+--
+-- Fila 33  2026-01-23  $18,000  [OFICINA / Gastos de Maquinaria]
+--   Finiquito, renta 320D (Israel Mena)
+--   ¿Por que? Etiquetado Oficina, pero es renta de maquinaria (320D)
+--
+-- Fila 113  2026-03-05  $200  [OFICINA / Gastos Generales]
+--   Gasolina para ir con presidente de totolac
+--   ¿Por que? Etiquetado Oficina; el motivo dice Totolac
+--
+-- Fila 117  2026-03-06  $800  [OFICINA / Gastos Generales]
+--   Inscripción a natación Beto
+--   ¿Por que? Etiquetado Oficina; parece gasto personal
+--
+-- Fila 157  2026-04-17  $2,000  [OFICINA / Gastos Generales]
+--   Depósito en efectivo para apartar coche
+--   ¿Por que? Etiquetado Oficina; parece gasto personal (coche)
+--
+-- Fila 184  2026-05-15  $50,000  [OFICINA / Por definir]
+--   Dinero administración Luis
+--   ¿Por que? Entrega de efectivo: definir destino
+--
+-- Fila 193  2026-06-05  $200  [OFICINA / Gastos Generales]
+--   Gasolina a Coche rojo para ir a totolac
+--   ¿Por que? Etiquetado Oficina; el motivo dice Totolac (fecha escrita 05/06/206)
+--
+-- Fila 245  2026-07-24  $10,850  [OFICINA / Gastos Generales]
+--   Laptop Dayana, Terapia, Curso Manifestarte, Iris, Personal (24/07/2026)
+--   ¿Por que? Etiquetado Oficina; parece gasto personal
+--
+-- Fila 285  2026-08-14  $2,000  [OFICINA / Gastos Generales]
+--   Deposito a cuenta mipyme para SEGURO de VERSA
+--   ¿Por que? Etiquetado Oficina; seguro de Versa (posible personal)
+--
+-- Fila 293  2026-08-19  $5,000  [GASTO PERSONAL / Fuera de la app (personal/otros)]
+--   Gasto personal 19 de Agosto de 2026 (Cierre Presidente Totolac)
+--   ¿Por que? Etiquetado Gasto Personal; el motivo dice Cierre Presidente Totolac
+--
+-- Fila 294  2026-08-19  $190,612.63  [OFICINA / Por definir]
+--   Entrega de dinero a Director de OP(Totolac)  Facturación
+--   ¿Por que? Etiquetado Oficina; el motivo dice Totolac (posible obra OBRAS TOTOLAC)
+--
+-- Fila 295  2026-08-19  $200  [OFICINA / Gastos Generales]
+--   Gasolina coche gris (Cierre Presidente Totolac)
+--   ¿Por que? Etiquetado Oficina; el motivo dice Totolac
+--
+-- Fila 309  2026-08-24  $94,435  [OFICINA / Por definir]
+--   Entrega de efectivo a Arq. Álvaro Cantor
+--   ¿Por que? Entrega de efectivo a Arq. Álvaro: definir obra (posible El Cristo)
+--
+-- Fila 316  2026-08-26  $500  [OFICINA / Gastos Generales]
+--   Gasolina Coche Blanco, para ir a visita de obra en totolac
+--   ¿Por que? Etiquetado Oficina; el motivo dice obra en Totolac
+--
+-- Fila 360  2026-09-05  $5,000  [OFICINA / Gastos Generales]
+--   Pago a Arq. Alvaro $5,000 05/Septiembre/2026
+--   ¿Por que? Pago a Arq. Álvaro: revisar si es de El Cristo
+--
+-- Fila 386  2026-09-17  $7,000  [OBRA DRENAJE PAPALOTLA / Materiales (sin tipo en la app)]
+--   Pago de Placas, Retro y Cuerdas de Anclas
+--   ¿Por que? Mixto: placas, retro y cuerdas de anclas; no hay desglose, se dejó en Materiales
+--
+-- Fila 389  2026-09-17  $6,000  [OBRA AGUA POTABLE EL CRISTO / Control de Destajos]
+--   Pago anticipo a Arq. Álvaro
+--   ¿Por que? Anticipo a Arq. Álvaro: se asumió subcontrato/mano de obra
+--
+-- Fila 408  2026-09-22  $3,500  [OBRA DRENAJE PAPALOTLA / Apoyos sociales (sin tipo en la app)]
+--   Apoyo a Lic. Karla por la reparacion de su Laptop
+--   ¿Por que? Apoyo a persona para reparar su laptop
+--
+-- Fila 416  2026-09-24  $40,210  [OBRA DRENAJE PAPALOTLA / Gastos de Maquinaria]
+--   PAGO PARA TERMUFIOSIONADO DE TUBOS Y GRUAS PARA COLOCACION DE ESTRUCTURA
+--   ¿Por que? Mixto: termofusionado de tubos y grúas; se dejó en Maquinaria
+--
+-- Fila 420  2026-09-25  $1,000  [OFICINA / Gastos Generales]
+--   Pago a Arq. Alvaro (Apoyo Obra Eléctrica el Cristo)
+--   ¿Por que? Etiquetado Oficina; el motivo dice Obra Eléctrica El Cristo
+--
+-- Fila 432  2026-09-30  $1,618  [OFICINA / Gastos Generales]
+--   Gasto de cervezas y botellas (fiesta Danielito)
+--   ¿Por que? Etiquetado Oficina; fiesta (posible personal)
+--
+-- Fila 442  2026-10-05  $11,875.5  [OFICINA / Por definir]
+--   Regreso a Director de Totolac
+--   ¿Por que? Etiquetado Oficina; el motivo dice Totolac (posible obra OBRAS TOTOLAC)
+--
+-- Fila 463  2026-10-16  $2,200  [OFICINA / Gastos Generales]
+--   COMPRA DE 2 BASES PARA CAMA PARA ARQ LUIS MORA
+--   ¿Por que? Etiquetado Oficina; parece gasto personal
+--
+-- Fila 468  2026-10-17  $2,200  [OFICINA / Gastos Generales]
+--   COMPRA DE 2 BASES PARA CAMA PARA ARQ LUIS MORA
+--   ¿Por que? POSIBLE DUPLICADO de la fila 463 (mismo motivo y monto)
+--
+-- Fila 469  2026-10-17  $12,400  [OBRA DRENAJE PAPALOTLA / Control de Destajos]
+--   Destajo MO, Corte 17 de octubre (Mtr Cristian)
+--   ¿Por que? POSIBLE DUPLICADO de la fila 464
+--
+-- Fila 470  2026-10-17  $21,240.63  [OFICINA / Gastos Generales]
+--   NOMINA OFICINA DEL 12 DE OCTUBRE AL 17 DE OCTUBRE 2026
+--   ¿Por que? POSIBLE DUPLICADO de la fila 465
+--
+-- Fila 471  2026-10-17  $2,000  [OFICINA / Gastos Generales]
+--   PRESTAMO A ARQ. GABRIEL para Arreglo de Computadora LAPTOP
+--   ¿Por que? POSIBLE DUPLICADO de la fila 466
+--
+-- Fila 488  2026-10-27  $26,000  [AMPLIACION C2 (SPM) / Gastos de Maquinaria]
+--   Renta de Retro Excavadora y pago de Tabiques (Adminstracion Santiago)
+--   ¿Por que? Mixto: renta de retro y tabiques; no hay desglose, se dejó en Maquinaria
+--
+-- Fila 516  2026-11-08  $4,000  [OFICINA / Gastos Generales]
+--   Cooperación  compra de llantas versa 2020
+--   ¿Por que? Etiquetado Oficina; llantas de Versa (posible personal)
+--
+-- Fila 530  2026-11-11  $7,584  [OBRAS TOTOLAC / Gastos de Maquinaria]
+--   $7500 de RENTA DE RETRO Y PAGO DE VIAJES EN TOTOLAC (ADMINISTRACION ARQ SANTIAGO) + comision oxxo
+--   ¿Por que? $7,500 renta de retro y viajes + $84 comisión Oxxo
+--
