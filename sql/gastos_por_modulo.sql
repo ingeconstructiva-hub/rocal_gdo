@@ -2,8 +2,9 @@
 --
 -- Reemplaza la carga anterior, que metia TODO en Gastos Generales. Aquel
 -- archivo venia sin tipo; este si lo trae, asi que cada movimiento se va a
--- donde se captura normalmente: destajos a Destajos, caja chica a Caja Chica,
--- renta de maquina a Maquinaria, y lo demas a Gastos Generales.
+-- donde se captura normalmente: destajos a Destajos, las entregas de caja
+-- chica a Inversiones, renta de maquina a Maquinaria, y lo demas a Gastos
+-- Generales.
 --
 -- QUE HACE, EN ORDEN
 --   1. Borra los 136 renglones de la carga anterior.
@@ -206,10 +207,15 @@ from (values
 join public.projects o on upper(trim(o.name)) = v.obra;
 
 -- ---- Caja Chica (49) ----
--- Quien recibio la caja se lee del motivo cuando viene nombrado; si no, queda
--- dicho que viene de la carga, que es mejor que inventarle un dueño.
-insert into public.caja_chica (project_id, numero_nota, encargado, monto, unidad, tipo_deposito, concepto, cantidad, precio_unitario, fecha, is_active)
-select o.id, 'S/N', v.encargado, v.monto, 'General', 'efectivo', v.concepto, 1, v.monto, v.fecha, true
+-- Van como INVERSION, no como gasto. Cada uno es dinero que la empresa le
+-- entrego a la obra; lo que se compro con el se captura aparte, desde la
+-- app. Metidos como gasto, el saldo de la caja saldria en negativo y cada
+-- peso se contaria dos veces.
+--
+-- Quien recibio el dinero se lee del motivo cuando viene nombrado; si no,
+-- queda dicho que viene de la carga, que es mejor que inventarle un dueño.
+insert into public.ingresos_obra (project_id, monto, solicitante, concepto, referencia, fecha, is_active)
+select o.id, v.monto, v.solicitante, v.concepto, 'efectivo', v.fecha, true
 from (values
   ('AMPLIACION C2 SPM', 'Invitacion de Tequila Hornito a Obras Publicas, Contador Bulmaro, Innaguracion de Obra San Pablo del Monte', 400.00::numeric, 'Carga inicial', date '2026-08-20'),
   ('AMPLIACION C2 SPM', 'LONA DE INICIO DE OBRA SPM AMPLIACION C2', 750.00::numeric, 'Carga inicial', date '2026-08-21'),
@@ -260,7 +266,7 @@ from (values
   ('PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL', 'Caja Chica Arq. Santiago bacheo en totolac', 2800.00::numeric, 'Arq. Santiago', date '2026-08-19'),
   ('PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL', 'Compra de refrescos y botella para Inauguración, Totolac', 732.00::numeric, 'Carga inicial', date '2026-11-05'),
   ('PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL', 'CAJA CHICA (ADM ARQ. SANTIAGO HOY 12/11/26)', 10050.00::numeric, 'Carga inicial', date '2026-11-12')
-) as v(obra, concepto, monto, encargado, fecha)
+) as v(obra, concepto, monto, solicitante, fecha)
 join public.projects o on upper(trim(o.name)) = v.obra;
 
 -- ---- Gastos de Maquinaria (21) ----
@@ -375,9 +381,9 @@ select p.name as obra, 'Destajos' as modulo, count(*) as renglones, sum(i.quanti
   from public.inventory i join public.projects p on p.id = i.project_id
  where i.requested_by = 'Carga inicial' group by p.name
 union all
-select p.name, 'Caja chica', count(*), sum(c.monto)
-  from public.caja_chica c join public.projects p on p.id = c.project_id
- where c.numero_nota = 'S/N' group by p.name
+select p.name, 'Inversiones', count(*), sum(i.monto)
+  from public.ingresos_obra i join public.projects p on p.id = i.project_id
+ where i.referencia = 'efectivo' group by p.name
 union all
 select p.name, 'Maquinaria', count(*), sum(g.monto)
   from public.gastos_maquinaria g join public.projects p on p.id = g.project_id
