@@ -16,13 +16,11 @@
 --   - Los 30 de la hoja "Por revisar" tampoco: estan en
 --     sql/gastos_por_revisar.sql para decidirlos uno por uno.
 --
--- Correrlo COMPLETO y una sola vez: el borrado va primero y los insert
--- despues. Si se corre dos veces, los movimientos se duplican.
---
--- Los nombres de obra de la derecha tienen que existir en public.projects. La
--- que no empate no inserta nada y sale en el reporte del final.
+-- Correrlo COMPLETO y una sola vez, de un solo tiron en el editor de SQL: el
+-- borrado va primero y los insert despues. Si se corre dos veces, los
+-- movimientos se duplican.
 
-begin;
+
 
 -- ============ 1. Fuera la carga anterior ============
 -- Se borra por el texto exacto del concepto, no por fecha: asi no se lleva
@@ -168,27 +166,17 @@ where concepto in (
 );
 
 -- ============ 2. Los movimientos ============
--- La hoja del Excel y la obra de la base. Si una se llama distinto, se cambia
--- AQUI y nada mas aqui.
-create temporary table obras_carga on commit drop as
-select p.id as project_id, upper(trim(p.name)) as obra
-from public.projects p
-where upper(trim(p.name)) in (
-  'AMPLIACION C2 SPM',
-  'DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA',
-  'OBRA 2 DE PAPALOTLA',
-  'AGUA POTABLE EL CRISTO',
-  'PROYECTO DE ALBERCA MUNICIPAL TEPEYANCO',
-  'PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL'
-);
-
+-- Cada renglon trae el nombre de su obra, tal como esta en public.projects.
+-- Si una se llama distinto, hay que reemplazar ese texto en todos sus
+-- renglones (buscar y reemplazar); la que no empate no inserta nada y sale
+-- en el reporte del final.
 -- ---- Control de Destajos (24) ----
 -- Son montos globales de un corte, no actividades sueltas: el Excel no trae
 -- volumenes ni precios unitarios. Entran como un renglon por corte, con
 -- unidad LOTE, para que la suma de la semana cuadre. El maestro se lee del
 -- propio motivo cuando viene nombrado.
 insert into public.inventory (project_id, name, unit, quantity, unit_price, week_label, requested_by, in_charge, is_active)
-select o.project_id, v.concepto, 'LOTE', 1, v.monto, v.semana, 'Carga inicial', v.maestro, true
+select o.id, v.concepto, 'LOTE', 1, v.monto, v.semana, 'Carga inicial', v.maestro, true
 from (values
   ('AMPLIACION C2 SPM', 'Destajo MO, Corte 17 de octubre (Mtr Cristian Y Mtro Javier)', 19883.33::numeric, '19 OCT - 23 OCT 2026', 'Mtro. Cristian'),
   ('AMPLIACION C2 SPM', 'NOMINA MANO DE OBRA  CRISTIAN Y SUS TRABAJADORES (ADM SANTIAGO)', 5800.00::numeric, '26 OCT - 30 OCT 2026', 'Sin destajista'),
@@ -215,13 +203,13 @@ from (values
   ('AGUA POTABLE EL CRISTO', 'Mano de Obra (Mtr Javier Domingo)', 3233.33::numeric, '14 SEP - 18 SEP 2026', 'Mtro. Javier'),
   ('AGUA POTABLE EL CRISTO', 'Mano de Obra (Mtr Javier Domingo) corte 26 de septiembre 2026', 5666.67::numeric, '21 SEP - 25 SEP 2026', 'Mtro. Javier')
 ) as v(obra, concepto, monto, semana, maestro)
-join obras_carga o on o.obra = v.obra;
+join public.projects o on upper(trim(o.name)) = v.obra;
 
 -- ---- Caja Chica (49) ----
 -- Quien recibio la caja se lee del motivo cuando viene nombrado; si no, queda
 -- dicho que viene de la carga, que es mejor que inventarle un dueño.
 insert into public.caja_chica (project_id, numero_nota, encargado, monto, unidad, tipo_deposito, concepto, cantidad, precio_unitario, fecha, is_active)
-select o.project_id, 'S/N', v.encargado, v.monto, 'General', 'efectivo', v.concepto, 1, v.monto, v.fecha, true
+select o.id, 'S/N', v.encargado, v.monto, 'General', 'efectivo', v.concepto, 1, v.monto, v.fecha, true
 from (values
   ('AMPLIACION C2 SPM', 'Invitacion de Tequila Hornito a Obras Publicas, Contador Bulmaro, Innaguracion de Obra San Pablo del Monte', 400.00::numeric, 'Carga inicial', date '2026-08-20'),
   ('AMPLIACION C2 SPM', 'LONA DE INICIO DE OBRA SPM AMPLIACION C2', 750.00::numeric, 'Carga inicial', date '2026-08-21'),
@@ -273,7 +261,7 @@ from (values
   ('PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL', 'Compra de refrescos y botella para Inauguración, Totolac', 732.00::numeric, 'Carga inicial', date '2026-11-05'),
   ('PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL', 'CAJA CHICA (ADM ARQ. SANTIAGO HOY 12/11/26)', 10050.00::numeric, 'Carga inicial', date '2026-11-12')
 ) as v(obra, concepto, monto, encargado, fecha)
-join obras_carga o on o.obra = v.obra;
+join public.projects o on upper(trim(o.name)) = v.obra;
 
 -- ---- Gastos de Maquinaria (21) ----
 -- La pantalla agrupa por equipo y necesita un renglon de alta ('config') para
@@ -282,9 +270,9 @@ join obras_carga o on o.obra = v.obra;
 -- y ahi cuelgan todos los movimientos. Cuando sepan cual fue cada una, se
 -- reasignan desde la app.
 insert into public.gastos_maquinaria (project_id, equipo, concepto, categoria, tipo_renta, costo_tarifa, monto, is_active, fecha)
-select o.project_id, 'Maquinaria (carga del Excel)', 'Alta de equipo', 'config', 'dia', 0, 0, true, now()
-from obras_carga o
-where o.obra in (
+select o.id, 'Maquinaria (carga del Excel)', 'Alta de equipo', 'config', 'dia', 0, 0, true, now()
+from public.projects o
+where upper(trim(o.name)) in (
   'AMPLIACION C2 SPM',
   'DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA',
   'OBRA 2 DE PAPALOTLA',
@@ -293,7 +281,7 @@ where o.obra in (
 );
 
 insert into public.gastos_maquinaria (project_id, equipo, concepto, categoria, tipo_renta, costo_tarifa, asistencia_dias, monto, is_active, fecha)
-select o.project_id, 'Maquinaria (carga del Excel)', v.concepto, 'uso', 'dia', v.monto, 1, v.monto, true, v.fecha
+select o.id, 'Maquinaria (carga del Excel)', v.concepto, 'uso', 'dia', v.monto, 1, v.monto, true, v.fecha
 from (values
   ('AMPLIACION C2 SPM', 'Renta de Retro Excavadora y pago de Tabiques (Adminstracion Santiago) (Mixto: renta de retro y tabiques; no hay desglose, se dejó en Maquinaria)', 26000.00::numeric, date '2026-10-27'),
   ('AMPLIACION C2 SPM', '$3000 Pago de retroexcavador del dia de reparacion (Ing. Santiago) y $3600 Pago de Material (Arq. Gabriel) (Desglose según el motivo)', 3000.00::numeric, date '2026-11-04'),
@@ -317,14 +305,14 @@ from (values
   ('PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL', 'CAJA CHICA ARQ. SANTIAGO PAGO DE RETRO Y CAMIONES DE VIAJE DE ESCOMBRO -10 DE NOVIEMBRE 2026', 9000.00::numeric, date '2026-11-10'),
   ('PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL', '$7500 de RENTA DE RETRO Y PAGO DE VIAJES EN TOTOLAC (ADMINISTRACION ARQ SANTIAGO) + comision oxxo ($7,500 renta de retro y viajes + $84 comisión Oxxo)', 7584.00::numeric, date '2026-11-11')
 ) as v(obra, concepto, monto, fecha)
-join obras_carga o on o.obra = v.obra;
+join public.projects o on upper(trim(o.name)) = v.obra;
 
 -- ---- Gastos Generales, Materiales y Apoyos sociales (52) ----
 -- La app no tiene tipo para Materiales ni para Apoyos sociales, asi que van
 -- aqui con su categoria: material y burocrata. Todos como pagados: son
 -- salidas que ya ocurrieron.
 insert into public.gastos_generales (project_id, concepto, monto, categoria, estado_pago, monto_pagado, cantidad, precio_unitario, fecha, is_active)
-select o.project_id, v.concepto, v.monto, v.categoria, 'pagado', v.monto, 1, v.monto, v.fecha, true
+select o.id, v.concepto, v.monto, v.categoria, 'pagado', v.monto, 1, v.monto, v.fecha, true
 from (values
   ('AMPLIACION C2 SPM', 'Compra de 1 viaje de grava y viaje de escombro (Administracion Javier)', 4000.00::numeric, 'material', date '2026-10-22'),
   ('AMPLIACION C2 SPM', 'Compra de 10 Varillas de 1/2''''', 2500.00::numeric, 'material', date '2026-10-31'),
@@ -379,9 +367,8 @@ from (values
   ('PROYECTO DE ALBERCA MUNICIPAL TEPEYANCO', 'ANTICIPO ING. ANDRES Mecanica de Suelos PROY EJECUTIVO TEPEYANCO', 6500.00::numeric, 'asesoria', date '2026-09-04'),
   ('PROYECTO DE ALBERCA MUNICIPAL TEPEYANCO', 'Finiquito Mecánica de Suelos Ing. Andres', 7000.00::numeric, 'asesoria', date '2026-09-16')
 ) as v(obra, concepto, monto, categoria, fecha)
-join obras_carga o on o.obra = v.obra;
+join public.projects o on upper(trim(o.name)) = v.obra;
 
-commit;
 
 -- ============ 3. Como quedo ============
 select p.name as obra, 'Destajos' as modulo, count(*) as renglones, sum(i.quantity * i.unit_price) as importe
