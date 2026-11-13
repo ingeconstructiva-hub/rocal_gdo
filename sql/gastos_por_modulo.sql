@@ -43,6 +43,62 @@ delete from public.ingresos_obra    where referencia        = 'Carga Excel';
 delete from public.gastos_generales where numero_cotizacion = 'Carga Excel';
 delete from public.gastos_maquinaria where equipo = 'Maquinaria (carga del Excel)';
 
+-- Una version anterior de este query metia parte de la caja chica como
+-- GASTO en vez de inversion. Esos renglones no llevan marca, asi que se
+-- borran por el texto del concepto, que sale del propio Excel.
+delete from public.caja_chica
+where concepto in (
+  'Invitacion de Tequila Hornito a Obras Publicas, Contador Bulmaro, Innaguracion de Obra San Pablo del Monte',
+  'LONA DE INICIO DE OBRA SPM AMPLIACION C2',
+  'Caja chica Arq. Gabriel Fecha: 12/10/2026',
+  'Compra de refrescos y galletas para entrega de concurso de la Ampliacion C2 SPM',
+  'Caja chica Arq. Gabriel Fecha: 13/10/2026',
+  'Caja chica Arq. Gabriel Fecha: 14/10/2026',
+  'Caja Chica Arq. Gabriel, compra de Cementos y Cal',
+  'Caja Chica Arq. Gabriel, 17/10/2026',
+  'Caja Chica Arq. Gabriel, 17/10/2026',
+  'CAJA CHICA ARQ. GABRIEL',
+  'CAJA CHICA ARQ. GABRIEL (Administracion GABRIEL)',
+  'Invitamos a comer a los de Obras Publicas el conta gumaro',
+  'Caja Chica Arq. gabriel 24 de Octubre 2026',
+  'Caja Chica Ampliacion C2 Compra de material y otras cosas (Administracion Gabriel)',
+  'Caja Chica (Administracion Gabriel)',
+  'Caja Chica (Administracion Gabriel)',
+  'Caja Chica (Administracion Gabriel - Emmanuel)',
+  'Caja Chica (Administracion Gabriel - Emmanuel)',
+  'Caja Chica, compra de pico y otras cosas (Administracion Gabriel)',
+  'Compra de discos para guillotina ($400) y $600 Caja chica (Arq. Gabriel)',
+  'Caja chica Arq. Gabriel Ampliacion C2',
+  'CAJA CHICA ARQ. GABRIEL 10 DE NOVIEMBRE 2026',
+  'CAJA CHICA 12/11/2026 (ADMINISTRACION ARQ GABRIEL)',
+  'ACOMPLETAR DINERO PARA BOTELLAS Y REFRESCOS EN INAGURACION DE OBRA (EL CONTA BULMARO ME DIO $500 SE ACOMPLETO $900)',
+  'Gasolina Coche Gris para ir a inaguracion de obra papalotla',
+  'Caja Chica Arq. Santiago 25 de Agosto 2025',
+  'caja chica ($2,600) y dos días de retroexcavadora ($8,000) (Desglose según el motivo)',
+  'Gasolina de Coche Gris para ir a dejar apoyo social a presidente',
+  'Caja Chica Arq. santiago 30 DE AGOSTO',
+  'Caja Chica Arq. Santiago 1 de Septiembre',
+  'MADERA (25 POLINES 1.5 M ) ($2,500) , 3 VARILLAS DE 3/8 Y 3 DE 5/8 ($1,567) Y CAJA CHICA (04 / 09 / 2026) ($2,500) (Desglose según el motivo)',
+  'Caja Chica (posible compra de pintura para estructura)',
+  'Compra de pintura y primer para estructura ($8200) y caja chica ($1000) (Desglose según el motivo)',
+  'Caja Chica Arq. Santiago',
+  'Caja Chica Arq. Santiago 16 Septiembre',
+  'Caja Chica Arq. Santiago ($3,000) y $3500 para pintura (Desglose según el motivo)',
+  'Caja Chica para pagar Retroexcavadora por 3ra Vuelta',
+  'Gasolina a camioneta para ir a dejar bailarina con el conta gumaro y revisar deslave en papalotla',
+  'Viáticos (estimaciones con obras publicas)',
+  'Comida con Contador Gumaro y Supervisor, asi como con Arquis durante el recorrido de obra',
+  'Caja Chica Arq. Emmanuel',
+  'Caja Chica Arq. Emmanuel 18 de Septiembre',
+  'Caja chica (Emmanuel) para pagar 2do Viaje de Arena',
+  'Caja chica (Emmanuel) 3er viaje de arena21 de Septiembre',
+  'Compra de materiales PARA REGISTRO DE valvula y gasolina javier',
+  'Caja Chica Arq. Emmanuel',
+  'Caja Chica Arq. Santiago bacheo en totolac',
+  'Compra de refrescos y botella para Inauguración, Totolac',
+  'CAJA CHICA (ADM ARQ. SANTIAGO HOY 12/11/26)'
+);
+
 -- Y la primera carga de todas, la que metia todo en Gastos Generales. Esa
 -- no llevaba marca, asi que se borra por el texto exacto del concepto: asi
 -- no se lleva por delante nada capturado a mano.
