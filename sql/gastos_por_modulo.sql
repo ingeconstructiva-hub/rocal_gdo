@@ -7,16 +7,12 @@
 --
 -- QUE HACE, EN ORDEN
 --   1. Borra los 136 renglones de la carga anterior.
---   2. Mete 138 movimientos en sus cuatro modulos.
+--   2. Mete 146 movimientos en sus cuatro modulos.
 --   3. Dice como quedo cada obra.
 --
 -- QUE NO HACE
 --   - POZOS PAPALOTLA y DRENAJE TEPEXCO quedan fuera: esas obras no se dan de
 --     alta, asi que sus 17 movimientos no entran.
---   - OBRAS TOTOLAC tambien: ninguna obra de la base se llama asi. La
---     candidata es PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL, pero ponerle
---     187 mil pesos a la obra equivocada es peor que dejarlos fuera. Cuando
---     me digas cual es, los agrego.
 --   - Los 30 de la hoja "Por revisar" tampoco: estan en
 --     sql/gastos_por_revisar.sql para decidirlos uno por uno.
 --
@@ -182,7 +178,8 @@ where upper(trim(p.name)) in (
   'DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA',
   'OBRA 2 DE PAPALOTLA',
   'AGUA POTABLE EL CRISTO',
-  'PROYECTO DE ALBERCA MUNICIPAL TEPEYANCO'
+  'PROYECTO DE ALBERCA MUNICIPAL TEPEYANCO',
+  'PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL'
 );
 
 -- ---- Control de Destajos (24) ----
@@ -220,7 +217,7 @@ from (values
 ) as v(obra, concepto, monto, semana, maestro)
 join obras_carga o on o.obra = v.obra;
 
--- ---- Caja Chica (46) ----
+-- ---- Caja Chica (49) ----
 -- Quien recibio la caja se lee del motivo cuando viene nombrado; si no, queda
 -- dicho que viene de la carga, que es mejor que inventarle un dueño.
 insert into public.caja_chica (project_id, numero_nota, encargado, monto, unidad, tipo_deposito, concepto, cantidad, precio_unitario, fecha, is_active)
@@ -271,11 +268,14 @@ from (values
   ('AGUA POTABLE EL CRISTO', 'Caja chica (Emmanuel) para pagar 2do Viaje de Arena', 1000.00::numeric, 'Carga inicial', date '2026-09-19'),
   ('AGUA POTABLE EL CRISTO', 'Caja chica (Emmanuel) 3er viaje de arena21 de Septiembre', 3000.00::numeric, 'Carga inicial', date '2026-09-21'),
   ('AGUA POTABLE EL CRISTO', 'Compra de materiales PARA REGISTRO DE valvula y gasolina javier', 500.00::numeric, 'Carga inicial', date '2026-09-23'),
-  ('AGUA POTABLE EL CRISTO', 'Caja Chica Arq. Emmanuel', 1000.00::numeric, 'Arq. Emmanuel', date '2026-09-24')
+  ('AGUA POTABLE EL CRISTO', 'Caja Chica Arq. Emmanuel', 1000.00::numeric, 'Arq. Emmanuel', date '2026-09-24'),
+  ('PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL', 'Caja Chica Arq. Santiago bacheo en totolac', 2800.00::numeric, 'Arq. Santiago', date '2026-08-19'),
+  ('PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL', 'Compra de refrescos y botella para Inauguración, Totolac', 732.00::numeric, 'Carga inicial', date '2026-11-05'),
+  ('PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL', 'CAJA CHICA (ADM ARQ. SANTIAGO HOY 12/11/26)', 10050.00::numeric, 'Carga inicial', date '2026-11-12')
 ) as v(obra, concepto, monto, encargado, fecha)
 join obras_carga o on o.obra = v.obra;
 
--- ---- Gastos de Maquinaria (17) ----
+-- ---- Gastos de Maquinaria (21) ----
 -- La pantalla agrupa por equipo y necesita un renglon de alta ('config') para
 -- que el equipo aparezca en la lista. El Excel no dice que maquina fue en
 -- cada caso, asi que se da de alta una sola, "Maquinaria (carga del Excel)",
@@ -288,7 +288,8 @@ where o.obra in (
   'AMPLIACION C2 SPM',
   'DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA',
   'OBRA 2 DE PAPALOTLA',
-  'AGUA POTABLE EL CRISTO'
+  'AGUA POTABLE EL CRISTO',
+  'PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL'
 );
 
 insert into public.gastos_maquinaria (project_id, equipo, concepto, categoria, tipo_renta, costo_tarifa, asistencia_dias, monto, is_active, fecha)
@@ -310,11 +311,15 @@ from (values
   ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Acarreos de material ( mantenimiento a unidad )', 1000.00::numeric, date '2026-11-08'),
   ('OBRA 2 DE PAPALOTLA', 'Renta de Retroexcavadora para inaguración y Despalmar calle', 4000.00::numeric, date '2026-10-24'),
   ('AGUA POTABLE EL CRISTO', 'Pago del 30% de Renta de Retroexcavadora Arq. Adriana', 7000.00::numeric, date '2026-09-17'),
-  ('AGUA POTABLE EL CRISTO', 'Liquidacion del 70% de Renta de Retroexcavadora Arq. Adriana', 16000.00::numeric, date '2026-09-26')
+  ('AGUA POTABLE EL CRISTO', 'Liquidacion del 70% de Renta de Retroexcavadora Arq. Adriana', 16000.00::numeric, date '2026-09-26'),
+  ('PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL', 'Pago de Hra Renta de Retroexcavadora para Inauguración de Obra en Totolac', 800.00::numeric, date '2026-11-05'),
+  ('PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL', 'Renta de día de retroexcavadora y pago de 4 viajes de escombro en TOTOLAC', 7000.00::numeric, date '2026-11-09'),
+  ('PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL', 'CAJA CHICA ARQ. SANTIAGO PAGO DE RETRO Y CAMIONES DE VIAJE DE ESCOMBRO -10 DE NOVIEMBRE 2026', 9000.00::numeric, date '2026-11-10'),
+  ('PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL', '$7500 de RENTA DE RETRO Y PAGO DE VIAJES EN TOTOLAC (ADMINISTRACION ARQ SANTIAGO) + comision oxxo ($7,500 renta de retro y viajes + $84 comisión Oxxo)', 7584.00::numeric, date '2026-11-11')
 ) as v(obra, concepto, monto, fecha)
 join obras_carga o on o.obra = v.obra;
 
--- ---- Gastos Generales, Materiales y Apoyos sociales (51) ----
+-- ---- Gastos Generales, Materiales y Apoyos sociales (52) ----
 -- La app no tiene tipo para Materiales ni para Apoyos sociales, asi que van
 -- aqui con su categoria: material y burocrata. Todos como pagados: son
 -- salidas que ya ocurrieron.
@@ -369,6 +374,7 @@ from (values
   ('AGUA POTABLE EL CRISTO', 'Deposito a Juan Facturas', 336.00::numeric, 'administrativo', date '2026-09-18'),
   ('AGUA POTABLE EL CRISTO', 'Apoyo social Presidenta del Cristo', 20000.00::numeric, 'burocrata', date '2026-09-16'),
   ('AGUA POTABLE EL CRISTO', 'Apoyo social Presidenta del Cristo', 10000.00::numeric, 'burocrata', date '2026-10-31'),
+  ('PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL', 'Apoyo Social Presi Benjamin,  Totolac', 150000.00::numeric, 'burocrata', date '2026-08-20'),
   ('PROYECTO DE ALBERCA MUNICIPAL TEPEYANCO', 'PAGO TOPOGRAFÍA PROYECTO ALBERCA SEMIOLIMPICA TEPEYANCO (ING FRANCISCO)', 3600.00::numeric, 'asesoria', date '2026-09-02'),
   ('PROYECTO DE ALBERCA MUNICIPAL TEPEYANCO', 'ANTICIPO ING. ANDRES Mecanica de Suelos PROY EJECUTIVO TEPEYANCO', 6500.00::numeric, 'asesoria', date '2026-09-04'),
   ('PROYECTO DE ALBERCA MUNICIPAL TEPEYANCO', 'Finiquito Mecánica de Suelos Ing. Andres', 7000.00::numeric, 'asesoria', date '2026-09-16')
