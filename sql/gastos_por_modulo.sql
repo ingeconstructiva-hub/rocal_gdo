@@ -3,8 +3,8 @@
 -- Reemplaza la carga anterior, que metia TODO en Gastos Generales. Aquel
 -- archivo venia sin tipo; este si lo trae, asi que cada movimiento se va a
 -- donde se captura normalmente: destajos a Destajos, las entregas de caja
--- chica a Inversiones, renta de maquina a Maquinaria, y lo demas a Gastos
--- Generales.
+-- chica a Inversiones y lo que ya se pago de ella a Caja Chica, renta de
+-- maquina a Maquinaria, y lo demas a Gastos Generales.
 --
 -- QUE HACE, EN ORDEN
 --   1. Borra los 136 renglones de la carga anterior.
@@ -206,67 +206,80 @@ from (values
 ) as v(obra, concepto, monto, semana, maestro)
 join public.projects o on upper(trim(o.name)) = v.obra;
 
--- ---- Caja Chica (49) ----
--- Van como INVERSION, no como gasto. Cada uno es dinero que la empresa le
--- entrego a la obra; lo que se compro con el se captura aparte, desde la
--- app. Metidos como gasto, el saldo de la caja saldria en negativo y cada
--- peso se contaria dos veces.
+-- ---- Entregas de caja chica (33) ----
+-- Van como INVERSION, no como gasto. Cada una es dinero que la empresa le
+-- entrego a la obra; lo que se compre con el se captura aparte, desde la
+-- app. Metidas como gasto, el saldo de la caja saldria en negativo y cada
+-- peso se contaria dos veces: una al entregarlo y otra al gastarlo.
 --
--- Quien recibio el dinero se lee del motivo cuando viene nombrado; si no,
--- queda dicho que viene de la carga, que es mejor que inventarle un dueño.
+-- El dinero entregado PARA pagar algo tambien cuenta como entrega: cuando
+-- sale de la empresa todavia no se gasta.
+--
+-- Quien lo recibio se lee del motivo cuando viene nombrado; si no, queda
+-- dicho que viene de la carga, que es mejor que inventarle un dueño.
 insert into public.ingresos_obra (project_id, monto, solicitante, concepto, referencia, fecha, is_active)
 select o.id, v.monto, v.solicitante, v.concepto, 'efectivo', v.fecha, true
 from (values
   ('AMPLIACION C2 SPM', 'Invitacion de Tequila Hornito a Obras Publicas, Contador Bulmaro, Innaguracion de Obra San Pablo del Monte', 400.00::numeric, 'Carga inicial', date '2026-08-20'),
-  ('AMPLIACION C2 SPM', 'LONA DE INICIO DE OBRA SPM AMPLIACION C2', 750.00::numeric, 'Carga inicial', date '2026-08-21'),
   ('AMPLIACION C2 SPM', 'Caja chica Arq. Gabriel Fecha: 12/10/2026', 1500.00::numeric, 'Arq. Gabriel', date '2026-10-12'),
-  ('AMPLIACION C2 SPM', 'Compra de refrescos y galletas para entrega de concurso de la Ampliacion C2 SPM', 200.00::numeric, 'Carga inicial', date '2026-10-13'),
   ('AMPLIACION C2 SPM', 'Caja chica Arq. Gabriel Fecha: 13/10/2026', 3000.00::numeric, 'Arq. Gabriel', date '2026-10-13'),
   ('AMPLIACION C2 SPM', 'Caja chica Arq. Gabriel Fecha: 14/10/2026', 3000.00::numeric, 'Arq. Gabriel', date '2026-10-14'),
-  ('AMPLIACION C2 SPM', 'Caja Chica Arq. Gabriel, compra de Cementos y Cal', 7000.00::numeric, 'Arq. Gabriel', date '2026-10-16'),
   ('AMPLIACION C2 SPM', 'Caja Chica Arq. Gabriel, 17/10/2026', 2000.00::numeric, 'Arq. Gabriel', date '2026-10-16'),
   ('AMPLIACION C2 SPM', 'Caja Chica Arq. Gabriel, 17/10/2026', 2000.00::numeric, 'Arq. Gabriel', date '2026-10-17'),
   ('AMPLIACION C2 SPM', 'CAJA CHICA ARQ. GABRIEL', 380.00::numeric, 'Carga inicial', date '2026-10-20'),
   ('AMPLIACION C2 SPM', 'CAJA CHICA ARQ. GABRIEL (Administracion GABRIEL)', 2890.00::numeric, 'GABRIEL', date '2026-10-22'),
   ('AMPLIACION C2 SPM', 'Invitamos a comer a los de Obras Publicas el conta gumaro', 595.00::numeric, 'Carga inicial', date '2026-10-22'),
   ('AMPLIACION C2 SPM', 'Caja Chica Arq. gabriel 24 de Octubre 2026', 3000.00::numeric, 'Carga inicial', date '2026-10-24'),
-  ('AMPLIACION C2 SPM', 'Caja Chica Ampliacion C2 Compra de material y otras cosas (Administracion Gabriel)', 6500.00::numeric, 'Gabriel', date '2026-10-27'),
   ('AMPLIACION C2 SPM', 'Caja Chica (Administracion Gabriel)', 2000.00::numeric, 'Gabriel', date '2026-10-27'),
   ('AMPLIACION C2 SPM', 'Caja Chica (Administracion Gabriel)', 2000.00::numeric, 'Gabriel', date '2026-10-28'),
   ('AMPLIACION C2 SPM', 'Caja Chica (Administracion Gabriel - Emmanuel)', 2000.00::numeric, 'Gabriel', date '2026-10-29'),
   ('AMPLIACION C2 SPM', 'Caja Chica (Administracion Gabriel - Emmanuel)', 2000.00::numeric, 'Gabriel', date '2026-10-29'),
-  ('AMPLIACION C2 SPM', 'Caja Chica, compra de pico y otras cosas (Administracion Gabriel)', 2000.00::numeric, 'Gabriel', date '2026-10-30'),
-  ('AMPLIACION C2 SPM', 'Compra de discos para guillotina ($400) y $600 Caja chica (Arq. Gabriel)', 1000.00::numeric, 'Arq. Gabriel', date '2026-11-04'),
   ('AMPLIACION C2 SPM', 'Caja chica Arq. Gabriel Ampliacion C2', 1000.00::numeric, 'Arq. Gabriel', date '2026-11-05'),
   ('AMPLIACION C2 SPM', 'CAJA CHICA ARQ. GABRIEL 10 DE NOVIEMBRE 2026', 3000.00::numeric, 'Carga inicial', date '2026-11-10'),
   ('AMPLIACION C2 SPM', 'CAJA CHICA 12/11/2026 (ADMINISTRACION ARQ GABRIEL)', 2000.00::numeric, 'ARQ', date '2026-11-11'),
   ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'ACOMPLETAR DINERO PARA BOTELLAS Y REFRESCOS EN INAGURACION DE OBRA (EL CONTA BULMARO ME DIO $500 SE ACOMPLETO $900)', 400.00::numeric, 'Carga inicial', date '2026-08-12'),
-  ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Gasolina Coche Gris para ir a inaguracion de obra papalotla', 200.00::numeric, 'Carga inicial', date '2026-08-13'),
   ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Caja Chica Arq. Santiago 25 de Agosto 2025', 3000.00::numeric, 'Arq. Santiago', date '2026-08-25'),
   ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'caja chica ($2,600) y dos días de retroexcavadora ($8,000) (Desglose según el motivo)', 2600.00::numeric, 'Carga inicial', date '2026-08-28'),
-  ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Gasolina de Coche Gris para ir a dejar apoyo social a presidente', 300.00::numeric, 'Carga inicial', date '2026-09-01'),
   ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Caja Chica Arq. santiago 30 DE AGOSTO', 1000.00::numeric, 'Carga inicial', date '2026-09-01'),
   ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Caja Chica Arq. Santiago 1 de Septiembre', 3000.00::numeric, 'Arq. Santiago', date '2026-09-01'),
-  ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'MADERA (25 POLINES 1.5 M ) ($2,500) , 3 VARILLAS DE 3/8 Y 3 DE 5/8 ($1,567) Y CAJA CHICA (04 / 09 / 2026) ($2,500) (Desglose según el motivo)', 2500.00::numeric, 'Carga inicial', date '2026-09-04'),
   ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Caja Chica (posible compra de pintura para estructura)', 2000.00::numeric, 'Carga inicial', date '2026-09-07'),
-  ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Compra de pintura y primer para estructura ($8200) y caja chica ($1000) (Desglose según el motivo)', 1000.00::numeric, 'Carga inicial', date '2026-09-11'),
   ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Caja Chica Arq. Santiago', 2500.00::numeric, 'Arq. Santiago', date '2026-09-14'),
   ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Caja Chica Arq. Santiago 16 Septiembre', 3000.00::numeric, 'Arq. Santiago', date '2026-09-16'),
-  ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Caja Chica Arq. Santiago ($3,000) y $3500 para pintura (Desglose según el motivo)', 3000.00::numeric, 'Arq. Santiago', date '2026-09-18'),
   ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Caja Chica para pagar Retroexcavadora por 3ra Vuelta', 1000.00::numeric, 'Carga inicial', date '2026-09-19'),
-  ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Gasolina a camioneta para ir a dejar bailarina con el conta gumaro y revisar deslave en papalotla', 500.00::numeric, 'Carga inicial', date '2026-10-11'),
-  ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Viáticos (estimaciones con obras publicas)', 1000.00::numeric, 'Carga inicial', date '2026-11-09'),
-  ('OBRA 2 DE PAPALOTLA', 'Comida con Contador Gumaro y Supervisor, asi como con Arquis durante el recorrido de obra', 500.00::numeric, 'Carga inicial', date '2026-09-22'),
   ('AGUA POTABLE EL CRISTO', 'Caja Chica Arq. Emmanuel', 1000.00::numeric, 'Arq. Emmanuel', date '2026-09-17'),
   ('AGUA POTABLE EL CRISTO', 'Caja Chica Arq. Emmanuel 18 de Septiembre', 2000.00::numeric, 'Arq. Emmanuel', date '2026-09-18'),
   ('AGUA POTABLE EL CRISTO', 'Caja chica (Emmanuel) para pagar 2do Viaje de Arena', 1000.00::numeric, 'Carga inicial', date '2026-09-19'),
   ('AGUA POTABLE EL CRISTO', 'Caja chica (Emmanuel) 3er viaje de arena21 de Septiembre', 3000.00::numeric, 'Carga inicial', date '2026-09-21'),
-  ('AGUA POTABLE EL CRISTO', 'Compra de materiales PARA REGISTRO DE valvula y gasolina javier', 500.00::numeric, 'Carga inicial', date '2026-09-23'),
   ('AGUA POTABLE EL CRISTO', 'Caja Chica Arq. Emmanuel', 1000.00::numeric, 'Arq. Emmanuel', date '2026-09-24'),
   ('PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL', 'Caja Chica Arq. Santiago bacheo en totolac', 2800.00::numeric, 'Arq. Santiago', date '2026-08-19'),
-  ('PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL', 'Compra de refrescos y botella para Inauguración, Totolac', 732.00::numeric, 'Carga inicial', date '2026-11-05'),
   ('PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL', 'CAJA CHICA (ADM ARQ. SANTIAGO HOY 12/11/26)', 10050.00::numeric, 'Carga inicial', date '2026-11-12')
 ) as v(obra, concepto, monto, solicitante, fecha)
+join public.projects o on upper(trim(o.name)) = v.obra;
+
+-- ---- Gastos pagados de la caja (16) ----
+-- Estos si dicen que se compro o se pago: gasolina, comidas, refrescos,
+-- material suelto. Van como gasto de caja chica, que es donde se captura
+-- lo que sale del fondo.
+insert into public.caja_chica (project_id, numero_nota, encargado, monto, unidad, tipo_deposito, concepto, cantidad, precio_unitario, fecha, is_active)
+select o.id, 'S/N', v.encargado, v.monto, 'General', 'efectivo', v.concepto, 1, v.monto, v.fecha, true
+from (values
+  ('AMPLIACION C2 SPM', 'LONA DE INICIO DE OBRA SPM AMPLIACION C2', 750.00::numeric, 'Carga inicial', date '2026-08-21'),
+  ('AMPLIACION C2 SPM', 'Compra de refrescos y galletas para entrega de concurso de la Ampliacion C2 SPM', 200.00::numeric, 'Carga inicial', date '2026-10-13'),
+  ('AMPLIACION C2 SPM', 'Caja Chica Arq. Gabriel, compra de Cementos y Cal', 7000.00::numeric, 'Arq. Gabriel', date '2026-10-16'),
+  ('AMPLIACION C2 SPM', 'Caja Chica Ampliacion C2 Compra de material y otras cosas (Administracion Gabriel)', 6500.00::numeric, 'Gabriel', date '2026-10-27'),
+  ('AMPLIACION C2 SPM', 'Caja Chica, compra de pico y otras cosas (Administracion Gabriel)', 2000.00::numeric, 'Gabriel', date '2026-10-30'),
+  ('AMPLIACION C2 SPM', 'Compra de discos para guillotina ($400) y $600 Caja chica (Arq. Gabriel)', 1000.00::numeric, 'Arq. Gabriel', date '2026-11-04'),
+  ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Gasolina Coche Gris para ir a inaguracion de obra papalotla', 200.00::numeric, 'Carga inicial', date '2026-08-13'),
+  ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Gasolina de Coche Gris para ir a dejar apoyo social a presidente', 300.00::numeric, 'Carga inicial', date '2026-09-01'),
+  ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'MADERA (25 POLINES 1.5 M ) ($2,500) , 3 VARILLAS DE 3/8 Y 3 DE 5/8 ($1,567) Y CAJA CHICA (04 / 09 / 2026) ($2,500) (Desglose según el motivo)', 2500.00::numeric, 'Carga inicial', date '2026-09-04'),
+  ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Compra de pintura y primer para estructura ($8200) y caja chica ($1000) (Desglose según el motivo)', 1000.00::numeric, 'Carga inicial', date '2026-09-11'),
+  ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Caja Chica Arq. Santiago ($3,000) y $3500 para pintura (Desglose según el motivo)', 3000.00::numeric, 'Arq. Santiago', date '2026-09-18'),
+  ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Gasolina a camioneta para ir a dejar bailarina con el conta gumaro y revisar deslave en papalotla', 500.00::numeric, 'Carga inicial', date '2026-10-11'),
+  ('DRENAJE EN CALLE NUEVO LAREDO PAPALOTLA', 'Viáticos (estimaciones con obras publicas)', 1000.00::numeric, 'Carga inicial', date '2026-11-09'),
+  ('OBRA 2 DE PAPALOTLA', 'Comida con Contador Gumaro y Supervisor, asi como con Arquis durante el recorrido de obra', 500.00::numeric, 'Carga inicial', date '2026-09-22'),
+  ('AGUA POTABLE EL CRISTO', 'Compra de materiales PARA REGISTRO DE valvula y gasolina javier', 500.00::numeric, 'Carga inicial', date '2026-09-23'),
+  ('PAVIMENTACION ADOCRETO - CALLE 2 DE ABRIL', 'Compra de refrescos y botella para Inauguración, Totolac', 732.00::numeric, 'Carga inicial', date '2026-11-05')
+) as v(obra, concepto, monto, encargado, fecha)
 join public.projects o on upper(trim(o.name)) = v.obra;
 
 -- ---- Gastos de Maquinaria (21) ----
@@ -384,6 +397,10 @@ union all
 select p.name, 'Inversiones', count(*), sum(i.monto)
   from public.ingresos_obra i join public.projects p on p.id = i.project_id
  where i.referencia = 'efectivo' group by p.name
+union all
+select p.name, 'Caja chica', count(*), sum(c.monto)
+  from public.caja_chica c join public.projects p on p.id = c.project_id
+ where c.numero_nota = 'S/N' group by p.name
 union all
 select p.name, 'Maquinaria', count(*), sum(g.monto)
   from public.gastos_maquinaria g join public.projects p on p.id = g.project_id
