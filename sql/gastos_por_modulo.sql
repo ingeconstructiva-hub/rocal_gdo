@@ -34,20 +34,52 @@
 
 -- ============ 1. Fuera lo que haya de antes ============
 --
--- Se borra por la marca que deja esta misma carga, asi que el query se
--- puede volver a correr cuantas veces haga falta: lo primero que hace es
--- limpiar lo suyo. Lo capturado a mano desde la app no lleva marca y no se
--- toca.
-delete from public.inventory        where requested_by      = 'Carga Excel';
-delete from public.ingresos_obra    where referencia        = 'Carga Excel';
-delete from public.gastos_generales where numero_cotizacion = 'Carga Excel';
-delete from public.gastos_maquinaria where equipo = 'Maquinaria (carga del Excel)';
+-- Se borra de dos maneras, a proposito:
+--
+--   - Por la MARCA que deja esta carga.
+--   - Por el TEXTO del concepto, que sale del Excel y no ha cambiado entre
+--     versiones de este query.
+--
+-- Hacen falta las dos. Cada vez que cambio donde va un movimiento tambien
+-- cambia su marca, y borrar solo por la marca nueva deja vivo lo que metio
+-- la corrida anterior: eso es lo que aparecia repetido.
+--
+-- Lo capturado a mano desde la app no se toca: sus conceptos son otros. Los
+-- que la app escribe empiezan con "Fondeo a:", que no esta en ninguna lista
+-- de aqui.
 
--- Una version anterior de este query metia parte de la caja chica como
--- GASTO en vez de inversion. Esos renglones no llevan marca, asi que se
--- borran por el texto del concepto, que sale del propio Excel.
-delete from public.caja_chica
-where concepto in (
+-- Destajos
+delete from public.inventory where requested_by in ('Carga Excel', 'Carga inicial');
+delete from public.inventory where name in (
+  'Destajo MO, Corte 17 de octubre (Mtr Cristian Y Mtro Javier)',
+  'NOMINA MANO DE OBRA  CRISTIAN Y SUS TRABAJADORES (ADM SANTIAGO)',
+  'DESTAJOS DEL 24 AL 31 DE OCT, 2026 MANO DE OBRA (ADM GABRIEL)',
+  'NOMINA CRISTIAN Y SUS TRABAJADORES DEL 02 DE NOVIEMBRE AL 07 DE NOVIEMBRE (ADM SANTIAGO)',
+  'DESTAJOS DEL 02 DE NOVIEMBRE AL 07 DE NOVIEMBRE 2026 MANO DE OBRA (ADM GABRIEL)',
+  'Pago día de oficial Albañil para desyerbe de Arboles y apoyo en Inaguracion de obra',
+  'Pago día de Ayudante Albañil para desyerbe de Arboles y apoyo en Inaguracion de obra',
+  'Destajo MO, Corte 29 de Agosto (Mtr Marco)',
+  'ANTICIPO DESTAJOS (PAILERIA MTR MAXIMINO)',
+  '*Destajo MO, Corte 31 de Agosto al 05 de Septiembre (Mtr Marco)',
+  'Destajo MO, Corte 31 de Agosto al 05 de Septiembre (Mtr Maximino, Pailería)',
+  'Destajo MO, Corte 7 al 12 de Septiembre (Mtr Maximino, Pailería)',
+  'Destajo MO, Corte 12 de Septiembre (Mtr Angel)',
+  'Destajo MO, Corte 19 de Septiembre (Mtr Angel)',
+  'Destajo MO, Corte 14 al 19 de Septiembre (Mtr Maximino, Pailería)',
+  'Destajo MO, Corte 26 de Septiembre (Mtr Cristian)',
+  'Destajo MO, Corte 21 al 26 de Septiembre (Mtr Maximino, Pailería)',
+  'Destajo MO, Corte 3 de octubre 2026 (Mtr Cristian)',
+  'Destajo MO, Corte 10 de octubre (Mtr Cristian)',
+  'Destajo MO, Corte 17 de octubre (Mtr Cristian)',
+  'Destajo MO, Corte 17 de octubre (Mtr Cristian) (POSIBLE DUPLICADO de la fila 464)',
+  'Pago anticipo a Arq. Álvaro (Anticipo a Arq. Álvaro: se asumió subcontrato/mano de obra)',
+  'Mano de Obra (Mtr Javier Domingo)',
+  'Mano de Obra (Mtr Javier Domingo) corte 26 de septiembre 2026'
+);
+
+-- Inversiones, y la caja chica que una version metio como gasto
+delete from public.ingresos_obra where referencia = 'Carga Excel';
+delete from public.ingresos_obra where concepto in (
   'Invitacion de Tequila Hornito a Obras Publicas, Contador Bulmaro, Innaguracion de Obra San Pablo del Monte',
   'LONA DE INICIO DE OBRA SPM AMPLIACION C2',
   'Caja chica Arq. Gabriel Fecha: 12/10/2026',
@@ -99,11 +131,120 @@ where concepto in (
   'CAJA CHICA (ADM ARQ. SANTIAGO HOY 12/11/26)'
 );
 
--- Y la primera carga de todas, la que metia todo en Gastos Generales. Esa
--- no llevaba marca, asi que se borra por el texto exacto del concepto: asi
--- no se lleva por delante nada capturado a mano.
-delete from public.gastos_generales
-where concepto in (
+delete from public.caja_chica where concepto in (
+  'Invitacion de Tequila Hornito a Obras Publicas, Contador Bulmaro, Innaguracion de Obra San Pablo del Monte',
+  'LONA DE INICIO DE OBRA SPM AMPLIACION C2',
+  'Caja chica Arq. Gabriel Fecha: 12/10/2026',
+  'Compra de refrescos y galletas para entrega de concurso de la Ampliacion C2 SPM',
+  'Caja chica Arq. Gabriel Fecha: 13/10/2026',
+  'Caja chica Arq. Gabriel Fecha: 14/10/2026',
+  'Caja Chica Arq. Gabriel, compra de Cementos y Cal',
+  'Caja Chica Arq. Gabriel, 17/10/2026',
+  'Caja Chica Arq. Gabriel, 17/10/2026',
+  'CAJA CHICA ARQ. GABRIEL',
+  'CAJA CHICA ARQ. GABRIEL (Administracion GABRIEL)',
+  'Invitamos a comer a los de Obras Publicas el conta gumaro',
+  'Caja Chica Arq. gabriel 24 de Octubre 2026',
+  'Caja Chica Ampliacion C2 Compra de material y otras cosas (Administracion Gabriel)',
+  'Caja Chica (Administracion Gabriel)',
+  'Caja Chica (Administracion Gabriel)',
+  'Caja Chica (Administracion Gabriel - Emmanuel)',
+  'Caja Chica (Administracion Gabriel - Emmanuel)',
+  'Caja Chica, compra de pico y otras cosas (Administracion Gabriel)',
+  'Compra de discos para guillotina ($400) y $600 Caja chica (Arq. Gabriel)',
+  'Caja chica Arq. Gabriel Ampliacion C2',
+  'CAJA CHICA ARQ. GABRIEL 10 DE NOVIEMBRE 2026',
+  'CAJA CHICA 12/11/2026 (ADMINISTRACION ARQ GABRIEL)',
+  'ACOMPLETAR DINERO PARA BOTELLAS Y REFRESCOS EN INAGURACION DE OBRA (EL CONTA BULMARO ME DIO $500 SE ACOMPLETO $900)',
+  'Gasolina Coche Gris para ir a inaguracion de obra papalotla',
+  'Caja Chica Arq. Santiago 25 de Agosto 2025',
+  'caja chica ($2,600) y dos días de retroexcavadora ($8,000) (Desglose según el motivo)',
+  'Gasolina de Coche Gris para ir a dejar apoyo social a presidente',
+  'Caja Chica Arq. santiago 30 DE AGOSTO',
+  'Caja Chica Arq. Santiago 1 de Septiembre',
+  'MADERA (25 POLINES 1.5 M ) ($2,500) , 3 VARILLAS DE 3/8 Y 3 DE 5/8 ($1,567) Y CAJA CHICA (04 / 09 / 2026) ($2,500) (Desglose según el motivo)',
+  'Caja Chica (posible compra de pintura para estructura)',
+  'Compra de pintura y primer para estructura ($8200) y caja chica ($1000) (Desglose según el motivo)',
+  'Caja Chica Arq. Santiago',
+  'Caja Chica Arq. Santiago 16 Septiembre',
+  'Caja Chica Arq. Santiago ($3,000) y $3500 para pintura (Desglose según el motivo)',
+  'Caja Chica para pagar Retroexcavadora por 3ra Vuelta',
+  'Gasolina a camioneta para ir a dejar bailarina con el conta gumaro y revisar deslave en papalotla',
+  'Viáticos (estimaciones con obras publicas)',
+  'Comida con Contador Gumaro y Supervisor, asi como con Arquis durante el recorrido de obra',
+  'Caja Chica Arq. Emmanuel',
+  'Caja Chica Arq. Emmanuel 18 de Septiembre',
+  'Caja chica (Emmanuel) para pagar 2do Viaje de Arena',
+  'Caja chica (Emmanuel) 3er viaje de arena21 de Septiembre',
+  'Compra de materiales PARA REGISTRO DE valvula y gasolina javier',
+  'Caja Chica Arq. Emmanuel',
+  'Caja Chica Arq. Santiago bacheo en totolac',
+  'Compra de refrescos y botella para Inauguración, Totolac',
+  'CAJA CHICA (ADM ARQ. SANTIAGO HOY 12/11/26)'
+);
+
+-- Maquinaria: el equipo entero, que solo existe por esta carga
+delete from public.gastos_maquinaria where equipo = 'Maquinaria (carga del Excel)';
+
+-- Gastos generales: los de esta carga y los de la primera de todas, que
+-- metia TODO aqui.
+delete from public.gastos_generales where numero_cotizacion = 'Carga Excel';
+delete from public.gastos_generales where concepto in (
+  'Compra de 1 viaje de grava y viaje de escombro (Administracion Javier)',
+  'Compra de 10 Varillas de 1/2''''',
+  '$3000 Pago de retroexcavador del dia de reparacion (Ing. Santiago) y $3600 Pago de Material (Arq. Gabriel) (Desglose según el motivo)',
+  'Lote 1 y 2 de material eléctrico (tubería conduit galvanizado y ppr) Javier Domingo',
+  'compra de 4 millares de tabique',
+  'Pago de bases al municipio de San Pablo del Monte, Tlaxcala',
+  'Apoyo Social Presidenta de SPM Conta. Gumaro',
+  'Apoyo Social Hermano de Presi SPM (Administracion Conta Bulmaro)',
+  'Pago de Tubería Milo',
+  'Compra de 2 Millares de Tabique para pozos de visita',
+  'PAGO A RETROEXCAVADORA 2 HR ($8,000), 2 TONELADAS DE CEMENTO ($9200) (Desglose según el motivo)',
+  '2 viajes de grava 1340 y 1/2 de Grava 1340',
+  '8 Varillas de 3/8',
+  'COMPRA DE 27 VARILLAS DE 5/8 Y 3 VARILLAS DE 1/2',
+  'Pago de 2 millares de Tabique ($5000) y 2 hrs de Maquina ($1900) (Desglose según el motivo)',
+  'Compra de camión de 6 m3 de Tepetate para mejoramiento de suelo',
+  'MADERA (25 POLINES 1.5 M ) ($2,500) , 3 VARILLAS DE 3/8 Y 3 DE 5/8 ($1,567) Y CAJA CHICA (04 / 09 / 2026) ($2,500) (Desglose según el motivo)',
+  'Perfiles Estructura  (Aceros Geovany) 2026',
+  'Varilla y Cemento para zapatas',
+  'Compra de pintura y primer para estructura ($8200) y caja chica ($1000) (Desglose según el motivo)',
+  'Pago acero',
+  'Compra de Redondos de 3/4 de Pulgadas Gr. 55 para Anclas de Estructura',
+  'Pago de Placas, Retro y Cuerdas de Anclas (Mixto: placas, retro y cuerdas de anclas; no hay desglose, se dejó en Materiales)',
+  'Pago de soleras a Geovany',
+  'Caja Chica Arq. Santiago ($3,000) y $3500 para pintura (Desglose según el motivo)',
+  'Hule para tapar Zapatas',
+  'PAGO DE CONCRETO',
+  'COMPRA DE CEMENTO para Últimos trabajos de Albañileria (Arq. Santiago)',
+  'Suministro de Tubo RD Liso para cruce de drenaje',
+  'Compra de Tubo Ced 40',
+  'COMPRAS QUE SE HICIERON EN OBRA DE DRENAJE PAPALOTLA PARA HACER MURO Y RELLENO (ADMNISTRACION, ARQ. SANTIAGO)',
+  'Anticipo Tapas de concreto (Artemio) 5 de Noviembre',
+  'Pago de PADRON DE CONTRATISTAS PAPALOTLA DE XICOHTENCATL',
+  'Pago de PADRON DE CONTRATISTAS PAPALOTLA DE XICOHTENCATL JAVIER DOMINGO',
+  'Topografía y Proyecto',
+  'Pago Finiquito a Ing. Topografo',
+  'Pago a Ing. de Mecanica de Suelos',
+  'Pago a Ing. ESTRUCTURISTA',
+  'Pago finiquito a Ing. Andrés de Mecanica de Suelos',
+  'APOYO SOCIAL PRESIDENTE DE PAPALOTLA',
+  'Apoyo a Lic. Karla por la reparacion de su Laptop (Apoyo a persona para reparar su laptop)',
+  'Utilidad adelantada del porcentaje (Cont. Gumaro)',
+  'Anticipo Topografía (Obra 2) Ing Francisco',
+  'Apoyo social anticipo Presidente de Papalotla',
+  'SE NECESITA PARA MATERIAL ALAMBRE, CEMENTO, GRAVA, COLADO',
+  'Deposito a Juan Facturas',
+  'Apoyo social Presidenta del Cristo',
+  'Apoyo social Presidenta del Cristo',
+  'Apoyo Social Presi Benjamin,  Totolac',
+  'PAGO TOPOGRAFÍA PROYECTO ALBERCA SEMIOLIMPICA TEPEYANCO (ING FRANCISCO)',
+  'ANTICIPO ING. ANDRES Mecanica de Suelos PROY EJECUTIVO TEPEYANCO',
+  'Finiquito Mecánica de Suelos Ing. Andres'
+);
+
+delete from public.gastos_generales where concepto in (
   'Invitacion de Tequila Hornito a Obras Publicas, Contador Bulmaro, Innaguracion de Obra San Pablo del Monte',
   'LONA DE INICIO DE OBRA SPM AMPLIACION C2',
   'Apoyo Social Presidenta de SPM Conta. Gumaro',
